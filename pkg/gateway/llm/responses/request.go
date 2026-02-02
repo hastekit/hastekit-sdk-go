@@ -4,8 +4,8 @@ import (
 	"errors"
 
 	"github.com/bytedance/sonic"
-	"github.com/hastekit/hastekit-sdk-go/internal/utils"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/constants"
+	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
 )
 
 type Request struct {

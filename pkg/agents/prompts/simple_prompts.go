@@ -7,8 +7,8 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/hastekit/hastekit-sdk-go/internal/utils"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents"
+	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 )

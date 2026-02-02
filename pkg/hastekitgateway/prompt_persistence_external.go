@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hastekit/hastekit-sdk-go/internal/utils"
+	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
 )
 
 type ExternalPromptPersistence struct {

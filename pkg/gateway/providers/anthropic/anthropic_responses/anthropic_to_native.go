@@ -5,9 +5,9 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/google/uuid"
-	"github.com/hastekit/hastekit-sdk-go/internal/utils"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/constants"
 	responses2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
+	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
 )
 
 func (in *Request) ToNativeRequest() *responses2.Request {

@@ -9,12 +9,12 @@ import (
 	"strings"
 
 	"github.com/bytedance/sonic"
-	"github.com/hastekit/hastekit-sdk-go/internal/utils"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/chat_completion"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/embeddings"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/speech"
+	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 )

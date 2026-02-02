@@ -11,10 +11,10 @@ import (
 	"strings"
 
 	"github.com/bytedance/sonic"
-	"github.com/hastekit/hastekit-sdk-go/internal/utils"
 	responses2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/base"
 	xai_responses2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/xai/xai_responses"
+	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
 )
 
 type ClientOptions struct {

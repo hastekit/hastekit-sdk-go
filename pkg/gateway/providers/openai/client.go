@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	"github.com/bytedance/sonic"
-	"github.com/hastekit/hastekit-sdk-go/internal/utils"
 	chat_completion2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/chat_completion"
 	embeddings2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/embeddings"
 	responses2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
@@ -23,6 +22,7 @@ import (
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/openai/openai_embeddings"
 	openai_responses2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/openai/openai_responses"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/openai/openai_speech"
+	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
 )
 
 type ClientOptions struct {

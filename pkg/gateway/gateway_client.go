@@ -5,12 +5,12 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/hastekit/hastekit-sdk-go/internal/utils"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/chat_completion"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/embeddings"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/speech"
+	utils2 "github.com/hastekit/hastekit-sdk-go/pkg/utils"
 )
 
 // LLMGatewayAdapter is the interface for making LLM calls.
@@ -86,8 +86,8 @@ func (c *LLMClient) NewResponses(ctx context.Context, in *responses.Request) (*r
 	}
 	in.Model = model
 
-	in.Stream = utils.Ptr(false)
-	in.Store = utils.Ptr(false)
+	in.Stream = utils2.Ptr(false)
+	in.Store = utils2.Ptr(false)
 	return c.LLMGatewayAdapter.NewResponses(ctx, providerName, c.getKey(providerName), in)
 }
 
@@ -99,8 +99,8 @@ func (c *LLMClient) NewStreamingResponses(ctx context.Context, in *responses.Req
 	}
 	in.Model = model
 
-	in.Stream = utils.Ptr(true)
-	in.Store = utils.Ptr(false)
+	in.Stream = utils2.Ptr(true)
+	in.Store = utils2.Ptr(false)
 	return c.LLMGatewayAdapter.NewStreamingResponses(ctx, providerName, c.getKey(providerName), in)
 }
 
@@ -182,7 +182,7 @@ func (c *LLMClient) getKey(providerName llm.ProviderName) string {
 		weights[idx] = key.Weight
 	}
 
-	return providerConfig.ApiKeys[utils.WeightedRandomIndex(weights)].APIKey
+	return providerConfig.ApiKeys[utils2.WeightedRandomIndex(weights)].APIKey
 }
 
 func (c *LLMClient) getProviderAndModelName(input string) (llm.ProviderName, string, error) {

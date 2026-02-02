@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/bytedance/sonic"
-	"github.com/hastekit/hastekit-sdk-go/internal/utils"
 	embeddings2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/embeddings"
 	responses2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	speech2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/speech"
@@ -18,6 +17,7 @@ import (
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/gemini/gemini_embeddings"
 	gemini_responses2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/gemini/gemini_responses"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/gemini/gemini_speech"
+	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
 )
 
 type ClientOptions struct {
