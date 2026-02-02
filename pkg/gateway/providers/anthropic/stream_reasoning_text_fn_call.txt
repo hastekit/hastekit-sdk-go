@@ -1,0 +1,165 @@
+event: response.created
+data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_0a301049a93730080169385d20f53c819394b018a6ff56f82a","object":"response","created_at":1765301537,"status":"in_progress","background":false,"error":null,"incomplete_details":null,"instructions":"You are a helpful assistant. You must explain your reason to call a tool before calling it.","max_output_tokens":null,"max_tool_calls":null,"model":"o4-mini-2025-04-16","output":[],"parallel_tool_calls":true,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":"medium","summary":"detailed"},"safety_identifier":null,"service_tier":"auto","store":false,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[{"type":"function","description":"Lists all instances of asset usage within the specified date range. It returns only programs that are starting within the specified date range.","name":"get_asset_usages","parameters":{"properties":{"assetIds":{"description":"A list of asset IDs to check for usage.","items":{"type":"string"},"type":"array"},"channelIds":{"type":"array","description":"A list of channel IDs to check for usage.","items":{"type":"string"}},"endDate":{"description":"The end date of the range to check for asset usage. Programs starting before this date will be included.","format":"date-time","type":"string"},"startDate":{"description":"The start date of the range to check for asset usage. Programs starting at or after this date will be included.","format":"date-time","type":"string"}},"required":["startDate","endDate","assetIds","channelIds"],"type":"object"},"strict":false}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}}}
+
+event: response.in_progress
+data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_0a301049a93730080169385d20f53c819394b018a6ff56f82a","object":"response","created_at":1765301537,"status":"in_progress","background":false,"error":null,"incomplete_details":null,"instructions":"You are a helpful assistant. You must explain your reason to call a tool before calling it.","max_output_tokens":null,"max_tool_calls":null,"model":"o4-mini-2025-04-16","output":[],"parallel_tool_calls":true,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":"medium","summary":"detailed"},"safety_identifier":null,"service_tier":"auto","store":false,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[{"type":"function","description":"Lists all instances of asset usage within the specified date range. It returns only programs that are starting within the specified date range.","name":"get_asset_usages","parameters":{"properties":{"assetIds":{"description":"A list of asset IDs to check for usage.","items":{"type":"string"},"type":"array"},"channelIds":{"type":"array","description":"A list of channel IDs to check for usage.","items":{"type":"string"}},"endDate":{"description":"The end date of the range to check for asset usage. Programs starting before this date will be included.","format":"date-time","type":"string"},"startDate":{"description":"The start date of the range to check for asset usage. Programs starting at or after this date will be included.","format":"date-time","type":"string"}},"required":["startDate","endDate","assetIds","channelIds"],"type":"object"},"strict":false}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"id":"rs_0a301049a93730080169385d222150819394e7b44ad3d78d14","type":"reasoning","encrypted_content":"gAAAAABpOF0iTOdfvBI67wojdErpNEPSQJxu3QmIxn3uijX_AQZZJKZuy5n68ugigCjQZQC6AICQOF0gCwVC4t5C_5Z7S4dpDAjKxK0_Ys68UxiWsAqojuOctrqMn6BhBbGl-gjhmU7G4kwVXEmjScnk0PSDLkwKuq7UQDjKWPbexYtVUtUebGgeZiEWODSGuIL1axxNf3ptqZ8d7sQHXKnwgA_Plz24FOJs6W7wlb9rDogOloqiyAVJFkWg2MYy-U8h9i9JcNMvzsXpsoCjHUMlk8-Uf_MYy-VdVZuegBo44d83v9gmW4dT0QAxsXCPKyo3A1d7LJQQkI1AkNjmyiNq6MfXTj6ne_3kU5isOioT2WUqMdypTveduodPtbj-UfYEeEcz40RozZdobvsRcJBQkdqpPLQEAzsMcqWkHVswNvDqsh6OhLDw4WSsFqS5kuXspV0rpjfFrZrEQWrm6XevvWdqmfLsygr6_sc_IEy7FY0wKwb2L5BcKPZf_o2LW7cf62_UpaJFZAlWZqiG7cObmyFgLRwg61JFc05AGh6tRQK_HmFueKimKm4GUVPGuwCepcZANs20gXHI6QjreJeU6ipQXHaljBp78VAr03nIOCrOKdzjpBoE9owqf1IRusSQl08Nyy2aamrbgsxfA8C4URAQL7vF73beqkxHYssLUDJFG5n1eojgYoj3U5_3MrFmuZg5GSvbCQXdX_e_zRs_a8LVeq1G9XjyTV0ejAjZaJJ8P_G2brVu9Hv7Uk-tJ3BfkL_PnaOHZMONlthHT2y2tT29xZZjHPRQ68dTfAKGZpNAkO867oFHz_gYt8VrcDQaZqoWDpTRwCXlB43JVppq6AL4aRB-OQ==","summary":[]}}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","sequence_number":3,"output_index":0,"item":{"id":"rs_0a301049a93730080169385d222150819394e7b44ad3d78d14","type":"reasoning","encrypted_content":"gAAAAABpOF0qxCTNjgGecwHsUg-uPXdyqsKzbNzqYN-3gyiQe058CTru2d9xX61Zn2sp2ElTu3hP9EUOV9jNvCesEUdr-TxOPwzRoDyTAmXzrJdQy8rowi-5Ax81p_xxNp3Xgud-qWxr4A592m5vERaN7R69lZzxP-TYWv1MC7p7svAPlHufsLtTBHXX7UYPzVw5JLD70z7L9XYtUIfrLeh5Mp4GWb_2q2sYYokn2ylM53bKlNEB-zkjxcUvQVhcbLx_YZpfeqyDhT3nYAu63ukKOPNd1lzIK0oSPNG1lWFJw4r84PKwYAvJevYaB9UfckrHarJabLgj4Sky6OvOIhoZ1JQ0QbXMpbpGBf7LKJ0q4ysmUZUu5jszbAxESiwTgcONVxoBJ_urQynNgTzufSkcgt2eRy76WAI2YHjT5da_--XxF2h_vddfeBSytFy5KwNk4JdGMWClqFCCfh29XhfqLLvIjzKgf1ch56iB4gQ_hN26PWa4zwWV1H9DV60C20_YAc7Ou6GDp9ScSZ3ZLNNoNoU-uLkC0OuA6PMm3-3sMrboc2oDfUaXIpsoGXgna1wat6aDxFhldP81KwjI_DZqBesfM-vuT0GQQ4YOxIvn2U0_pqkDV5N3e5XPrzCT5fVe8obeNtx3xIiuuRJkbbIm43tUTgP-B6bxuZGET_lUiBhgwl7xWCHZtaReDzNSksiqc8M6KnMm96kk2r4_f4sYhjAlC0kvyfXbHUZEbhgxz0Lb5sjngRcZ4qyuT31Kixkxx2p557LjQ6OueQFdtEPHtXTRktxLH9LOPe7Nv8MwVd8ClKXXVWdWKbQz-ubL33cZ83Ufgcf5xASs7aJwhmIv6OmK4a1E1xpozJzxjNE9kgOoStQnttiISHfk0_W467Z5TxMp3pw7FFpQ94jCrx9fV_-5EDlRnwxbisNqjhXIqFiLqpkZngOiA18WeZQhWpJZy4P8waSwPl-O21nB42nHZAAdkOBfVOrqEXuDKXYi824YfxlXsnwJowOxOwP_YaUCRE-bd9Y3VlEA4UNKdHGy4MYOly9T1aljCv1Q0lB1SBcmg730_-Aib1lp0s6ZfccZ_Alq5EN3hraHsk2fz-_q63yJEaNrRjhjiva39yHSXwHB6tNfeMAeA2DG8OF9XayvsfuoJw-csv_m_bbQlYxvNeVpD9pHvqxb60O-K_N1_Uh6nuyZRzw2MGwSOBVwHhJhEKsOFlT8lMYmkPmmyFL9MZdLZTTmS0wjrSR7bkkxHREPvjo3Z34Y-GOXlYcXiBIr98Q2tfCnskeGlEPWfEE9VjD6sQrKMabShNhBaqsnuGWWMEYwYzL4Dgc-XwO_pvbPzNnJISirnG7K3vk4oTaivI4DOuypoy-OruW7QgT0UAWospXk_NqecSANcF7paN8-kSomJe08PIMI3v1xkgVKj9jT_1E19RDG_2GzcDtPq1oupYasv3YJOVC2ZJYxp1G5dG1pb1mmix81V9_JsjN51HcQccEGvnQKyO7z8enGlWAMHwgY2s_Lzz4X6c-4a2CkHa5JLQMzanEzS4Wr-cT0aYiIsI5BNJL8E8pVRPP7z0RJ2UTceTT2PQO2UwgE8F5jP3ap3ifbkGsn0-Bw1NYX98IHY6msKKJvTLfhyMTMNuDye5lzv_VlCm8g1UHF_PX2NQw9burQQFLsfnOeTXC0KGNbfrdUJzRAlNJ5E2oaKd1JsyQjRYbGFtMqpE0V-HzEMoWBKuY3fcYz6j8IUb0EM_Dz1WV-EUeDBHxSTQmtNukSGVOqh6b2MjcjoxIzHvFfc34N6zEQ7kMGpVCynLgYH_Q2h7uw5CXWS7Z68_vio5GgMHoV4Uz_y5uwhHWtr7pCE-zGIhOyg2zY7REv3OEzPV2ZHs4Ctyw8hEUX-QytuzuMH6TdV-eOfJXur8s_RrUdeqdJZGgHARTJkaWF97LT74pOZXo3qW3Iouywp1LRAstvr1l4l58fC5E1qeB3ID7ZxJJ8FDdZlbHHx_EbpyroGxxNpRT5ypIk0iujPgyVzQPS6cDrDBcb3CUXAAY3sZxrilBjyFIvl-ZwrB_pPHeuEiVBNowP2ByHPIEcAQm7Er19hXumwNTr-Vxs--27KtpdAVo5eNItYuAgRhKq7EuK0lCxe7MqTCcGbto7Gjp2wFlY3Bt8Z-VdRXuRZmFz4T5l7zmZNImZHEj6hehs73hDN1tT-HkPqDd94yEmrzh_XT9uIMPwLWQNXC4rbWx6jGAjI71gBsGUqimQvLpCzeDXcRmBUBRmxr3valMdwHLK89EGTtJsrdFe40Y3WgkGFr5dXm-c8ejsFmQuNV9NBMNTd3eAqQpf_bNBDfWWxBr-JQfd3y-lS8hw6BSEtSEQD9Q-psuvkpIZosHWl1yipSm5-_SbLcVQ-bvHf5gv3g8ZqaaDNZpzPZ9DSlr-HDbe49Tl3S6HPCtvwUegdP-Sol073XiC98nt4dYIkin1NoZEbUEF-j78lbBE8H9p-Wg-TnxFECnQbL8o3b3KEyB2_OTt0R5-y5pLQiK6xlknGWdOMwdjvXsH236DDUNjHdx7SKTv6z4bugDCcM8nDmzCbNHKPImL8-Gx5-LEW1X_74_u5rXCMKEmqB06GuYMB1dTIBd5lcjFsulfLR50aqGw2oFI3Ab2h3Q4uyNTELaRVuf3s1qI6eiWQnKEtjfEM18Qt8JBkAfHGCztXRiIP54tpeGNi7xysWsAthJU5FwJLLjTBa0DxeZun9dB_IuWl040qiZqFIpZ-cRrfrWDvwPPp5heni3HwR0xaFsp5Cq5HLsomPwr92OUOaVhL0eXVS5GBetJeqfuPdtR1MkgHX8jTnZnKdHhJnWB9yzecJ2imMeeHubflUPSyaXOIK2Gqo75m_l1CcxmGr6jhOGPQfhjViGMUipkrQkdHIzIwaC3V-b4wkKx6Aug1VItuYnrjcQWMB25mQMHK6CgE3_3e8ZFDDShaQaIx09pMA7NP7tsx-YU3UuJQvKY3_4Rd6AVAXsmYdLJ6fYBpdtrLOwRqNreGRqMq6EWN75KvTLkDMCinVLc56Ju-_CZoHoyRWw_BMjG9qyYYgE8FFGy4pazqlsEZtPUMu6f6q33ShMgXmGPGgpmN8dgCN-7eMl3h-TGQDFkQMd4jyezrGtQ1uqRztHxRqd6XmiRvaaRu0_9cFilZAp-qZyhDosU4hJv6PNEyJs4O6hwsM-zLVFdR1ZEMQaii3DcwhP5vJaLpJ4pC6U2XNCPQge_ZUekpR0KE7J6fnHGL6CdVtNwVumHXJpfhRYBaw9R9konwbM8H9uIPucXLJYdH-_W-BJC1vaowpUs2x99v8LeRJRIW3cZVxcItRZpB60AmGg0474oXgffs68iZaPlGbI-RDmbM_RTqyYJ3_N7dgNg3QmITAklU-U568yf8J6qT0-P2k5LsA1_MF0okomKTPW4wOHQDJ7krQf_sNx973M-6fSEoclRTcmSCqSTDYtg0zm_cMXHbyPs6_ROl4UT3PfA3GYN676zlQF-leQsyS5WEJpOwLR8zMuE5pOWvEIZhINlU-cKcsfmUmKpTYVzrvTbi0N-1yeEemqHCjLN4dK5SqJkQRRkVJC_ppltLtoEqS_6gYJFxwRODbfcNHZzrCxrk-fbxMt1wet8XVKhOAO1Ru06mpsWVVrRtF69RkYva4GGRy2BIIZoYCIUNNO6eEsIf1zME5UkAcjeDfeAIu6SoaK7dakrq2aNBJ-DT62ijIOc1uF2dCYcmfapMMb-IuDzYc21RzzG2cexWoUEil0ZegoGxHwuT-Py1ersZroEA1PSCDwW8MEcIU4pERJabzXso8lizAhss5hgoBNgVBn37i2DxR5_4RmYlQpsyuUMIKQuSniwUQ9Ilws9qBrwn7QcVRoFZN3UhJsqGDVkbP-DYStPaiyIShO_Fwm3qOca6dKTvghImY68q3Bfa--y8dvPr3MeN7qN8zpvkX0MGNBuOZUt-16TzHz1WLc-LCEHktQhMrevtT-Y9Qwxc77ut-6Qpa5SGO4equhNqMFAYxKHQByswlfPWIZrtz7plpmyswBYRAS1t7OzBnVD6xfGvFurunhDkwMGPwz8q3EXhxcRPCy7I61HIHyNWLk2YBMrep0bWVaH-Er2UVkXaCYDnLWhlDhMwfi0Xl12i9U5ANp8UlCLVulUY69x5rNT3--ZXJgqgCN6cXcQB4D_Z9RSSAV-K98trh_aOFo7HS-XPM0KePyvwTIT9rOyZlF9b9i_xkQ2jS_SMUHz6fL2V2LORdk6ia1WzoSgPase6PAyD3qHhFoEpOg4o65chAolVfJhqyVpBP1oFvQo8bUXHoMFGtEMGJfuoClmqxy-ZcQP84YUw1wX0iaR0T3ghI5nl8R7DRaeiGNTHP7nlN0opFA7r5tKum4g08dt-KRMppIbW0az4iR_xlHUZFFDI6Abh1-5KUWqO1fIgDwTrWAG13QrunjmTkvMKDLCzADb8EnZtK5Ut2SzTbRoyDTULEzJYXJS_lVrXJgW2VFqcLZui4fVzlOucYfTBo1tzP2rF8jlByvUkhLORSwOz2NKG3mKMJAafVoYteRGkRcaSp77CpasNBXIQ3YOO_G54_iaqeWW-r-9VZYXFhyeBmONG0dC__NsT38FTSGdR7KWGh0UYRlzCuHaQHYlNhsci_5SJmwGiAZXMhdpn3eDKVB58WIxXeZ2PnbDjZEVy7L7YoEFBHH-agWgFXaw6CHhRB9d8ctkcimbrW2g7Rp53d9O9YyhGgnwTF1DdZ_sw3Eu1YSjlG0xZamxCQ66_-sLRn_3NGIvoQVx0dJi-t1Fjl83G9SEh1A5_PiC6hnFf_eLxeNsF1ghnJUr9Nx2XfAIdRtnXCfLlEw5LdkKL3jfSufusPsxIb_soTtVzTdSe1vxpcT2alNCCqpAVRt_rqMQmFOYskGSH6GBHGca201EXCD6uGnn7Xjel_Edx-tGO4BL7H7V5td392hocqypNuCSSoSVu4HZFgfM23App3oSp8eRXB62BpsQhKf-ktQbKNN0yEh6JqiDMQ-U0uZ8CriFq5JrGz6KBCgi3WpxzT-bHvFwFrI6ohFwEULbOdMajJWCiWifPuiz_s665RlK_ZvueUc8CWTKGoBjNOmyxD6EffDDDZd3gE3tdjNQkjFlYR8aQbSkvzVvYDsVMnven-OaVwghohjHLcnR0uA0zdkD7FzgicTv9hAVU9y6I9qqHgUE46kXAKkKkswNBGP-FPphOqIXK0s1Q-s1A7KhXS7fOE-ykKMTnQPDh_sndEhf7cQcGCjAtNVlqZoPU3AP5gqKK1hsHfCF4Hcj926pz7virCFA6aQpMGUhdlzR6CjTpwWzfXBMBkhpJHse1-gKEq8aizxbgBA_5lvqdIy56q-2Bv2xekfgfaO28ujDDoLuCQVfOkUCACJU8fK40IVw7jYRTJkQCajEnwdlcQtSf_lrc8IbjLO4GfkP4gAljRiDvQvb9WyTwlvD_R7_f5ThOpV55DsvwxlAsQ28ySQJLhVAbIzJ_OW9klK1HZ__i7brUg==","summary":[]}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","sequence_number":4,"output_index":1,"item":{"id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","type":"function_call","status":"in_progress","arguments":"","call_id":"call_mdRv9gsN6KJGYyMef1YjhXQ4","name":"get_asset_usages"}}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":5,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"{\"","obfuscation":"E9RXX9cCBYOzpn"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":6,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"asset","obfuscation":"ZgYpNH89jmD"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":7,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"Ids","obfuscation":"9rQkFCUA5PsN2"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":8,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"\":[\"","obfuscation":"XzLnBr61fAQO"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":9,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"abc","obfuscation":"60WyuSX8HNamR"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":10,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"\"],","obfuscation":"q6yuJymlGvcsl"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":11,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"\"","obfuscation":"wivtsLWv8OgySGN"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":12,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"channel","obfuscation":"3lbRIPFN7"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":13,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"Ids","obfuscation":"3o3dypM7iipaA"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":14,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"\":[\"","obfuscation":"KEl4yO60GxVC"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":15,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"xyz","obfuscation":"kz3eBBU8gNAbU"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":16,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"\"],","obfuscation":"1wzqcddcG91L5"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":17,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"\"","obfuscation":"6QaKr3W0XY5B4IJ"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":18,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"start","obfuscation":"OWQPF208JG4"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":19,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"Date","obfuscation":"y4mHoSQoVCvg"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":20,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"\":\"","obfuscation":"pwnvrNdQVd6lb"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":21,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"202","obfuscation":"DTr2AsABgtpsg"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":22,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"6","obfuscation":"ROj0GkmGlTpRY7w"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":23,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"-","obfuscation":"OWgKuHjMwPhjkwU"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":24,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"01","obfuscation":"Yl4HPqmJToZPmn"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":25,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"-","obfuscation":"mYbOZgepZAEKnxx"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":26,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"01","obfuscation":"42H6ZBaZOlWmkw"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":27,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"T","obfuscation":"sDVwxQEwFK67Xdk"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":28,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"00","obfuscation":"uVORhq2JjvlQhp"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":29,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":":","obfuscation":"b8iEzumNujCWJXR"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":30,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"00","obfuscation":"A1RaKFCqDa6vLo"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":31,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":":","obfuscation":"XlqCuUMCOO6lK8P"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":32,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"00","obfuscation":"7gOZN0ZV1GNEPD"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":33,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"Z","obfuscation":"QeYt0eTqfcmub1Z"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":34,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"\",\"","obfuscation":"tNk0Wka3jZ52c"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":35,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"end","obfuscation":"zMouRE6kLmwu6"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":36,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"Date","obfuscation":"oOxwB73KMdyu"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":37,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"\":\"","obfuscation":"eB31sHoL7dgrc"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":38,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"202","obfuscation":"3h8LT22159gUQ"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":39,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"6","obfuscation":"hka1XyRDMHsLfTr"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":40,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"-","obfuscation":"bActmKltOA5ChiP"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":41,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"01","obfuscation":"S1HB238noDxwo2"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":42,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"-","obfuscation":"u2Y2Nr29xNVD2ln"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":43,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"08","obfuscation":"BsXNbkb9GlwMeb"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":44,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"T","obfuscation":"SwLQCJZqoDRG45G"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":45,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"00","obfuscation":"akRwZC92awuuFl"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":46,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":":","obfuscation":"aXsz3nlkj5AV3Gx"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":47,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"00","obfuscation":"BFlV5j1orqZtLz"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":48,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":":","obfuscation":"KunuNbABAGLMjTN"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":49,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"00","obfuscation":"zVWMr4X72i7zzX"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":50,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"Z","obfuscation":"pjv2zPIteNJZGba"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":51,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"delta":"\"}","obfuscation":"RHi4zDziXVRQ1G"}
+
+event: response.function_call_arguments.done
+data: {"type":"response.function_call_arguments.done","sequence_number":52,"item_id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","output_index":1,"arguments":"{\"assetIds\":[\"abc\"],\"channelIds\":[\"xyz\"],\"startDate\":\"2026-01-01T00:00:00Z\",\"endDate\":\"2026-01-08T00:00:00Z\"}"}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","sequence_number":53,"output_index":1,"item":{"id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","type":"function_call","status":"completed","arguments":"{\"assetIds\":[\"abc\"],\"channelIds\":[\"xyz\"],\"startDate\":\"2026-01-01T00:00:00Z\",\"endDate\":\"2026-01-08T00:00:00Z\"}","call_id":"call_mdRv9gsN6KJGYyMef1YjhXQ4","name":"get_asset_usages"}}
+
+event: response.completed
+data: {"type":"response.completed","sequence_number":54,"response":{"id":"resp_0a301049a93730080169385d20f53c819394b018a6ff56f82a","object":"response","created_at":1765301537,"status":"completed","background":false,"error":null,"incomplete_details":null,"instructions":"You are a helpful assistant. You must explain your reason to call a tool before calling it.","max_output_tokens":null,"max_tool_calls":null,"model":"o4-mini-2025-04-16","output":[{"id":"rs_0a301049a93730080169385d222150819394e7b44ad3d78d14","type":"reasoning","encrypted_content":"gAAAAABpOF0qCAfndHB4CLpPWmPW8AVUqSE518VvMjlMhD1oRtLuAZBZ3EkQeTP-lQsHpg8gIzika2EIIz0jQDAbb-MQeLYBJow8Y6vVivk8oPj8RN0FNhhkq-jJk52_7d4v49aiO0QRun_8oxI-9KgPT-e696bzwN9CVLqIEhHfe1GpGi3xU4YuWUXxYGRYenhdXmiD9bccsQnlVjkDqhm04eXGKfyL-7TlwmKJSP9lQKik4RCzzshccwNqlMRt31C796idQWSRdnukAldo-OG7lT3nWZc18P5LgEhrajQxDOaBMUgUrmxAiOSfJWA6naLFRBTplndlhI7WJEMYr38ZhsdUFIrGqCdkWKidQYxuzMOgKKPwOthTQieSlMUCemvRymDn7QO1-9sVKZwmtCSP6-HShCInJ9Ld655EEExNj44VTLTK1XIx2dVNS9NLigUDi-K9h2AjSI0ee9X9kcBN7yuAFDEVgbVtKgSJh1XRk63S9_MdGLf3me8g7eECoq7lfV0L2AgptHmuf5RpFrBnSY-34xDovhe06GU_GXq4ZqwbWGVmXVbRD6NmkyYd3QL0f7rB0G_zkAdrUUH_kEBhoi8unmKaQmPnpWT1DCb6iX4tVb8iUH0xcPAw8kRRPCGteuxgkkcGVQEozVPrBXu5mX3tcMVvISNN5Wz0cwtcBxvtWdOeBjJS0Zqbf5Mq-1YdsI00JPHflZqdS_BpylHD-r1L5-ytJSIixAwaQ-jtEicOAO01YcharpHrEhiPmC343luw1aNqbhHJ3onh_12PydRh6VEadQWhwq1wlnXjjlVwsT9-pasXom5d40Q02puhMXT3QEzSuiGwefsopjzKUtnycflZtvQqWN2IU6XO_VGZMXb1mL28EIzb2nQ2OOVdT8NkSkR-0yTeoAHS9H2KvJcRsjjnEeF1SVJXMUCdqF8R4RLyPGWrI5AIxM1pSUFVlPb3ml9p4kfwdL5lQcI2Q6txD2al6VH-lNlagZwsw4Cm_M6zvcFf_oVygtYOKh8GF94DhDoHwrsIWxzTqh5DTJ3xx4ZB3LNsVeoAhK-IXHrOa9i_W-sXIL0IMeoaZFHcwMpF_9TOlyNrKvoFaDHdD1U7esWMRWYG683HlzM5VE9T68NoBc8z0ykIuNtvVucEdaOOb37LPm438n026RyEDhxFJt_ubvp1kKTCbrHxMfpfK_w3DsBZhjAJl0tszs6fIZajxLpbge62Rq9EjOKCObGcmJ0zhYVeBCVQg_VGalLi18DpxvWwIv7bKoqivKUyq9FYQ91INTkixlSr-Vi200GKbWos98MGCOeLwBB7hZX9m79d97F4kmAa81uKzXHPv7aSj0eLV-ahIdtPVEPufARgRayO3o49MkZbKirRxJPIaTKYCOkK9TulaODgDQjeL4deYKBAQlNnu3W__oH3IFKQu7NdjUsw8D5pBRgaTB6ut0KE1Ndj3KCEIW7RliecmLdlaYi8FGCBDWHwtJTV97ePplIgw2zymoUxQYMUDNnxlBk1f6avwhm1yFWK8AXdFOZN4BKeLa7CWldwWL0uCawwz_ESCvhw9dV-xdD22KjDvNnQBZ5pkDGBD5jOaqc8uYIa4xNW1FEHuAQ2SK4RKSTm0RszVnl1e73-DyF63bVM4VTaBiicMV_oinXjcaKf_SlKMfIC_S3C5muW78pnc53OpZQSO4LluMLpUS7XDng6-0q-RFvEzJ0bc0L8qbLrImHwNDAmq8g_VkECz9NlHjt1fPDJZEnR8qkVQ9Y4PjgVh9ArLB5QuLeQQ3ZHXXFA751MNBuzwpqjpEz9g5E8dUM0sJLpkp3igOR_UMN69lfwlb6oi-NXp3CkCif8y-_d1EIwL0f4GpsAwxh4nqimfz2umqw1_lfmH_pcM6sPstm8zbCld8gX2sZOJMWkniQDrhb6PL2PTJutuUN0E3w2a5sEM3LpA9cWhpesQEZYHTLx0S3luPsNWB7hF28L_t3waJaJmcjecNBMkTtsbgm93G_b6TMAzR4rao2AA9O6dzkNyAInLZHAFqmwKH8D8ySMmwwHPtufn_7pAeifU-_TyTAkii7byRDVnwjdbR-xMM88xNJ5v4665IRvzmTE2pNVRT0PI6MuiN83BrYcL55w3a0_TOOonmXyMJQZsE7cFHF26_PX8kpbzcYoTv7DpulvI8HoQxJGEqdYJvTvsv_lslmrA3iAH9glKv708nKvMiOrEJxuVOnJ97eXYD-u8h826fDD_hVlpsDOneYZuqc3QKTp9YlXUZp_dzYHFaUPV3FT0K0HeySEZZBAj2l7br--SUx_sTpCEF00x8RHgY4DpLpr4Le-QDEc9jUYZ-7GEunrX3fuSm7w3mC23Y0CbIr2YUf3JXWByfqQL0bLF8OxPY4J28gefUr9uEKdTS0ow1jmiotax0AVis6gV38iEmNSxIJ5DDptDQkcpWSnAD3C-wIVyOrH8Nbsk9lQcr5OcvU2BGYslvHjrpEV_LIZLweZ48vpySNt7w_haBLwapAXpcQa5TwxMd3yWNAVse3hSqX25aPS0neDJmKxIdNz-JuPFf9W0gZ4J5lm86Jc-QlWD_EguXk2a3ZgtGxEB0vxPgiUYbEtLS055Z3oPnGnejKhF6GfZSVIXN7-LBYbceqULqTkSyk89ZHDWd7LQyWly9ZZwURxljQUNPEdM5NX3-UHHbV8Rybh9ECWMlZC1L9gi5snqcf4SEocoM20Prlsn8G_8F-_OQEpNqwCe_rVdFOUJe68DvSqTpSDy8GM0Tg0I-TLmtFF2fr3lXlorMHsv-A1Y7J-q8iHiGWVnYgcNfVuSeA0hin3HpTLAoPDqRDSbxJY6BJnlQbi5nVHols3Kwai1W27v0ERS-yBAh_Kw9wbx25U92PjJF8QER5Oz7smLcOjEft_EQie3zLvKgCV5vLWbssjMj6F-bx35JwHSFbmCs0h8lo6GtJuN1063uNzgaoBcQ0fhdCwI8IbkDrJoQmPxdO7rzVdo4gW_Kcg7Wl_OFbnieU_LJPHYdvSXMMftnInNuKOwwHCi-NTeAcubbwnHN37qvVaHlrl-mndd0Qczrmi4YfNAfkaH5qHpuTb69PW5xHAnIpcyHfXtO38SyPVtvPFC9PoIZJLn81KmlDrHotczZB9d_aaDhCJfz7wXbiguAB74SK4ObFO8j_RfnV684DJGZEPjMS-qz-rpCwXD-nbtbh0IqpDwgVvXMCGclUVwD0rD7k0Ms8naktLdrulOrFqKogaIwzjzXlf3HJAyoeabUmv8p9W6Q25zglx0oJLOY92KS5It_Bzmu0Fv6rFNeawCLEBMno096Y3N1xUnCZRdRDjAGTsyAjk7isCY229ctOBAZPR6uS2kV1Ev7oKmrhX0PZfIcciJ25iL1L6Hg6FbSeMMy_JbK7A-rAvl7Bm1rb2aaDtwRTKTv-AFRC5Yires2aq-TbBM4Gx4IMI6gztkF3kbmjE4XKO160u-09Ybj8kl1ovegb_q5FOoRUaw9Jbo0aMMeDEsZm7EI-9A8NFv-kT7gH62zJIzVd09Fj52knUWvkzLfj5CyBDcWfjA_dQU-X-oua-WgttLIxAk-xPEhdbw3KNhaGbH6Bj2oInRw4NlFdmUQjbDJFN-_gUeBb8w6ZfHBiEazPqWTmxtwCo0MtonWnk-dd05-1IebXQ4e7_oq7y1X7a6nC_6085dztlB_LAbHbU6qhlRoSFwH7iao8KXykEcXx0ayHmZE4oE0oBqjzMYKBr0d6JgsQDzAXsdLH-OahsJK9EoxNAva3JTS1gb767QwZzU6pJoSQoJTnHFFHqTP4U4hSE3apfV3HjMFKdPU2nSzOVmr-Sfu2bUcjeqWmcKqw_BWwAwrhepMyFbMtNWKtFGkxI0sK3B6Iq-1xtxC6H6oPjEbJ4Y3duZWCuRg1TXaoKUPV9muM4PKHsidex01yrHqy9QbsXbVWhJuojjqzYsOl2Dkk2dXgliJ9lVnUah6HiZVoAJc8xx-wTsGffTCOYAS-w3HK3a4lf4g4X0cdlvd2utPUaDrcyCwv4zebtePmo-7iWbrqk23qbqWrp6QvUwNJ5c8rRDDn5hczbEZIvaLx6-U1Pkcq7RqbMmspluHcvacFBhZXbh1q_TxTodrjAH92q0YvN7dS73BilNDth32It2CZ5imNIFjvE-njuJTkLjHJskp1fNLqVHq7_vWyoOvb9wgHrr7WNTzN_1UxWAjLOtIWxU1oFHmNqAcoJAu3JHCk1lj9XLxkeCiRWIvYsfPL3r-VzZhJwPewygkT5-LNwZRGRxCY7DIIBFzWFooFAiEi4qXbF6LiMLX7Y3meTc24MIj9MPvySHYlC6qis1vFGVYh5G6hjaqIvICDGZjnbNv5l4mE3o52LHasEwPlqo3x8iaNxlrCyNMN3qw9xASb-NhJevpdivUQxKcWZegtP69GY_WV20jsB7gpPTsxt2vaKy9HpAgWTN1-MzlOy4yFgfrnT1Mv4_KN_pSEkyvfOo996RqEK5apmkg3bZm3EwTHuaRI0SR2jS8LBRY0kM6lYWZoIJ3S4QS20Eu-UQz0AsCEVUyIgC8CdRvLHlUOg0eF21LH-0GAJhfnovMaqUCqJ1bhEHz6iBmYbuD60l2x246K82mZ8ryMDzp5mU9_nfjG-u3DwVGeKvtk7KxYtT4Nh5Ai_w8GA43lMdSo-SxN5jdUxyONi5jy93hakImjkxWbXL_thXaOGN7-2xW_xgGBtbTcCqa-84tI8FCz1VBHsqSn36vkX5xpX_fLNhMLXvpKmTcPohbqxcuqJkn3CBkk9sQWHuPzb-dnE6zHAZUIBxixumc52JOTEVYYAQW4wvosjmAVTCL8XEANVFfCTSieOujd3EKesCfaS1WGRlwW0f-cwFP_c71jzzjg3kXQlawIp8jo5lvoRF6STR_RvLMYsxOznjwqk0MamWnlLSEBgwMoQwnUZqMMIWont5AIvudyAzuousl5pMheT2g3Z2ctNPnJuq6ssrygyZJ0QGEb5Lk-yZqEJ7P40X54NucARwStkEb93K0BYx20YO2n1_L8FynRQMTMFM95DMoFh_z38MpZ6MZGYnMiWhNfyxrKZBdtKudJf3SM-0aLNr_V9GYLWeL2u6V2PIDha8i1VDTWTn7lvJhWf7FCs0hFJNM-7Cp8b8NhQC9AdlHnnok887pQ7PhK24TUNHNA1B3QmsvrKYJQrg4xXf5KtKEBq-aUeZH_ti2-kk0XNy9f2KQtaaNbXL8WlpbkmdOqVMl67D_gRa9O91iasijUCoucd-Ymqgj7QNGM51lcSzyqGmU9AdtUK4eBejJHb7elNwYYowDhPInoyk_4LIdcE_Rsxlz1YrMHttBlAwiH1ZG3T9uNyO2g09l_tcXwbdHHPO01WEfiupUqXoHR2B0w_cXy7V37Om3y70wn5wGKa2_IfKR1WAkOxrYspuZxUqWG2ThRDkp1x2yPlBsflIATTGJ-U4UO4hvfClokmOLKJwEAGMpi-QpsNV4tAnQSzn-g-v5w13GftZKerwtlnAJLWrw==","summary":[]},{"id":"fc_0a301049a93730080169385d2a8500819392678eff582febdb","type":"function_call","status":"completed","arguments":"{\"assetIds\":[\"abc\"],\"channelIds\":[\"xyz\"],\"startDate\":\"2026-01-01T00:00:00Z\",\"endDate\":\"2026-01-08T00:00:00Z\"}","call_id":"call_mdRv9gsN6KJGYyMef1YjhXQ4","name":"get_asset_usages"}],"parallel_tool_calls":true,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":"medium","summary":"detailed"},"safety_identifier":null,"service_tier":"default","store":false,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[{"type":"function","description":"Lists all instances of asset usage within the specified date range. It returns only programs that are starting within the specified date range.","name":"get_asset_usages","parameters":{"properties":{"assetIds":{"description":"A list of asset IDs to check for usage.","items":{"type":"string"},"type":"array"},"channelIds":{"type":"array","description":"A list of channel IDs to check for usage.","items":{"type":"string"}},"endDate":{"description":"The end date of the range to check for asset usage. Programs starting before this date will be included.","format":"date-time","type":"string"},"startDate":{"description":"The start date of the range to check for asset usage. Programs starting at or after this date will be included.","format":"date-time","type":"string"}},"required":["startDate","endDate","assetIds","channelIds"],"type":"object"},"strict":false}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":203,"input_tokens_details":{"cached_tokens":0},"output_tokens":960,"output_tokens_details":{"reasoning_tokens":896},"total_tokens":1163},"user":null,"metadata":{}}}
+
