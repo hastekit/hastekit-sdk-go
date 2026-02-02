@@ -251,7 +251,7 @@ func (s *LLMHistorySummarizer) Summarize(ctx context.Context, msgIdToRunId map[s
 	// Generate summary ID
 	summaryID := uuid.NewString()
 
-	return &core.SummaryResult{
+	return &history.SummaryResult{
 		Summary:                 &summaryMessage,
 		LastSummarizedMessageID: lastSummarizedMessageID,
 		SummaryID:               summaryID,
