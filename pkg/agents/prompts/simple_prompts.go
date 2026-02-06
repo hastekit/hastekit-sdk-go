@@ -116,9 +116,9 @@ func skillsToPrompts(skills []agents.Skill) string {
 
 	var p strings.Builder
 
+	p.WriteString("\n\n" + "## Skills\n\n")
+	p.WriteString("Skills contains more specialised context, instructions and scripts that you can use when it is required. They are available to you in the filesystem that you can access using the `execute_bash_commands` tool. Based on the task at hand, access relevant skill.")
 	p.WriteString("<available_skills>")
-	p.WriteString("<usage>To use the skill, read the file using execute_bash_commands tool</usage>")
-
 	for _, skill := range skills {
 		p.WriteString("<skill>")
 
