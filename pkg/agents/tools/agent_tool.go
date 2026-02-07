@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents"
+	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/constants"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
 )
@@ -27,6 +28,7 @@ func (t *AgentTool) Execute(ctx context.Context, params *agents.ToolCall) (*resp
 		Messages: []responses.InputMessageUnion{
 			{
 				OfEasyInput: &responses.EasyMessage{
+					Role:    constants.RoleUser,
 					Content: responses.EasyInputContentUnion{OfString: &params.Arguments},
 				},
 			},
@@ -42,6 +44,20 @@ func (t *AgentTool) Execute(ctx context.Context, params *agents.ToolCall) (*resp
 			for _, content := range out.OfOutputMessage.Content {
 				if content.OfOutputText != nil {
 					data += content.OfOutputText.Text
+				}
+			}
+		}
+
+		if out.OfEasyInput != nil {
+			if out.OfEasyInput.Content.OfString != nil {
+				data += *out.OfEasyInput.Content.OfString
+			}
+
+			if out.OfEasyInput.Content.OfInputMessageList != nil {
+				for _, message := range out.OfEasyInput.Content.OfInputMessageList {
+					if message.OfOutputText != nil {
+						data += message.OfOutputText.Text
+					}
 				}
 			}
 		}
