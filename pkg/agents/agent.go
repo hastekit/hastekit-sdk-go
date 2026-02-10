@@ -319,6 +319,7 @@ func (e *Agent) ExecuteWithExecutor(ctx context.Context, in *AgentInput, cb func
 						AgentName:           e.Name,
 						Namespace:           in.Namespace,
 						ConversationID:      run.GetConversationID(),
+						RunContext:          in.RunContext,
 					})
 					if err != nil {
 						return &AgentOutput{Status: agentstate.RunStatusError, RunID: runId}, err

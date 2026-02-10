@@ -8,10 +8,11 @@ import (
 
 type ToolCall struct {
 	*responses.FunctionCallMessage
-	AgentName      string `json:"agent_name"`
-	AgentVersion   string `json:"agent_version"`
-	Namespace      string `json:"namespace"`
-	ConversationID string `json:"conversation_id"`
+	AgentName      string         `json:"agent_name"`
+	AgentVersion   string         `json:"agent_version"`
+	Namespace      string         `json:"namespace"`
+	ConversationID string         `json:"conversation_id"`
+	RunContext     map[string]any `json:"run_context"`
 }
 
 type Tool interface {
