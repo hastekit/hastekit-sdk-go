@@ -71,13 +71,7 @@ func (t *SandboxTool) Execute(ctx context.Context, params *agents.ToolCall) (*re
 		env[k] = utils.TryAndParseAsTemplate(v, params.RunContext)
 	}
 
-	sb, err := t.sandboxManager.Create(ctx, &sandbox.CreateSandboxRequest{
-		SessionID: params.ConversationID,
-		Image:     t.image,
-		AgentName: params.AgentName,
-		Namespace: params.Namespace,
-		Env:       env,
-	})
+	sb, err := t.sandboxManager.CreateSandbox(ctx, t.image, env, params.AgentName, params.Namespace, params.ConversationID)
 	if err != nil {
 		return nil, err
 	}

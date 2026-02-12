@@ -32,9 +32,9 @@ type Handle struct {
 }
 
 type Manager interface {
-	Create(ctx context.Context, request *CreateSandboxRequest) (*Handle, error)
-	Get(ctx context.Context, sessionID string) (*Handle, error)
-	Delete(ctx context.Context, sessionID string) error
+	CreateSandbox(ctx context.Context, image string, env map[string]string, agentName string, namespace string, sessionID string) (*Handle, error)
+	GetSandbox(ctx context.Context, sessionID string) (*Handle, error)
+	DeleteSandbox(ctx context.Context, sessionID string) error
 }
 
 // BashExecRequest is the request body for daemon exec endpoints (bash/python).
