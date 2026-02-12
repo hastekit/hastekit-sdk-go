@@ -55,6 +55,11 @@ func (a *Accumulator) ReadStream(stream chan *responses.ResponseChunk, cb func(c
 			}
 
 			if chunk.OfOutputItemDone.Item.Type == "reasoning" {
+				// Skip empty reasoning blocks
+				if chunk.OfOutputItemDone.Item.EncryptedContent == nil && len(chunk.OfOutputItemDone.Item.Summary) == 0 {
+					continue
+				}
+
 				var encryptedContent *string
 				if chunk.OfOutputItemDone.Item.EncryptedContent != nil {
 					encryptedContent = chunk.OfOutputItemDone.Item.EncryptedContent
