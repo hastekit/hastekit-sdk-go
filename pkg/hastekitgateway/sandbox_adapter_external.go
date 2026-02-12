@@ -35,8 +35,8 @@ func NewSandboxClient(endpoint string) *SandboxClient {
 	}
 }
 
-// Create creates a new sandbox and returns its handle.
-func (c *SandboxClient) Create(ctx context.Context, req *sandbox.CreateSandboxRequest) (*sandbox.Handle, error) {
+// CreateSandbox creates a new sandbox and returns its handle.
+func (c *SandboxClient) CreateSandbox(ctx context.Context, req *sandbox.CreateSandboxRequest) (*sandbox.Handle, error) {
 	if req == nil {
 		return nil, fmt.Errorf("CreateSandboxRequest is required")
 	}
@@ -81,8 +81,8 @@ func (c *SandboxClient) Create(ctx context.Context, req *sandbox.CreateSandboxRe
 	return out.Data, nil
 }
 
-// Get returns the handle for an existing sandbox by session ID.
-func (c *SandboxClient) Get(ctx context.Context, sessionID string) (*sandbox.Handle, error) {
+// GetSandbox returns the handle for an existing sandbox by session ID.
+func (c *SandboxClient) GetSandbox(ctx context.Context, sessionID string) (*sandbox.Handle, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return nil, fmt.Errorf("session_id is required")
@@ -118,8 +118,8 @@ func (c *SandboxClient) Get(ctx context.Context, sessionID string) (*sandbox.Han
 	return out.Data, nil
 }
 
-// Delete tears down the sandbox for the given session ID.
-func (c *SandboxClient) Delete(ctx context.Context, sessionID string) error {
+// DeleteSandbox tears down the sandbox for the given session ID.
+func (c *SandboxClient) DeleteSandbox(ctx context.Context, sessionID string) error {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return fmt.Errorf("session_id is required")

@@ -32,7 +32,7 @@ type Handle struct {
 }
 
 type Manager interface {
-	CreateSandbox(ctx context.Context, image string, env map[string]string, agentName string, namespace string, sessionID string) (*Handle, error)
+	CreateSandbox(ctx context.Context, req *CreateSandboxRequest) (*Handle, error)
 	GetSandbox(ctx context.Context, sessionID string) (*Handle, error)
 	DeleteSandbox(ctx context.Context, sessionID string) error
 }
