@@ -13,14 +13,7 @@ type TemporalRuntime struct {
 	broker agents.StreamBroker
 }
 
-func NewTemporalRuntime(endpoint string, broker agents.StreamBroker) *TemporalRuntime {
-	c, err := client.Dial(client.Options{
-		HostPort: endpoint,
-	})
-	if err != nil {
-		panic("unable to create temporal client")
-	}
-
+func NewTemporalRuntime(c client.Client, broker agents.StreamBroker) *TemporalRuntime {
 	return &TemporalRuntime{
 		client: c,
 		broker: broker,
@@ -28,6 +21,10 @@ func NewTemporalRuntime(endpoint string, broker agents.StreamBroker) *TemporalRu
 }
 
 func (r *TemporalRuntime) Run(ctx context.Context, agent *agents.Agent, in *agents.AgentInput) (*agents.AgentOutput, error) {
+	if r.client == nil {
+		return nil, fmt.Errorf("no temporal client available")
+	}
+
 	run, err := r.client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue: "AgentWorkflowTaskQueue",
 	}, agent.Name+"_AgentWorkflow", in)

@@ -72,10 +72,11 @@ func (w *AgentWorkflow) Run(restateCtx restate.WorkflowContext, input *WorkflowI
 	}).WithLLM(llmProxy)
 
 	// Execute using the SAME agent instance with durability
-	return agent.ExecuteWithExecutor(restateCtx, &agents.AgentInput{
+	return agent.Execute(restateCtx, &agents.AgentInput{
 		Namespace:         input.Namespace,
 		PreviousMessageID: input.PreviousMessageID,
 		Messages:          input.Messages,
 		RunContext:        input.RunContext,
-	}, cb)
+		Callback:          cb,
+	})
 }

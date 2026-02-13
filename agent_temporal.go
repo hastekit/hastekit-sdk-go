@@ -7,9 +7,36 @@ import (
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/runtime/temporal_runtime"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/contrib/opentelemetry"
+	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 )
+
+func (c *SDK) setTemporalClient() {
+	if c.temporalConfig.Endpoint == "" {
+		return
+	}
+
+	otelInterceptor, err := opentelemetry.NewTracingInterceptor(
+		opentelemetry.TracerOptions{},
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	cli, err := client.Dial(client.Options{
+		HostPort: c.temporalConfig.Endpoint,
+		Interceptors: []interceptor.ClientInterceptor{
+			otelInterceptor,
+		},
+	})
+	if err != nil {
+		log.Fatalf("failed to connect to temporal: %v", err)
+	}
+
+	c.temporalClient = cli
+}
 
 func (c *SDK) NewTemporalAgent(options *AgentOptions) *agents.Agent {
 	agent := agents.NewAgent(&agents.AgentOptions{
@@ -21,7 +48,7 @@ func (c *SDK) NewTemporalAgent(options *AgentOptions) *agents.Agent {
 		Tools:       options.Tools,
 		Instruction: options.Instruction,
 		McpServers:  options.McpServers,
-		Runtime:     temporal_runtime.NewTemporalRuntime(c.temporalConfig.Endpoint, c.redisBroker),
+		Runtime:     temporal_runtime.NewTemporalRuntime(c.temporalClient, c.redisBroker),
 		MaxLoops:    options.MaxLoops,
 	})
 
@@ -41,8 +68,14 @@ func (c *SDK) NewTemporalAgent(options *AgentOptions) *agents.Agent {
 }
 
 func (c *SDK) StartTemporalService() {
+	tracingInterceptor, err := opentelemetry.NewTracingInterceptor(opentelemetry.TracerOptions{})
+	if err != nil {
+		log.Fatalln("Unable to create interceptor", err)
+	}
+
 	cli, err := client.Dial(client.Options{
-		HostPort: c.temporalConfig.Endpoint,
+		HostPort:     c.temporalConfig.Endpoint,
+		Interceptors: []interceptor.ClientInterceptor{tracingInterceptor},
 	})
 	if err != nil {
 		panic("unable to create temporal client")

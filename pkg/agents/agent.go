@@ -142,6 +142,10 @@ func (e *Agent) Execute(ctx context.Context, in *AgentInput) (*AgentOutput, erro
 	ctx, span := tracer.Start(ctx, "Agent.Execute")
 	defer span.End()
 
+	return e.ExecuteWithoutTrace(ctx, in)
+}
+
+func (e *Agent) ExecuteWithoutTrace(ctx context.Context, in *AgentInput) (*AgentOutput, error) {
 	if in.Callback == nil {
 		in.Callback = NilCallback
 	}
@@ -156,6 +160,12 @@ func (e *Agent) Execute(ctx context.Context, in *AgentInput) (*AgentOutput, erro
 }
 
 func (e *Agent) ExecuteWithExecutor(ctx context.Context, in *AgentInput, cb func(chunk *responses.ResponseChunk)) (*AgentOutput, error) {
+	// Generate a run ID
+	run, err := history.NewRun(ctx, e.history, in.Namespace, in.PreviousMessageID, in.Messages)
+	if err != nil {
+		return &AgentOutput{Status: agentstate.RunStatusError, RunID: ""}, err
+	}
+
 	// Connect to MCP servers, and list the tools
 	mcpTools, err := e.PrepareMCPTools(ctx, in.RunContext)
 	if err != nil {
@@ -172,12 +182,6 @@ func (e *Agent) ExecuteWithExecutor(ctx context.Context, in *AgentInput, cb func
 		for idx, coreTool := range tools {
 			toolDefs[idx] = *coreTool.Tool(ctx)
 		}
-	}
-
-	// Generate a run ID
-	run, err := history.NewRun(ctx, e.history, in.Namespace, in.PreviousMessageID, in.Messages)
-	if err != nil {
-		return &AgentOutput{Status: agentstate.RunStatusError, RunID: ""}, err
 	}
 
 	// Load run state from meta (in-memory, no DB call)

@@ -103,7 +103,9 @@ func (a *TemporalAgentV2) Execute(ctx workflow.Context, in *agents.AgentInput) (
 	})
 	agent = agent.WithLLM(llmProxy)
 
-	return agent.ExecuteWithExecutor(context.Background(), in, cb)
+	in.Callback = cb
+
+	return agent.ExecuteWithoutTrace(context.Background(), in)
 }
 
 func getToolName(prefix string, tool agents.Tool) string {

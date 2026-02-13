@@ -12,6 +12,7 @@ import (
 	"github.com/hastekit/hastekit-sdk-go/pkg/hastekitgateway"
 	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
 	"go.opentelemetry.io/otel"
+	"go.temporal.io/sdk/client"
 )
 
 var (
@@ -34,6 +35,8 @@ type SDK struct {
 	restateAgentConfigs  map[string]*agents.AgentOptions
 	temporalAgentConfigs map[string]*agents.AgentOptions
 	redisBroker          agents.StreamBroker
+
+	temporalClient client.Client
 }
 
 type ServerConfig struct {
@@ -106,6 +109,7 @@ func New(opts *ClientOptions) (*SDK, error) {
 		redisBroker:          broker,
 	}
 
+	sdk.setTemporalClient()
 	sdk.setLLMClient()
 
 	if opts.ServerConfig.ProjectName == "" {
