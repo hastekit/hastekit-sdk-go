@@ -23,6 +23,7 @@ func (c *SDK) NewRestateAgent(options *AgentOptions) *agents.Agent {
 		McpServers:  options.McpServers,
 		Runtime:     restate_runtime.NewRestateRuntime(c.restateConfig.Endpoint, c.redisBroker),
 		MaxLoops:    options.MaxLoops,
+		Handoffs:    options.Handoffs,
 	})
 
 	c.agents[options.Name] = agent
@@ -36,6 +37,7 @@ func (c *SDK) NewRestateAgent(options *AgentOptions) *agents.Agent {
 		Instruction: options.Instruction,
 		McpServers:  options.McpServers,
 		MaxLoops:    options.MaxLoops,
+		Handoffs:    options.Handoffs,
 	}
 
 	return agent

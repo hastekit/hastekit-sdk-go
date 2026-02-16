@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"slices"
 
+	"github.com/bytedance/sonic"
 	"github.com/google/uuid"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/agentstate"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/history"
@@ -33,6 +34,7 @@ type Agent struct {
 	runtime      Runtime
 	maxLoops     int
 	streamBroker StreamBroker
+	handoffs     []*Handoff
 }
 
 type AgentOptions struct {
@@ -44,6 +46,7 @@ type AgentOptions struct {
 	LLM        llm.Provider
 	Output     map[string]any
 	Tools      []Tool
+	Handoffs   []*Handoff
 	McpServers []MCPToolset
 	Runtime    Runtime
 	MaxLoops   *int
@@ -82,6 +85,7 @@ func NewAgent(opts *AgentOptions) *Agent {
 		parameters:  opts.Parameters,
 		runtime:     opts.Runtime,
 		maxLoops:    maxLoops,
+		handoffs:    opts.Handoffs,
 	}
 }
 
@@ -98,6 +102,7 @@ func (e *Agent) WithLLM(wrappedLLM LLM) *Agent {
 		runtime:      e.runtime,
 		maxLoops:     e.maxLoops,
 		streamBroker: e.streamBroker,
+		handoffs:     e.handoffs,
 	}
 }
 
@@ -115,6 +120,31 @@ func (e *Agent) PrepareMCPTools(ctx context.Context, runContext map[string]any) 
 	}
 
 	return coreTools, nil
+}
+
+func (e *Agent) PrepareHandoffTools(ctx context.Context) []Tool {
+	coreTools := []Tool{}
+
+	if e.handoffs != nil && len(e.handoffs) > 0 {
+		coreTools = append(coreTools, NewHandoffTool(&responses.ToolUnion{
+			OfFunction: &responses.FunctionTool{
+				Name:        "transfer_to_agent",
+				Description: utils.Ptr("Transfer the conversation to another agent"),
+				Parameters: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"agent_name": map[string]any{
+							"type":        "string",
+							"description": "Name of the target agent",
+						},
+					},
+					"required": []string{"agent_name"},
+				},
+			},
+		}))
+	}
+
+	return coreTools
 }
 
 func (e *Agent) GetRunID(ctx context.Context) string {
@@ -156,15 +186,30 @@ func (e *Agent) ExecuteWithoutTrace(ctx context.Context, in *AgentInput) (*Agent
 		return runtime.Run(ctx, e, in)
 	}
 
-	return e.ExecuteWithExecutor(ctx, in, in.Callback)
-}
-
-func (e *Agent) ExecuteWithExecutor(ctx context.Context, in *AgentInput, cb func(chunk *responses.ResponseChunk)) (*AgentOutput, error) {
 	// Generate a run ID
 	run, err := history.NewRun(ctx, e.history, in.Namespace, in.PreviousMessageID, in.Messages)
 	if err != nil {
 		return &AgentOutput{Status: agentstate.RunStatusError, RunID: ""}, err
 	}
+
+	runId := run.GetMessageID()
+
+	// TODO: what's the implication of obtaining traceid from context in case of durable execution?
+	var traceid string
+	if sc := trace.SpanFromContext(ctx).SpanContext(); sc.IsValid() {
+		traceid = sc.TraceID().String()
+	}
+
+	// Emit run.created
+	// TODO: make this a durable step to avoid resending on replays
+	e.runCreated(ctx, runId, traceid, in.Callback)
+
+	return e.ExecuteWithRun(ctx, in, in.Callback, run)
+}
+
+func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chunk *responses.ResponseChunk), run *history.ConversationRunManager) (*AgentOutput, error) {
+	handoffTools := e.PrepareHandoffTools(ctx)
+	tools := append(e.tools, handoffTools...)
 
 	// Connect to MCP servers, and list the tools
 	mcpTools, err := e.PrepareMCPTools(ctx, in.RunContext)
@@ -173,7 +218,7 @@ func (e *Agent) ExecuteWithExecutor(ctx context.Context, in *AgentInput, cb func
 	}
 
 	// Merge MCP tools with other tools
-	tools := append(e.tools, mcpTools...)
+	tools = append(tools, mcpTools...)
 
 	// Create tool schemas for input payload
 	var toolDefs []responses.ToolUnion
@@ -201,14 +246,13 @@ func (e *Agent) ExecuteWithExecutor(ctx context.Context, in *AgentInput, cb func
 		}
 	}
 
-	// Emit run.created
-	// TODO: make this a durable step to avoid resending on replays
-	e.runCreated(ctx, runId, traceid, cb)
-
 	// Get the prompt
 	instruction := "You are a helpful assistant."
 	if e.instruction != nil {
-		instruction, err = e.instruction.GetPrompt(ctx, in.RunContext)
+		instruction, err = e.instruction.GetPrompt(ctx, &Dependencies{
+			RunContext: in.RunContext,
+			Handoffs:   e.handoffs,
+		})
 		if err != nil {
 			return &AgentOutput{Status: agentstate.RunStatusError, RunID: runId}, err
 		}
@@ -299,6 +343,8 @@ func (e *Agent) ExecuteWithExecutor(ctx context.Context, in *AgentInput, cb func
 
 		case agentstate.StepExecuteTools:
 			// Execute pending tool calls
+			var handoffFn func() (*AgentOutput, error)
+
 			for _, toolCall := range run.RunState.PendingToolCalls {
 				tool := findTool(ctx, tools, toolCall.Name)
 				if tool == nil {
@@ -316,6 +362,38 @@ func (e *Agent) ExecuteWithExecutor(ctx context.Context, in *AgentInput, cb func
 						Output: responses.FunctionCallOutputContentUnion{
 							OfString: utils.Ptr("Request to call this tool has been declined"),
 						},
+					}
+				} else if toolCall.Name == "transfer_to_agent" {
+					var param map[string]any
+					if err := sonic.Unmarshal([]byte(toolCall.Arguments), &param); err != nil {
+						return &AgentOutput{Status: agentstate.RunStatusError, RunID: runId}, err
+					}
+
+					for _, handoff := range e.handoffs {
+						if handoff.Name == param["agent_name"] {
+							toolResult = &responses.FunctionCallOutputMessage{
+								ID:     toolCall.ID,
+								CallID: toolCall.CallID,
+								Output: responses.FunctionCallOutputContentUnion{
+									OfString: utils.Ptr("Transferred to agent"),
+								},
+							}
+
+							handoffFn = func() (*AgentOutput, error) {
+								return handoff.Agent.ExecuteWithRun(ctx, in, cb, run)
+							}
+							break
+						}
+					}
+
+					if handoffFn == nil {
+						toolResult = &responses.FunctionCallOutputMessage{
+							ID:     toolCall.ID,
+							CallID: toolCall.CallID,
+							Output: responses.FunctionCallOutputContentUnion{
+								OfString: utils.Ptr("Failed to transfer to agent. Target agent not found."),
+							},
+						}
 					}
 				} else {
 					toolResult, err = tool.Execute(ctx, &ToolCall{
@@ -351,6 +429,10 @@ func (e *Agent) ExecuteWithExecutor(ctx context.Context, in *AgentInput, cb func
 				run.RunState.PromoteAwaitingToApproval()
 			} else {
 				run.RunState.TransitionToLLM()
+			}
+
+			if handoffFn != nil {
+				return handoffFn()
 			}
 
 		case agentstate.StepAwaitApproval:

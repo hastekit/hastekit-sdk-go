@@ -11,14 +11,16 @@ import (
 )
 
 type TemporalAgentV2 struct {
-	options *agents.AgentOptions
-	broker  agents.StreamBroker
+	agentConfigs map[string]*agents.AgentOptions
+	options      *agents.AgentOptions
+	broker       agents.StreamBroker
 }
 
-func NewTemporalAgent(options *agents.AgentOptions, broker agents.StreamBroker) *TemporalAgentV2 {
+func NewTemporalAgent(configs map[string]*agents.AgentOptions, options *agents.AgentOptions, broker agents.StreamBroker) *TemporalAgentV2 {
 	return &TemporalAgentV2{
-		options: options,
-		broker:  broker,
+		agentConfigs: configs,
+		options:      options,
+		broker:       broker,
 	}
 }
 
@@ -65,7 +67,14 @@ func (a *TemporalAgentV2) Execute(ctx workflow.Context, in *agents.AgentInput) (
 		a.broker.Publish(context.Background(), workflowId, chunk)
 	}
 	defer a.broker.Close(context.Background(), workflowId)
+	in.Callback = cb
 
+	agent := a.newTemporalProxyAgent(ctx)
+
+	return agent.ExecuteWithoutTrace(context.Background(), in)
+}
+
+func (a *TemporalAgentV2) newTemporalProxyAgent(ctx workflow.Context) *agents.Agent {
 	promptProxy := NewTemporalPromptProxy(ctx, a.options.Name)
 
 	llmProxy := NewTemporalLLMProxy(ctx, a.options.Name, a.broker)
@@ -90,7 +99,7 @@ func (a *TemporalAgentV2) Execute(ctx workflow.Context, in *agents.AgentInput) (
 		mcpProxies = append(mcpProxies, mcpProxy)
 	}
 
-	agent := agents.NewAgent(&agents.AgentOptions{
+	opts := &agents.AgentOptions{
 		Name:       a.options.Name,
 		Output:     a.options.Output,
 		Parameters: a.options.Parameters,
@@ -100,12 +109,16 @@ func (a *TemporalAgentV2) Execute(ctx workflow.Context, in *agents.AgentInput) (
 		Instruction: promptProxy,
 		Tools:       toolProxies,
 		McpServers:  mcpProxies,
-	})
-	agent = agent.WithLLM(llmProxy)
+	}
 
-	in.Callback = cb
+	for _, h := range a.options.Handoffs {
+		agentOptions := a.agentConfigs[h.Name]
+		opts.Handoffs = append(opts.Handoffs, agents.NewHandoff(
+			h.Name, h.Description, NewTemporalAgent(a.agentConfigs, agentOptions, a.broker).newTemporalProxyAgent(ctx),
+		))
+	}
 
-	return agent.ExecuteWithoutTrace(context.Background(), in)
+	return agents.NewAgent(opts).WithLLM(llmProxy)
 }
 
 func getToolName(prefix string, tool agents.Tool) string {
