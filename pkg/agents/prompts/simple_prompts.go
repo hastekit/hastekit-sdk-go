@@ -84,9 +84,8 @@ func (sp *SimplePrompt) GetPrompt(ctx context.Context, deps *agents.Dependencies
 		return "", err
 	}
 
-	prompt += "\n\n" + skillsToPrompts(sp.skills)
-
-	prompt += "\n\n" + handoffsToPrompts(deps.Handoffs)
+	prompt += skillsToPrompts(sp.skills)
+	prompt += handoffsToPrompts(deps.Handoffs)
 
 	if deps.RunContext == nil {
 		return prompt, nil
