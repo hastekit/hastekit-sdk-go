@@ -150,7 +150,7 @@ func handoffsToPrompts(handoffs []*agents.Handoff) string {
 	for _, handoff := range handoffs {
 		p.WriteString("<agent>")
 
-		p.WriteString(fmt.Sprintf("<name>%s</name>", handoff.Agent.Name))
+		p.WriteString(fmt.Sprintf("<name>%s</name>", handoff.Name))
 		p.WriteString(fmt.Sprintf("<description>%s</description>", handoff.Description))
 
 		p.WriteString("</agent>")

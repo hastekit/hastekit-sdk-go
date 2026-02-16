@@ -112,10 +112,10 @@ func (a *TemporalAgentV2) newTemporalProxyAgent(ctx workflow.Context) *agents.Ag
 	}
 
 	for _, h := range a.options.Handoffs {
-		agentOptions := a.agentConfigs[h.Agent.Name]
+		agentOptions := a.agentConfigs[h.Name]
 		opts.Handoffs = append(opts.Handoffs, agents.NewHandoff(
-			NewTemporalAgent(a.agentConfigs, agentOptions, a.broker).newTemporalProxyAgent(ctx), h.Description),
-		)
+			h.Name, h.Description, NewTemporalAgent(a.agentConfigs, agentOptions, a.broker).newTemporalProxyAgent(ctx),
+		))
 	}
 
 	return agents.NewAgent(opts).WithLLM(llmProxy)

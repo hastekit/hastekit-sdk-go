@@ -85,9 +85,9 @@ func (w *AgentWorkflow) newRestateAgentProxy(restateCtx restate.WorkflowContext,
 	}
 
 	for _, h := range agentOptions.Handoffs {
-		agentOption := w.agentConfigs[h.Agent.Name]
+		agentOption := w.agentConfigs[h.Name]
 		opts.Handoffs = append(opts.Handoffs, agents.NewHandoff(
-			w.newRestateAgentProxy(restateCtx, agentOption), h.Description,
+			h.Name, h.Description, w.newRestateAgentProxy(restateCtx, agentOption),
 		))
 	}
 

@@ -370,7 +370,7 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chun
 					}
 
 					for _, handoff := range e.handoffs {
-						if handoff.Agent.Name == param["agent_name"] {
+						if handoff.Name == param["agent_name"] {
 							toolResult = &responses.FunctionCallOutputMessage{
 								ID:     toolCall.ID,
 								CallID: toolCall.CallID,

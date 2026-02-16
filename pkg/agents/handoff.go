@@ -3,18 +3,25 @@ package agents
 import (
 	"context"
 
+	"github.com/hastekit/hastekit-sdk-go/pkg/agents/history"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 )
 
-type Handoff struct {
-	Description string
-	Agent       *Agent
+type HandoffTarget interface {
+	ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chunk *responses.ResponseChunk), run *history.ConversationRunManager) (*AgentOutput, error)
 }
 
-func NewHandoff(agent *Agent, desc string) *Handoff {
+type Handoff struct {
+	Name        string
+	Description string
+	Agent       HandoffTarget `json:"-"`
+}
+
+func NewHandoff(name string, desc string, agent *Agent) *Handoff {
 	return &Handoff{
-		Agent:       agent,
+		Name:        name,
 		Description: desc,
+		Agent:       agent,
 	}
 }
 
