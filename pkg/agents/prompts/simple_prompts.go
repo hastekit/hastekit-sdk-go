@@ -40,7 +40,6 @@ type SimplePrompt struct {
 	loader   PromptLoader
 	resolver PromptResolverFn
 	skills   []agents.Skill
-	handoffs []*agents.Handoff
 }
 
 func New(prompt string, opts ...PromptOption) *SimplePrompt {
