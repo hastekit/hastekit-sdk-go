@@ -37,6 +37,19 @@ func (w *AgentWorkflow) Run(restateCtx restate.WorkflowContext, input *WorkflowI
 	}
 	defer w.broker.Close(context.Background(), workflowId)
 
+	agent := w.newRestateAgentProxy(restateCtx, agentOptions)
+
+	// Execute using the SAME agent instance with durability
+	return agent.Execute(restateCtx, &agents.AgentInput{
+		Namespace:         input.Namespace,
+		PreviousMessageID: input.PreviousMessageID,
+		Messages:          input.Messages,
+		RunContext:        input.RunContext,
+		Callback:          cb,
+	})
+}
+
+func (w *AgentWorkflow) newRestateAgentProxy(restateCtx restate.WorkflowContext, agentOptions *agents.AgentOptions) *agents.Agent {
 	promptProxy := NewRestatePrompt(restateCtx, agentOptions.Instruction)
 
 	llmProxy := NewRestateLLM(restateCtx, agentOptions.LLM)
@@ -59,7 +72,7 @@ func (w *AgentWorkflow) Run(restateCtx restate.WorkflowContext, input *WorkflowI
 		mcpClients = append(mcpClients, NewRestateMCPServer(restateCtx, mcpClient))
 	}
 
-	agent := agents.NewAgent(&agents.AgentOptions{
+	opts := &agents.AgentOptions{
 		Name:       agentOptions.Name,
 		Output:     agentOptions.Output,
 		Parameters: agentOptions.Parameters,
@@ -69,14 +82,14 @@ func (w *AgentWorkflow) Run(restateCtx restate.WorkflowContext, input *WorkflowI
 		History:     conversationHistory,
 		Tools:       restateTools,
 		McpServers:  mcpClients,
-	}).WithLLM(llmProxy)
+	}
 
-	// Execute using the SAME agent instance with durability
-	return agent.Execute(restateCtx, &agents.AgentInput{
-		Namespace:         input.Namespace,
-		PreviousMessageID: input.PreviousMessageID,
-		Messages:          input.Messages,
-		RunContext:        input.RunContext,
-		Callback:          cb,
-	})
+	for _, h := range agentOptions.Handoffs {
+		agentOption := w.agentConfigs[h.Agent.Name]
+		opts.Handoffs = append(opts.Handoffs, agents.NewHandoff(
+			w.newRestateAgentProxy(restateCtx, agentOption), h.Description,
+		))
+	}
+
+	return agents.NewAgent(opts).WithLLM(llmProxy)
 }

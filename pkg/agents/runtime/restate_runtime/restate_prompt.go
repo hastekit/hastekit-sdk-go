@@ -19,8 +19,8 @@ func NewRestatePrompt(restateCtx restate.WorkflowContext, instruction agents.Sys
 	}
 }
 
-func (r *RestatePrompt) GetPrompt(ctx context.Context, runContext map[string]any) (string, error) {
+func (r *RestatePrompt) GetPrompt(ctx context.Context, deps *agents.Dependencies) (string, error) {
 	return restate.Run(r.restateCtx, func(ctx restate.RunContext) (string, error) {
-		return r.wrappedPrompt.GetPrompt(ctx, runContext)
+		return r.wrappedPrompt.GetPrompt(ctx, deps)
 	}, restate.WithName("GetPrompt"))
 }

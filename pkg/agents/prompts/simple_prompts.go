@@ -40,6 +40,7 @@ type SimplePrompt struct {
 	loader   PromptLoader
 	resolver PromptResolverFn
 	skills   []agents.Skill
+	handoffs []*agents.Handoff
 }
 
 func New(prompt string, opts ...PromptOption) *SimplePrompt {
@@ -73,7 +74,7 @@ func WithSkills(skills []agents.Skill) PromptOption {
 	}
 }
 
-func (sp *SimplePrompt) GetPrompt(ctx context.Context, data map[string]any) (string, error) {
+func (sp *SimplePrompt) GetPrompt(ctx context.Context, deps *agents.Dependencies) (string, error) {
 	ctx, span := tracer.Start(ctx, "GetPrompt")
 	defer span.End()
 
@@ -86,11 +87,13 @@ func (sp *SimplePrompt) GetPrompt(ctx context.Context, data map[string]any) (str
 
 	prompt += "\n\n" + skillsToPrompts(sp.skills)
 
-	if data == nil {
+	prompt += "\n\n" + handoffsToPrompts(deps.Handoffs)
+
+	if deps.RunContext == nil {
 		return prompt, nil
 	}
 
-	return sp.resolver(prompt, data)
+	return sp.resolver(prompt, deps.RunContext)
 }
 
 func stringToTemplate(promptStr string) (*template.Template, error) {
@@ -130,6 +133,29 @@ func skillsToPrompts(skills []agents.Skill) string {
 	}
 
 	p.WriteString("</available_skills>")
+
+	return p.String()
+}
+
+func handoffsToPrompts(handoffs []*agents.Handoff) string {
+	if handoffs == nil || len(handoffs) == 0 {
+		return ""
+	}
+
+	var p strings.Builder
+
+	p.WriteString("\n\n" + "## Agents\n\n")
+	p.WriteString("Agents are specialized in certain tasks or domain. Use the `transfer_to_agent` tool to delegate or transfer to the specialized agents, based on the task at hand.")
+	p.WriteString("<available_agents>")
+	for _, handoff := range handoffs {
+		p.WriteString("<agent>")
+
+		p.WriteString(fmt.Sprintf("<name>%s</name>", handoff.Agent.Name))
+		p.WriteString(fmt.Sprintf("<description>%s</description>", handoff.Description))
+
+		p.WriteString("</agent>")
+	}
+	p.WriteString("</available_agents>")
 
 	return p.String()
 }

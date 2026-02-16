@@ -50,6 +50,7 @@ func (c *SDK) NewTemporalAgent(options *AgentOptions) *agents.Agent {
 		McpServers:  options.McpServers,
 		Runtime:     temporal_runtime.NewTemporalRuntime(c.temporalClient, c.redisBroker),
 		MaxLoops:    options.MaxLoops,
+		Handoffs:    options.Handoffs,
 	})
 
 	c.agents[options.Name] = agent
@@ -62,6 +63,7 @@ func (c *SDK) NewTemporalAgent(options *AgentOptions) *agents.Agent {
 		Tools:       options.Tools,
 		Instruction: options.Instruction,
 		McpServers:  options.McpServers,
+		Handoffs:    options.Handoffs,
 	}
 
 	return agent
@@ -86,7 +88,7 @@ func (c *SDK) StartTemporalService() {
 
 		// Register workflows and activities based on the agents available in the SDK
 		for agentName, agentOptions := range c.temporalAgentConfigs {
-			temporalAgentProxy := temporal_runtime.NewTemporalAgent(agentOptions, c.redisBroker)
+			temporalAgentProxy := temporal_runtime.NewTemporalAgent(c.temporalAgentConfigs, agentOptions, c.redisBroker)
 			for name, fn := range temporalAgentProxy.GetActivities() {
 				w.RegisterActivityWithOptions(fn, activity.RegisterOptions{Name: name})
 			}

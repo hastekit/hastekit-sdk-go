@@ -17,8 +17,8 @@ func NewTemporalPrompt(wrappedPrompt agents.SystemPromptProvider) *TemporalPromp
 	}
 }
 
-func (p *TemporalPrompt) GetPrompt(ctx context.Context, data map[string]any) (string, error) {
-	return p.wrappedPrompt.GetPrompt(ctx, data)
+func (p *TemporalPrompt) GetPrompt(ctx context.Context, deps *agents.Dependencies) (string, error) {
+	return p.wrappedPrompt.GetPrompt(ctx, deps)
 }
 
 type TemporalPromptProxy struct {
@@ -33,9 +33,9 @@ func NewTemporalPromptProxy(workflowCtx workflow.Context, prefix string) agents.
 	}
 }
 
-func (p *TemporalPromptProxy) GetPrompt(ctx context.Context, data map[string]any) (string, error) {
+func (p *TemporalPromptProxy) GetPrompt(ctx context.Context, deps *agents.Dependencies) (string, error) {
 	var prompt string
-	err := workflow.ExecuteActivity(p.workflowCtx, p.prefix+"_GetPromptActivity", data).Get(p.workflowCtx, &prompt)
+	err := workflow.ExecuteActivity(p.workflowCtx, p.prefix+"_GetPromptActivity", deps).Get(p.workflowCtx, &prompt)
 	if err != nil {
 		return "", err
 	}
