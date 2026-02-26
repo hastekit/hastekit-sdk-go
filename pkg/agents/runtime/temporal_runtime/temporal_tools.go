@@ -18,7 +18,7 @@ func NewTemporalTool(wrappedTool agents.Tool) *TemporalTool {
 	}
 }
 
-func (t *TemporalTool) Execute(ctx context.Context, params *agents.ToolCall) (*responses.FunctionCallOutputMessage, error) {
+func (t *TemporalTool) Execute(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
 	return t.wrappedTool.Execute(ctx, params)
 }
 
@@ -36,8 +36,8 @@ func NewTemporalToolProxy(workflowCtx workflow.Context, prefix string, wrappedTo
 	}
 }
 
-func (t *TemporalToolProxy) Execute(ctx context.Context, params *agents.ToolCall) (*responses.FunctionCallOutputMessage, error) {
-	var output *responses.FunctionCallOutputMessage
+func (t *TemporalToolProxy) Execute(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
+	var output *agents.ToolCallResponse
 	err := workflow.ExecuteActivity(t.workflowCtx, t.prefix+"_ExecuteToolActivity", params).Get(t.workflowCtx, &output)
 	if err != nil {
 		return nil, err

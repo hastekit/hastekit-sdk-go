@@ -20,8 +20,8 @@ func NewRestateTool(restateCtx restate.WorkflowContext, wrappedTool agents.Tool)
 	}
 }
 
-func (t *RestateTool) Execute(ctx context.Context, params *agents.ToolCall) (*responses.FunctionCallOutputMessage, error) {
-	return restate.Run(t.restateCtx, func(ctx restate.RunContext) (*responses.FunctionCallOutputMessage, error) {
+func (t *RestateTool) Execute(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
+	return restate.Run(t.restateCtx, func(ctx restate.RunContext) (*agents.ToolCallResponse, error) {
 		return t.wrappedTool.Execute(ctx, params)
 	}, restate.WithName(params.Name+"_ToolCall"))
 }

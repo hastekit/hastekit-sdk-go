@@ -23,8 +23,18 @@ func NewAgentTool(t *responses.ToolUnion, agent *agents.Agent) *AgentTool {
 	}
 }
 
-func (t *AgentTool) Execute(ctx context.Context, params *agents.ToolCall) (*responses.FunctionCallOutputMessage, error) {
+func (t *AgentTool) Execute(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
+	namespace := params.Namespace + "/" + params.Name
+	previousRunId := ""
+
+	agentToolContextId, exists := params.SubAgentContext[t.agent.Name]
+	if exists {
+		previousRunId = agentToolContextId
+	}
+
 	result, err := t.agent.Execute(ctx, &agents.AgentInput{
+		Namespace:         namespace,
+		PreviousMessageID: previousRunId,
 		Messages: []responses.InputMessageUnion{
 			{
 				OfEasyInput: &responses.EasyMessage{
@@ -63,11 +73,16 @@ func (t *AgentTool) Execute(ctx context.Context, params *agents.ToolCall) (*resp
 		}
 	}
 
-	return &responses.FunctionCallOutputMessage{
-		ID:     params.ID,
-		CallID: params.CallID,
-		Output: responses.FunctionCallOutputContentUnion{
-			OfString: utils.Ptr(data),
+	return &agents.ToolCallResponse{
+		FunctionCallOutputMessage: &responses.FunctionCallOutputMessage{
+			ID:     params.ID,
+			CallID: params.CallID,
+			Output: responses.FunctionCallOutputContentUnion{
+				OfString: utils.Ptr(data),
+			},
+		},
+		SubAgentContext: map[string]string{
+			t.agent.Name: result.RunID,
 		},
 	}, nil
 }

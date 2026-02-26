@@ -15,7 +15,7 @@ func NewCodeExecutionTool() *CodeExecutionTool {
 	return &CodeExecutionTool{}
 }
 
-func (t *CodeExecutionTool) Execute(ctx context.Context, params *agents.ToolCall) (*responses.FunctionCallOutputMessage, error) {
+func (t *CodeExecutionTool) Execute(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
 	return nil, nil
 }
 

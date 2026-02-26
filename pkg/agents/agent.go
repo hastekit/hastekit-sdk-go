@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 	"slices"
 
 	"github.com/bytedance/sonic"
@@ -396,15 +397,22 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chun
 						}
 					}
 				} else {
-					toolResult, err = tool.Execute(ctx, &ToolCall{
+					toolCallResp, err := tool.Execute(ctx, &ToolCall{
 						FunctionCallMessage: &toolCall,
 						AgentName:           e.Name,
 						Namespace:           in.Namespace,
 						ConversationID:      run.GetConversationID(),
 						RunContext:          in.RunContext,
+						SubAgentContext:     run.SubAgentContext,
 					})
 					if err != nil {
 						return &AgentOutput{Status: agentstate.RunStatusError, RunID: runId}, err
+					}
+
+					toolResult = toolCallResp.FunctionCallOutputMessage
+
+					if toolCallResp.SubAgentContext != nil {
+						maps.Copy(run.SubAgentContext, toolCallResp.SubAgentContext)
 					}
 				}
 
