@@ -3,8 +3,10 @@ package history
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"time"
 
+	"github.com/bytedance/sonic"
 	"github.com/google/uuid"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/agentstate"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
@@ -84,6 +86,7 @@ type ConversationRunManager struct {
 	newMessages     []responses.InputMessageUnion
 	usage           *responses.Usage
 	lastMessageMeta map[string]any
+	SubAgentContext map[string]string
 	RunState        *agentstate.RunState
 
 	summarizer HistorySummarizer
@@ -95,6 +98,7 @@ func NewRun(ctx context.Context, cm *CommonConversationManager, namespace string
 		ConversationPersistenceAdapter: cm.ConversationPersistenceAdapter,
 		summarizer:                     cm.Summarizer,
 		msgIdToRunId:                   make(map[string]string),
+		SubAgentContext:                make(map[string]string),
 	}
 
 	// Load messages
@@ -220,6 +224,7 @@ func (cm *ConversationRunManager) LoadMessages(ctx context.Context, namespace st
 	cm.convMessages = convMessages
 	cm.oldMessages = messages
 	cm.RunState = agentstate.LoadRunStateFromMeta(cm.lastMessageMeta)
+	cm.loadSubAgentContext(ctx)
 	if cm.RunState != nil {
 		cm.usage = &cm.RunState.Usage
 	}
@@ -243,6 +248,12 @@ func (cm *ConversationRunManager) GetConversationID() string {
 }
 
 func (cm *ConversationRunManager) SaveMessages(ctx context.Context, meta map[string]any) error {
+	if meta == nil {
+		meta = map[string]any{}
+	}
+
+	meta["subAgentContext"] = cm.SubAgentContext
+
 	if cm.summaries != nil {
 		sum := Summary{
 			ID:                      cm.summaries.SummaryID,
@@ -293,4 +304,23 @@ func (cm *ConversationRunManager) TrackUsage(usage *responses.Usage) {
 	cm.RunState.Usage.OutputTokens += usage.OutputTokens
 	cm.RunState.Usage.InputTokensDetails.CachedTokens += usage.InputTokensDetails.CachedTokens
 	cm.RunState.Usage.TotalTokens += usage.TotalTokens
+}
+
+func (cm *ConversationRunManager) loadSubAgentContext(ctx context.Context) {
+	data := cm.lastMessageMeta["subAgentContext"]
+
+	if data == nil {
+		return
+	}
+
+	buf, err := sonic.Marshal(data)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to marshal sub agent context", "error", err)
+		return
+	}
+
+	if err = sonic.Unmarshal(buf, &cm.SubAgentContext); err != nil {
+		slog.ErrorContext(ctx, "failed to unmarshal sub agent context", "error", err)
+		return
+	}
 }

@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents"
-	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	restate "github.com/restatedev/sdk-go"
 )
 
@@ -71,8 +70,8 @@ func NewRestateMCPTool(restateCtx restate.WorkflowContext, wrappedMcpServer agen
 	}
 }
 
-func (t *RestateMCPTool) Execute(ctx context.Context, params *agents.ToolCall) (*responses.FunctionCallOutputMessage, error) {
-	return restate.Run(t.restateCtx, func(ctx restate.RunContext) (*responses.FunctionCallOutputMessage, error) {
+func (t *RestateMCPTool) Execute(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
+	return restate.Run(t.restateCtx, func(ctx restate.RunContext) (*agents.ToolCallResponse, error) {
 		mcpTools, err := t.wrappedMcpServer.ListTools(ctx, t.runContext)
 		if err != nil {
 			return nil, err

@@ -57,7 +57,7 @@ func NewMcpTool(t mcp.Tool, cli *client.Client, Meta *mcp.Meta, requiresApproval
 	}
 }
 
-func (c *McpTool) Execute(ctx context.Context, params *agents.ToolCall) (*responses.FunctionCallOutputMessage, error) {
+func (c *McpTool) Execute(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
 	ctx, span := tracer.Start(ctx, "McpTool: "+params.Name)
 	defer span.End()
 
@@ -69,11 +69,13 @@ func (c *McpTool) Execute(ctx context.Context, params *agents.ToolCall) (*respon
 		if err != nil {
 			span.RecordError(err)
 			span.SetAttributes(attribute.String("output", err.Error()))
-			return &responses.FunctionCallOutputMessage{
-				ID:     params.ID,
-				CallID: params.CallID,
-				Output: responses.FunctionCallOutputContentUnion{
-					OfString: utils.Ptr(err.Error()),
+			return &agents.ToolCallResponse{
+				FunctionCallOutputMessage: &responses.FunctionCallOutputMessage{
+					ID:     params.ID,
+					CallID: params.CallID,
+					Output: responses.FunctionCallOutputContentUnion{
+						OfString: utils.Ptr(err.Error()),
+					},
 				},
 			}, nil
 		}
@@ -91,11 +93,13 @@ func (c *McpTool) Execute(ctx context.Context, params *agents.ToolCall) (*respon
 	if err != nil {
 		span.RecordError(err)
 		span.SetAttributes(attribute.String("output", err.Error()))
-		return &responses.FunctionCallOutputMessage{
-			ID:     params.ID,
-			CallID: params.CallID,
-			Output: responses.FunctionCallOutputContentUnion{
-				OfString: utils.Ptr(err.Error()),
+		return &agents.ToolCallResponse{
+			FunctionCallOutputMessage: &responses.FunctionCallOutputMessage{
+				ID:     params.ID,
+				CallID: params.CallID,
+				Output: responses.FunctionCallOutputContentUnion{
+					OfString: utils.Ptr(err.Error()),
+				},
 			},
 		}, nil
 	}
@@ -113,7 +117,7 @@ func (c *McpTool) Execute(ctx context.Context, params *agents.ToolCall) (*respon
 			}
 			outStr, _ := sonic.Marshal(out)
 			span.SetAttributes(attribute.String("output", string(outStr)))
-			return out, nil
+			return &agents.ToolCallResponse{FunctionCallOutputMessage: out}, nil
 		}
 	}
 

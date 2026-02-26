@@ -8,15 +8,21 @@ import (
 
 type ToolCall struct {
 	*responses.FunctionCallMessage
-	AgentName      string         `json:"agent_name"`
-	AgentVersion   string         `json:"agent_version"`
-	Namespace      string         `json:"namespace"`
-	ConversationID string         `json:"conversation_id"`
-	RunContext     map[string]any `json:"run_context"`
+	AgentName       string            `json:"agent_name"`
+	AgentVersion    string            `json:"agent_version"`
+	Namespace       string            `json:"namespace"`
+	ConversationID  string            `json:"conversation_id"`
+	RunContext      map[string]any    `json:"run_context"`
+	SubAgentContext map[string]string `json:"sub_agent_context,omitempty"`
+}
+
+type ToolCallResponse struct {
+	*responses.FunctionCallOutputMessage
+	SubAgentContext map[string]string `json:"sub_agent_context,omitempty"`
 }
 
 type Tool interface {
-	Execute(ctx context.Context, params *ToolCall) (*responses.FunctionCallOutputMessage, error)
+	Execute(ctx context.Context, params *ToolCall) (*ToolCallResponse, error)
 	Tool(ctx context.Context) *responses.ToolUnion
 	NeedApproval() bool
 }

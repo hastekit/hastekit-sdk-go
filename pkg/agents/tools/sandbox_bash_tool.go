@@ -54,7 +54,7 @@ func NewSandboxTool(svc sandbox.Manager, image string, env map[string]string) *S
 	}
 }
 
-func (t *SandboxTool) Execute(ctx context.Context, params *agents.ToolCall) (*responses.FunctionCallOutputMessage, error) {
+func (t *SandboxTool) Execute(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
 	ctx, span := tracer.Start(ctx, "SandboxTool")
 	defer span.End()
 
@@ -101,11 +101,13 @@ func (t *SandboxTool) Execute(ctx context.Context, params *agents.ToolCall) (*re
 	// Serialize the output
 	txt, _ := sonic.Marshal(res)
 
-	return &responses.FunctionCallOutputMessage{
-		ID:     params.ID,
-		CallID: params.CallID,
-		Output: responses.FunctionCallOutputContentUnion{
-			OfString: utils.Ptr(string(txt)),
+	return &agents.ToolCallResponse{
+		FunctionCallOutputMessage: &responses.FunctionCallOutputMessage{
+			ID:     params.ID,
+			CallID: params.CallID,
+			Output: responses.FunctionCallOutputContentUnion{
+				OfString: utils.Ptr(string(txt)),
+			},
 		},
 	}, nil
 }

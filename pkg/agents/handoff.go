@@ -38,6 +38,6 @@ func NewHandoffTool(t *responses.ToolUnion) *HandoffTool {
 	}
 }
 
-func (t *HandoffTool) Execute(ctx context.Context, params *ToolCall) (*responses.FunctionCallOutputMessage, error) {
+func (t *HandoffTool) Execute(ctx context.Context, params *ToolCall) (*ToolCallResponse, error) {
 	return nil, nil
 }
