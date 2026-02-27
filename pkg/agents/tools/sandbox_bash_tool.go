@@ -72,7 +72,7 @@ func (t *SandboxTool) Execute(ctx context.Context, params *agents.ToolCall) (*ag
 	}
 
 	sb, err := t.sandboxManager.CreateSandbox(ctx, &sandbox.CreateSandboxRequest{
-		SessionID: params.ConversationID,
+		SessionID: params.SessionID,
 		Image:     t.image,
 		AgentName: params.AgentName,
 		Namespace: params.Namespace,

@@ -43,6 +43,7 @@ func (t *AgentTool) Execute(ctx context.Context, params *agents.ToolCall) (*agen
 				},
 			},
 		},
+		SessionID: params.SessionID, // Using conversation id as the shared session id
 	})
 	if err != nil {
 		return nil, err

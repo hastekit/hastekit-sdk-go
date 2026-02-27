@@ -159,6 +159,9 @@ type AgentInput struct {
 	RunContext        map[string]any                       `json:"run_context"`
 	Callback          func(chunk *responses.ResponseChunk) `json:"-"`
 	StreamBroker      StreamBroker                         `json:"-"`
+
+	// Available only on sub-agents
+	SessionID string `json:"shared_session_id"`
 }
 
 // AgentOutput represents the result of agent execution
@@ -209,6 +212,10 @@ func (e *Agent) ExecuteWithoutTrace(ctx context.Context, in *AgentInput) (*Agent
 }
 
 func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chunk *responses.ResponseChunk), run *history.ConversationRunManager) (*AgentOutput, error) {
+	if in.SessionID == "" {
+		in.SessionID = run.GetConversationID()
+	}
+
 	handoffTools := e.PrepareHandoffTools(ctx)
 	tools := append(e.tools, handoffTools...)
 
@@ -401,7 +408,7 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chun
 						FunctionCallMessage: &toolCall,
 						AgentName:           e.Name,
 						Namespace:           in.Namespace,
-						ConversationID:      run.GetConversationID(),
+						SessionID:           in.SessionID,
 						RunContext:          in.RunContext,
 						SubAgentContext:     run.SubAgentContext,
 					})
