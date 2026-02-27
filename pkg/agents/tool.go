@@ -11,7 +11,7 @@ type ToolCall struct {
 	AgentName       string            `json:"agent_name"`
 	AgentVersion    string            `json:"agent_version"`
 	Namespace       string            `json:"namespace"`
-	ConversationID  string            `json:"conversation_id"`
+	SessionID       string            `json:"session_id"`
 	RunContext      map[string]any    `json:"run_context"`
 	SubAgentContext map[string]string `json:"sub_agent_context,omitempty"`
 }
