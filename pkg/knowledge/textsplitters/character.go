@@ -1,6 +1,7 @@
 package textsplitters
 
 import (
+	"context"
 	"fmt"
 	"unicode/utf8"
 )
@@ -24,7 +25,7 @@ func NewCharacterLengthSplitter(opts ChunkOptions) (*CharacterLengthSplitter, er
 
 // Split splits text into chunks of at most opts.ChunkSize runes, with opts.ChunkOverlap
 // runes shared between consecutive chunks.
-func (s *CharacterLengthSplitter) Split(text string) ([]string, error) {
+func (s *CharacterLengthSplitter) Split(ctx context.Context, text string) ([]string, error) {
 	runes := []rune(text)
 	if len(runes) == 0 {
 		return nil, nil

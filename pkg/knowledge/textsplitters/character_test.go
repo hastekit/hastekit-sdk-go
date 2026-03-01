@@ -1,6 +1,7 @@
 package textsplitters
 
 import (
+	"context"
 	"testing"
 )
 
@@ -12,7 +13,7 @@ func TestCharacterLengthSplitter_Split(t *testing.T) {
 	}
 
 	// "Hello world" = 11 runes
-	chunks, err := splitter.Split("Hello world")
+	chunks, err := splitter.Split(context.Background(), "Hello world")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +30,7 @@ func TestCharacterLengthSplitter_Split(t *testing.T) {
 
 func TestCharacterLengthSplitter_Empty(t *testing.T) {
 	splitter, _ := NewCharacterLengthSplitter(ChunkOptions{ChunkSize: 5, ChunkOverlap: 0})
-	chunks, err := splitter.Split("")
+	chunks, err := splitter.Split(context.Background(), "")
 	if err != nil {
 		t.Fatal(err)
 	}

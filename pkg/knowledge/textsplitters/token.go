@@ -1,6 +1,7 @@
 package textsplitters
 
 import (
+	"context"
 	"fmt"
 	"unicode/utf8"
 )
@@ -34,7 +35,7 @@ func NewTokenLengthSplitter(opts ChunkOptions, counter TokenCounter) (*TokenLeng
 
 // Split splits text into chunks of at most opts.ChunkSize tokens, with opts.ChunkOverlap
 // tokens overlapping between consecutive chunks.
-func (s *TokenLengthSplitter) Split(text string) ([]string, error) {
+func (s *TokenLengthSplitter) Split(ctx context.Context, text string) ([]string, error) {
 	if text == "" {
 		return nil, nil
 	}

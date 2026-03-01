@@ -1,18 +1,14 @@
 package textsplitters
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"regexp"
 	"strings"
-)
 
-// Embedder computes embeddings for text. Implementations can use
-// OpenAI, local models, or other embedding services.
-type Embedder interface {
-	// Embed returns the embedding vector for the given text.
-	Embed(text string) ([]float64, error)
-}
+	"github.com/hastekit/hastekit-sdk-go/pkg/knowledge/embedder"
+)
 
 // SemanticSplitterOptions configures the semantic chunking behavior.
 type SemanticSplitterOptions struct {
@@ -54,11 +50,11 @@ func DefaultSemanticSplitterOptions() SemanticSplitterOptions {
 // consecutive sentences with similar embeddings into chunks.
 type SemanticSplitter struct {
 	opts     SemanticSplitterOptions
-	embedder Embedder
+	embedder embedder.Embedder
 }
 
 // NewSemanticSplitter creates a splitter that chunks by semantic similarity.
-func NewSemanticSplitter(opts SemanticSplitterOptions, embedder Embedder) (*SemanticSplitter, error) {
+func NewSemanticSplitter(opts SemanticSplitterOptions, embedder embedder.Embedder) (*SemanticSplitter, error) {
 	if embedder == nil {
 		return nil, fmt.Errorf("embedder is required for semantic splitting")
 	}
@@ -82,13 +78,13 @@ func NewSemanticSplitter(opts SemanticSplitterOptions, embedder Embedder) (*Sema
 }
 
 // Split splits text into semantically coherent chunks.
-func (s *SemanticSplitter) Split(text string) ([]string, error) {
+func (s *SemanticSplitter) Split(ctx context.Context, text string) ([]string, error) {
 	if text == "" {
 		return nil, nil
 	}
 
 	// Step 1: Split into sentences
-	sentences := s.splitIntoSentences(text)
+	sentences := s.splitIntoSentences(ctx, text)
 	if len(sentences) == 0 {
 		return nil, nil
 	}
@@ -99,30 +95,30 @@ func (s *SemanticSplitter) Split(text string) ([]string, error) {
 	}
 
 	// Step 2: Compute embeddings for each sentence (with buffer context)
-	embeddings, err := s.computeEmbeddings(sentences)
+	embeddings, err := s.computeEmbeddings(ctx, sentences)
 	if err != nil {
 		return nil, fmt.Errorf("failed to compute embeddings: %w", err)
 	}
 
 	// Step 3: Compute similarity between consecutive sentences
-	similarities := s.computeSimilarities(embeddings)
+	similarities := s.computeSimilarities(ctx, embeddings)
 
 	// Step 4: Find breakpoints where similarity drops below threshold
-	breakpoints := s.findBreakpoints(similarities)
+	breakpoints := s.findBreakpoints(ctx, similarities)
 
 	// Step 5: Group sentences into chunks based on breakpoints
-	chunks := s.groupIntoChunks(sentences, breakpoints)
+	chunks := s.groupIntoChunks(ctx, sentences, breakpoints)
 
 	// Step 6: Enforce size constraints if specified
 	if s.opts.MaxChunkSize > 0 {
-		chunks = s.enforceMaxSize(chunks)
+		chunks = s.enforceMaxSize(ctx, chunks)
 	}
 
 	return chunks, nil
 }
 
 // splitIntoSentences splits text into sentences using the configured separators.
-func (s *SemanticSplitter) splitIntoSentences(text string) []string {
+func (s *SemanticSplitter) splitIntoSentences(ctx context.Context, text string) []string {
 	// Build a regex pattern from separators
 	var escapedSeps []string
 	for _, sep := range s.opts.Separators {
@@ -150,14 +146,14 @@ func (s *SemanticSplitter) splitIntoSentences(text string) []string {
 
 	// Merge very short sentences with the next one
 	if s.opts.MinChunkSize > 0 {
-		sentences = s.mergeShortSentences(sentences)
+		sentences = s.mergeShortSentences(ctx, sentences)
 	}
 
 	return sentences
 }
 
 // mergeShortSentences combines sentences shorter than MinChunkSize with neighbors.
-func (s *SemanticSplitter) mergeShortSentences(sentences []string) []string {
+func (s *SemanticSplitter) mergeShortSentences(ctx context.Context, sentences []string) []string {
 	if len(sentences) <= 1 {
 		return sentences
 	}
@@ -192,14 +188,14 @@ func (s *SemanticSplitter) mergeShortSentences(sentences []string) []string {
 }
 
 // computeEmbeddings computes embeddings for each sentence with buffer context.
-func (s *SemanticSplitter) computeEmbeddings(sentences []string) ([][]float64, error) {
+func (s *SemanticSplitter) computeEmbeddings(ctx context.Context, sentences []string) ([][]float64, error) {
 	embeddings := make([][]float64, len(sentences))
 
 	for i := range sentences {
 		// Build context with buffer
-		contextText := s.buildContextWindow(sentences, i)
+		contextText := s.buildContextWindow(ctx, sentences, i)
 
-		emb, err := s.embedder.Embed(contextText)
+		emb, err := s.embedder.Embed(ctx, contextText)
 		if err != nil {
 			return nil, fmt.Errorf("failed to embed sentence %d: %w", i, err)
 		}
@@ -210,7 +206,7 @@ func (s *SemanticSplitter) computeEmbeddings(sentences []string) ([][]float64, e
 }
 
 // buildContextWindow creates a context string including buffer sentences.
-func (s *SemanticSplitter) buildContextWindow(sentences []string, idx int) string {
+func (s *SemanticSplitter) buildContextWindow(ctx context.Context, sentences []string, idx int) string {
 	start := idx - s.opts.BufferSize
 	if start < 0 {
 		start = 0
@@ -224,7 +220,7 @@ func (s *SemanticSplitter) buildContextWindow(sentences []string, idx int) strin
 }
 
 // computeSimilarities calculates cosine similarity between consecutive embeddings.
-func (s *SemanticSplitter) computeSimilarities(embeddings [][]float64) []float64 {
+func (s *SemanticSplitter) computeSimilarities(ctx context.Context, embeddings [][]float64) []float64 {
 	if len(embeddings) <= 1 {
 		return nil
 	}
@@ -238,7 +234,7 @@ func (s *SemanticSplitter) computeSimilarities(embeddings [][]float64) []float64
 }
 
 // findBreakpoints identifies indices where chunks should be split.
-func (s *SemanticSplitter) findBreakpoints(similarities []float64) []int {
+func (s *SemanticSplitter) findBreakpoints(ctx context.Context, similarities []float64) []int {
 	if len(similarities) == 0 {
 		return nil
 	}
@@ -257,7 +253,7 @@ func (s *SemanticSplitter) findBreakpoints(similarities []float64) []int {
 }
 
 // groupIntoChunks combines sentences into chunks based on breakpoints.
-func (s *SemanticSplitter) groupIntoChunks(sentences []string, breakpoints []int) []string {
+func (s *SemanticSplitter) groupIntoChunks(ctx context.Context, sentences []string, breakpoints []int) []string {
 	if len(sentences) == 0 {
 		return nil
 	}
@@ -292,7 +288,7 @@ func (s *SemanticSplitter) groupIntoChunks(sentences []string, breakpoints []int
 }
 
 // enforceMaxSize splits chunks that exceed MaxChunkSize.
-func (s *SemanticSplitter) enforceMaxSize(chunks []string) []string {
+func (s *SemanticSplitter) enforceMaxSize(ctx context.Context, chunks []string) []string {
 	var result []string
 
 	for _, chunk := range chunks {
@@ -309,7 +305,7 @@ func (s *SemanticSplitter) enforceMaxSize(chunks []string) []string {
 				result = append(result, chunk)
 				continue
 			}
-			subChunks, err := fallback.Split(chunk)
+			subChunks, err := fallback.Split(ctx, chunk)
 			if err != nil {
 				result = append(result, chunk)
 				continue
@@ -350,7 +346,7 @@ type PercentileBreakpointFinder struct {
 }
 
 // FindBreakpoints returns indices where similarity is in the lowest percentile.
-func (p *PercentileBreakpointFinder) FindBreakpoints(similarities []float64) []int {
+func (p *PercentileBreakpointFinder) FindBreakpoints(ctx context.Context, similarities []float64) []int {
 	if len(similarities) == 0 || p.Percentile <= 0 || p.Percentile >= 100 {
 		return nil
 	}
@@ -395,7 +391,7 @@ type GradientBreakpointFinder struct {
 }
 
 // FindBreakpoints returns indices where similarity gradient exceeds threshold.
-func (g *GradientBreakpointFinder) FindBreakpoints(similarities []float64) []int {
+func (g *GradientBreakpointFinder) FindBreakpoints(ctx context.Context, similarities []float64) []int {
 	if len(similarities) < 2 {
 		return nil
 	}

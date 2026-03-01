@@ -1,6 +1,7 @@
 package textsplitters
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"strings"
@@ -13,7 +14,7 @@ type mockEmbedder struct {
 	embedFunc func(text string) ([]float64, error)
 }
 
-func (m *mockEmbedder) Embed(text string) ([]float64, error) {
+func (m *mockEmbedder) Embed(ctx context.Context, text string) ([]float64, error) {
 	if m.embedFunc != nil {
 		return m.embedFunc(text)
 	}
@@ -155,7 +156,7 @@ func TestSemanticSplitter_EmptyInput(t *testing.T) {
 		t.Fatalf("failed to create splitter: %v", err)
 	}
 
-	chunks, err := splitter.Split("")
+	chunks, err := splitter.Split(context.Background(), "")
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -171,7 +172,7 @@ func TestSemanticSplitter_SingleSentence(t *testing.T) {
 	}
 
 	text := "This is a single sentence."
-	chunks, err := splitter.Split(text)
+	chunks, err := splitter.Split(context.Background(), text)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -195,7 +196,7 @@ func TestSemanticSplitter_SimilarContent(t *testing.T) {
 	// Similar sentences about programming
 	text := "Python is a programming language. Java is also a programming language. Programming languages are useful."
 
-	chunks, err := splitter.Split(text)
+	chunks, err := splitter.Split(context.Background(), text)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -223,7 +224,7 @@ func TestSemanticSplitter_DissimilarContent(t *testing.T) {
 	text := "The quick brown fox jumps over the lazy dog. Quantum physics explains particle behavior. " +
 		"Italian cuisine features pasta and pizza. Machine learning uses neural networks."
 
-	chunks, err := splitter.Split(text)
+	chunks, err := splitter.Split(context.Background(), text)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -250,7 +251,7 @@ func TestSemanticSplitter_MaxChunkSize(t *testing.T) {
 	text := "This is a longer text that should be split due to max chunk size constraints. " +
 		"We want to ensure that no chunk exceeds the maximum size."
 
-	chunks, err := splitter.Split(text)
+	chunks, err := splitter.Split(context.Background(), text)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -278,7 +279,7 @@ func TestSemanticSplitter_ParagraphBreaks(t *testing.T) {
 		"This is paragraph two about topic B.\n\n" +
 		"This is paragraph three about topic C."
 
-	chunks, err := splitter.Split(text)
+	chunks, err := splitter.Split(context.Background(), text)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -359,7 +360,7 @@ func TestPercentileBreakpointFinder(t *testing.T) {
 	// Values <= 0.4: 0.3 (idx 1), 0.2 (idx 3), 0.4 (idx 6)
 	// Breakpoints: 2, 4, 7
 
-	breakpoints := finder.FindBreakpoints(similarities)
+	breakpoints := finder.FindBreakpoints(context.Background(), similarities)
 	t.Logf("Breakpoints at percentile 25: %v", breakpoints)
 
 	if len(breakpoints) == 0 {
@@ -397,7 +398,7 @@ func TestPercentileBreakpointFinder_EdgeCases(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			finder := &PercentileBreakpointFinder{Percentile: tt.percentile}
-			breakpoints := finder.FindBreakpoints(tt.similarities)
+			breakpoints := finder.FindBreakpoints(context.Background(), tt.similarities)
 			if tt.wantEmpty && len(breakpoints) != 0 {
 				t.Errorf("expected empty breakpoints, got %v", breakpoints)
 			}
@@ -412,7 +413,7 @@ func TestGradientBreakpointFinder(t *testing.T) {
 	// Big drop between index 3 and 4 (0.9 -> 0.4 = 0.5 gradient)
 	similarities := []float64{0.7, 0.8, 0.3, 0.9, 0.4, 0.5}
 
-	breakpoints := finder.FindBreakpoints(similarities)
+	breakpoints := finder.FindBreakpoints(context.Background(), similarities)
 	t.Logf("Gradient breakpoints: %v", breakpoints)
 
 	// Should find breakpoints at indices 2 and 4 (after the drops)
@@ -434,7 +435,7 @@ func TestGradientBreakpointFinder_NotEnoughSimilarities(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			breakpoints := finder.FindBreakpoints(tt.similarities)
+			breakpoints := finder.FindBreakpoints(context.Background(), tt.similarities)
 			if len(breakpoints) != 0 {
 				t.Errorf("expected no breakpoints, got %v", breakpoints)
 			}
@@ -505,7 +506,7 @@ func TestSemanticSplitter_EmbedderError(t *testing.T) {
 	}
 
 	// Use text that will definitely produce multiple sentences
-	_, err = splitter.Split("First sentence here. Second sentence here. Third sentence here.")
+	_, err = splitter.Split(context.Background(), "First sentence here. Second sentence here. Third sentence here.")
 	// Should propagate the error
 	if err == nil {
 		t.Error("expected error from embedder, got nil")
@@ -530,7 +531,7 @@ func TestSemanticSplitter_CustomSeparators(t *testing.T) {
 	}
 
 	text := "Part one|Part two|Part three"
-	chunks, err := splitter.Split(text)
+	chunks, err := splitter.Split(context.Background(), text)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -552,7 +553,7 @@ func TestSemanticSplitter_ZeroBuffer(t *testing.T) {
 	}
 
 	text := "First sentence. Second sentence. Third sentence."
-	chunks, err := splitter.Split(text)
+	chunks, err := splitter.Split(context.Background(), text)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -573,6 +574,6 @@ func BenchmarkSemanticSplitter(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = splitter.Split(text)
+		_, _ = splitter.Split(context.Background(), text)
 	}
 }
