@@ -22,6 +22,18 @@ func (m *mockEmbedder) Embed(ctx context.Context, text string) ([]float64, error
 	return simpleWordEmbedding(text), nil
 }
 
+func (m *mockEmbedder) EmbedBatch(ctx context.Context, texts []string) ([][]float64, error) {
+	var results [][]float64
+	for _, text := range texts {
+		emb, err := m.Embed(ctx, text)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, emb)
+	}
+	return results, nil
+}
+
 // simpleWordEmbedding creates a simple embedding based on word presence.
 // Words are hashed to positions in a fixed-size vector.
 func simpleWordEmbedding(text string) []float64 {
