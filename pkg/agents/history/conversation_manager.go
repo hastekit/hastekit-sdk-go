@@ -300,6 +300,9 @@ func (cm *ConversationRunManager) SaveMessages(ctx context.Context, meta map[str
 }
 
 func (cm *ConversationRunManager) TrackUsage(usage *responses.Usage) {
+	if usage == nil {
+		return
+	}
 	cm.RunState.Usage.InputTokens += usage.InputTokens
 	cm.RunState.Usage.OutputTokens += usage.OutputTokens
 	cm.RunState.Usage.InputTokensDetails.CachedTokens += usage.InputTokensDetails.CachedTokens
