@@ -593,6 +593,7 @@ type WebSearchCallActionUnion struct {
 	OfSearch   *WebSearchCallActionOfSearch   `json:",omitempty"`
 	OfOpenPage *WebSearchCallActionOfOpenPage `json:",omitempty"`
 	OfFind     *WebSearchCallActionOfFind     `json:",omitempty"`
+	OfString   *string                        `json:",omitempty"`
 }
 
 func (u *WebSearchCallActionUnion) UnmarshalJSON(data []byte) error {
@@ -614,6 +615,12 @@ func (u *WebSearchCallActionUnion) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 
+	var str string
+	if err := sonic.Unmarshal(data, &str); err == nil {
+		u.OfString = &str
+		return nil
+	}
+
 	return errors.New("invalid web search call action union")
 }
 
@@ -628,6 +635,10 @@ func (u *WebSearchCallActionUnion) MarshalJSON() ([]byte, error) {
 
 	if u.OfFind != nil {
 		return sonic.Marshal(u.OfFind)
+	}
+
+	if u.OfString != nil {
+		return sonic.Marshal(u.OfString)
 	}
 
 	return nil, nil
