@@ -1,6 +1,7 @@
 package textsplitters
 
 import (
+	"context"
 	"testing"
 )
 
@@ -12,7 +13,7 @@ func TestTokenLengthSplitter_Split(t *testing.T) {
 	}
 	// 4 chars per token: 20 chars = 5 tokens. So "12345678901234567890" -> 5 tokens per chunk
 	text := "12345678901234567890"
-	chunks, err := splitter.Split(text)
+	chunks, err := splitter.Split(context.Background(), text)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +29,7 @@ func TestTokenLengthSplitter_Split(t *testing.T) {
 
 func TestTokenLengthSplitter_Empty(t *testing.T) {
 	splitter, _ := NewTokenLengthSplitter(ChunkOptions{ChunkSize: 5, ChunkOverlap: 0}, DefaultEstimatorCounter)
-	chunks, err := splitter.Split("")
+	chunks, err := splitter.Split(context.Background(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
