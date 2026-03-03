@@ -136,7 +136,7 @@ func TestNewSemanticSplitter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := NewSemanticSplitter(tt.opts, embedder)
+			_, err := NewSemanticSplitter(tt.opts, embedder, DefaultEstimatorCounter)
 			if tt.wantErr {
 				if err == nil {
 					t.Error("expected error, got nil")
@@ -152,8 +152,22 @@ func TestNewSemanticSplitter(t *testing.T) {
 	}
 }
 
+func TestSemanticSplitter_NilCounter(t *testing.T) {
+	_, err := NewSemanticSplitter(
+		SemanticSplitterOptions{MaxChunkSize: 100, SimilarityThreshold: 0.5},
+		&mockEmbedder{},
+		nil,
+	)
+	if err == nil {
+		t.Fatal("expected error for nil counter, got nil")
+	}
+	if !strings.Contains(err.Error(), "token counter is required") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
 func TestSemanticSplitter_NilEmbedder(t *testing.T) {
-	_, err := NewSemanticSplitter(DefaultSemanticSplitterOptions(), nil)
+	_, err := NewSemanticSplitter(DefaultSemanticSplitterOptions(), nil, DefaultEstimatorCounter)
 	if err == nil {
 		t.Error("expected error for nil embedder")
 	}
@@ -163,7 +177,7 @@ func TestSemanticSplitter_NilEmbedder(t *testing.T) {
 }
 
 func TestSemanticSplitter_EmptyInput(t *testing.T) {
-	splitter, err := NewSemanticSplitter(DefaultSemanticSplitterOptions(), &mockEmbedder{})
+	splitter, err := NewSemanticSplitter(DefaultSemanticSplitterOptions(), &mockEmbedder{}, DefaultEstimatorCounter)
 	if err != nil {
 		t.Fatalf("failed to create splitter: %v", err)
 	}
@@ -178,7 +192,7 @@ func TestSemanticSplitter_EmptyInput(t *testing.T) {
 }
 
 func TestSemanticSplitter_SingleSentence(t *testing.T) {
-	splitter, err := NewSemanticSplitter(DefaultSemanticSplitterOptions(), &mockEmbedder{})
+	splitter, err := NewSemanticSplitter(DefaultSemanticSplitterOptions(), &mockEmbedder{}, DefaultEstimatorCounter)
 	if err != nil {
 		t.Fatalf("failed to create splitter: %v", err)
 	}
@@ -200,7 +214,7 @@ func TestSemanticSplitter_SimilarContent(t *testing.T) {
 	opts.SimilarityThreshold = 0.3 // Low threshold - most things stay together
 	opts.MinChunkSize = 0
 
-	splitter, err := NewSemanticSplitter(opts, embedder)
+	splitter, err := NewSemanticSplitter(opts, embedder, DefaultEstimatorCounter)
 	if err != nil {
 		t.Fatalf("failed to create splitter: %v", err)
 	}
@@ -227,7 +241,7 @@ func TestSemanticSplitter_DissimilarContent(t *testing.T) {
 	opts.SimilarityThreshold = 0.8 // High threshold - more splits
 	opts.MinChunkSize = 0
 
-	splitter, err := NewSemanticSplitter(opts, embedder)
+	splitter, err := NewSemanticSplitter(opts, embedder, DefaultEstimatorCounter)
 	if err != nil {
 		t.Fatalf("failed to create splitter: %v", err)
 	}
@@ -250,12 +264,13 @@ func TestSemanticSplitter_DissimilarContent(t *testing.T) {
 
 func TestSemanticSplitter_MaxChunkSize(t *testing.T) {
 	embedder := &mockEmbedder{}
+	tc := DefaultEstimatorCounter
 	opts := DefaultSemanticSplitterOptions()
-	opts.MaxChunkSize = 50
+	opts.MaxChunkSize = 50         // tokens
 	opts.SimilarityThreshold = 0.1 // Keep things together
 	opts.MinChunkSize = 0
 
-	splitter, err := NewSemanticSplitter(opts, embedder)
+	splitter, err := NewSemanticSplitter(opts, embedder, tc)
 	if err != nil {
 		t.Fatalf("failed to create splitter: %v", err)
 	}
@@ -269,9 +284,13 @@ func TestSemanticSplitter_MaxChunkSize(t *testing.T) {
 	}
 
 	for i, chunk := range chunks {
-		runeCount := len([]rune(chunk))
-		if runeCount > opts.MaxChunkSize {
-			t.Errorf("chunk %d exceeds max size: %d > %d", i, runeCount, opts.MaxChunkSize)
+		tokenCount, err := tc.CountTokens(chunk)
+		if err != nil {
+			t.Errorf("chunk %d: CountTokens failed: %v", i, err)
+			continue
+		}
+		if tokenCount > opts.MaxChunkSize {
+			t.Errorf("chunk %d exceeds max size: %d tokens > %d", i, tokenCount, opts.MaxChunkSize)
 		}
 	}
 }
@@ -282,7 +301,7 @@ func TestSemanticSplitter_ParagraphBreaks(t *testing.T) {
 	opts.MinChunkSize = 0
 	opts.SimilarityThreshold = 0.7
 
-	splitter, err := NewSemanticSplitter(opts, embedder)
+	splitter, err := NewSemanticSplitter(opts, embedder, DefaultEstimatorCounter)
 	if err != nil {
 		t.Fatalf("failed to create splitter: %v", err)
 	}
@@ -512,7 +531,7 @@ func TestSemanticSplitter_EmbedderError(t *testing.T) {
 	opts := DefaultSemanticSplitterOptions()
 	opts.MinChunkSize = 0 // Ensure sentences aren't merged
 
-	splitter, err := NewSemanticSplitter(opts, embedder)
+	splitter, err := NewSemanticSplitter(opts, embedder, DefaultEstimatorCounter)
 	if err != nil {
 		t.Fatalf("failed to create splitter: %v", err)
 	}
@@ -537,7 +556,7 @@ func TestSemanticSplitter_CustomSeparators(t *testing.T) {
 		Separators:          []string{"|"}, // Custom separator
 	}
 
-	splitter, err := NewSemanticSplitter(opts, embedder)
+	splitter, err := NewSemanticSplitter(opts, embedder, DefaultEstimatorCounter)
 	if err != nil {
 		t.Fatalf("failed to create splitter: %v", err)
 	}
@@ -559,7 +578,7 @@ func TestSemanticSplitter_ZeroBuffer(t *testing.T) {
 	opts := DefaultSemanticSplitterOptions()
 	opts.BufferSize = 0
 
-	splitter, err := NewSemanticSplitter(opts, embedder)
+	splitter, err := NewSemanticSplitter(opts, embedder, DefaultEstimatorCounter)
 	if err != nil {
 		t.Fatalf("failed to create splitter: %v", err)
 	}
@@ -580,7 +599,7 @@ func BenchmarkSemanticSplitter(b *testing.B) {
 	embedder := &mockEmbedder{}
 	opts := DefaultSemanticSplitterOptions()
 
-	splitter, _ := NewSemanticSplitter(opts, embedder)
+	splitter, _ := NewSemanticSplitter(opts, embedder, DefaultEstimatorCounter)
 
 	text := strings.Repeat("This is a test sentence. ", 100)
 

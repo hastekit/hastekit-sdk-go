@@ -12,11 +12,11 @@ import (
 
 // SemanticSplitterOptions configures the semantic chunking behavior.
 type SemanticSplitterOptions struct {
-	// MaxChunkSize is the maximum size of a chunk in characters.
+	// MaxChunkSize is the maximum size of a chunk in tokens.
 	// If 0, no maximum is enforced (chunks are purely similarity-based).
 	MaxChunkSize int
 
-	// MinChunkSize is the minimum size of a chunk in characters.
+	// MinChunkSize is the minimum size of a chunk in tokens.
 	// Sentences below this will be merged with neighbors. Default: 0.
 	MinChunkSize int
 
@@ -48,15 +48,21 @@ func DefaultSemanticSplitterOptions() SemanticSplitterOptions {
 // SemanticSplitter chunks text based on semantic similarity between sentences.
 // It first splits text into sentences, computes embeddings, and then groups
 // consecutive sentences with similar embeddings into chunks.
+// Chunk size limits (MaxChunkSize, MinChunkSize) are measured in tokens using the provided TokenCounter.
 type SemanticSplitter struct {
 	opts     SemanticSplitterOptions
 	embedder embedder.Embedder
+	counter  TokenCounter
 }
 
 // NewSemanticSplitter creates a splitter that chunks by semantic similarity.
-func NewSemanticSplitter(opts SemanticSplitterOptions, embedder embedder.Embedder) (*SemanticSplitter, error) {
+// counter is used to measure chunk sizes in tokens (MaxChunkSize, MinChunkSize) and is required.
+func NewSemanticSplitter(opts SemanticSplitterOptions, embedder embedder.Embedder, counter TokenCounter) (*SemanticSplitter, error) {
 	if embedder == nil {
 		return nil, fmt.Errorf("embedder is required for semantic splitting")
+	}
+	if counter == nil {
+		return nil, fmt.Errorf("token counter is required")
 	}
 	if opts.SimilarityThreshold < 0 || opts.SimilarityThreshold > 1 {
 		return nil, fmt.Errorf("similarity threshold must be in [0, 1], got %f", opts.SimilarityThreshold)
@@ -74,7 +80,7 @@ func NewSemanticSplitter(opts SemanticSplitterOptions, embedder embedder.Embedde
 		opts.Separators = DefaultSemanticSplitterOptions().Separators
 	}
 
-	return &SemanticSplitter{opts: opts, embedder: embedder}, nil
+	return &SemanticSplitter{opts: opts, embedder: embedder, counter: counter}, nil
 }
 
 // Split splits text into semantically coherent chunks.
@@ -117,6 +123,15 @@ func (s *SemanticSplitter) Split(ctx context.Context, text string) ([]string, er
 	return chunks, nil
 }
 
+// tokenCount returns the token count for text using the splitter's counter. Returns 0 if counter is nil or on error.
+func (s *SemanticSplitter) tokenCount(text string) int {
+	if s.counter == nil {
+		return 0
+	}
+	n, _ := s.counter.CountTokens(text)
+	return n
+}
+
 // splitIntoSentences splits text into sentences using the configured separators.
 func (s *SemanticSplitter) splitIntoSentences(ctx context.Context, text string) []string {
 	// Build a regex pattern from separators
@@ -152,9 +167,9 @@ func (s *SemanticSplitter) splitIntoSentences(ctx context.Context, text string) 
 	return sentences
 }
 
-// mergeShortSentences combines sentences shorter than MinChunkSize with neighbors.
+// mergeShortSentences combines sentences shorter than MinChunkSize (in tokens) with neighbors.
 func (s *SemanticSplitter) mergeShortSentences(ctx context.Context, sentences []string) []string {
-	if len(sentences) <= 1 {
+	if len(sentences) <= 1 || s.counter == nil {
 		return sentences
 	}
 
@@ -168,7 +183,7 @@ func (s *SemanticSplitter) mergeShortSentences(ctx context.Context, sentences []
 			buffer = buffer + " " + sent
 		}
 
-		if len(buffer) >= s.opts.MinChunkSize {
+		if s.tokenCount(buffer) >= s.opts.MinChunkSize {
 			merged = append(merged, buffer)
 			buffer = ""
 		}
@@ -287,19 +302,23 @@ func (s *SemanticSplitter) groupIntoChunks(ctx context.Context, sentences []stri
 	return chunks
 }
 
-// enforceMaxSize splits chunks that exceed MaxChunkSize.
+// enforceMaxSize splits chunks that exceed MaxChunkSize (in tokens).
 func (s *SemanticSplitter) enforceMaxSize(ctx context.Context, chunks []string) []string {
+	if s.counter == nil {
+		return chunks
+	}
+
 	var result []string
 
 	for _, chunk := range chunks {
-		if len([]rune(chunk)) <= s.opts.MaxChunkSize {
+		if s.tokenCount(chunk) <= s.opts.MaxChunkSize {
 			result = append(result, chunk)
 		} else {
-			// Use character splitter as fallback for oversized chunks
+			// Use token splitter as fallback for oversized chunks
 			fallback, err := NewTokenLengthSplitter(ChunkOptions{
 				ChunkSize:    s.opts.MaxChunkSize,
 				ChunkOverlap: s.opts.MaxChunkSize / 10, // 10% overlap
-			}, &EstimatorCounter{CharsPerToken: 1})
+			}, s.counter)
 			if err != nil {
 				// Shouldn't happen with valid MaxChunkSize, but just append as-is
 				result = append(result, chunk)
