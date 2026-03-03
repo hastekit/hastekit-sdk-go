@@ -19,13 +19,14 @@ type KnowledgeTool struct {
 	*agents.BaseTool
 	knowledgePersistence KnowledgePersistence
 	name                 string
+	limit                int
 }
 
 type KnowledgeSearchInput struct {
 	Query string `json:"query"`
 }
 
-func NewKnowledgeTool(svc KnowledgePersistence, name string, description string) *KnowledgeTool {
+func NewKnowledgeTool(svc KnowledgePersistence, name string, description string, limit int) *KnowledgeTool {
 	return &KnowledgeTool{
 		BaseTool: &agents.BaseTool{
 			ToolUnion: responses.ToolUnion{
@@ -48,6 +49,7 @@ func NewKnowledgeTool(svc KnowledgePersistence, name string, description string)
 		},
 		knowledgePersistence: svc,
 		name:                 name,
+		limit:                limit,
 	}
 }
 
@@ -63,7 +65,7 @@ func (t *KnowledgeTool) Execute(ctx context.Context, params *agents.ToolCall) (*
 		return nil, err
 	}
 
-	results, err := t.knowledgePersistence.Search(ctx, in.Query, 10)
+	results, err := t.knowledgePersistence.Search(ctx, in.Query, t.limit)
 	if err != nil {
 		return nil, err
 	}
