@@ -594,6 +594,27 @@ func TestSemanticSplitter_ZeroBuffer(t *testing.T) {
 	}
 }
 
+func TestSemanticSplitter_MandatorySeparators(t *testing.T) {
+	embedder := &mockEmbedder{}
+	opts := DefaultSemanticSplitterOptions()
+	opts.MinChunkSize = 0
+	opts.MandatorySeparators = []string{"|||"}
+
+	splitter, err := NewSemanticSplitter(opts, embedder, DefaultEstimatorCounter)
+	if err != nil {
+		t.Fatalf("failed to create splitter: %v", err)
+	}
+
+	text := "First sentence.|||Second sentence.|||Third sentence."
+	chunks, err := splitter.Split(context.Background(), text)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(chunks) != 3 {
+		t.Fatalf("expected 3 chunks, got %d: %v", len(chunks), chunks)
+	}
+}
+
 // Benchmark for semantic splitting
 func BenchmarkSemanticSplitter(b *testing.B) {
 	embedder := &mockEmbedder{}

@@ -38,6 +38,29 @@ func TestTokenLengthSplitter_Empty(t *testing.T) {
 	}
 }
 
+func TestTokenLengthSplitter_MandatorySeparators(t *testing.T) {
+	splitter, err := NewTokenLengthSplitter(
+		ChunkOptions{
+			ChunkSize:           200,
+			ChunkOverlap:        0,
+			MandatorySeparators: []string{"||"},
+		},
+		DefaultEstimatorCounter,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	text := "alpha||beta||gamma"
+	chunks, err := splitter.Split(context.Background(), text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(chunks) != 3 {
+		t.Fatalf("expected 3 chunks, got %d: %v", len(chunks), chunks)
+	}
+}
+
 func TestEstimatorCounter_CountTokens(t *testing.T) {
 	c := DefaultEstimatorCounter
 	n, err := c.CountTokens("abcd")

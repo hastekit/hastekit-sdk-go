@@ -67,6 +67,20 @@ func (s *RecursiveSplitter) Split(ctx context.Context, text string) ([]string, e
 		return nil, nil
 	}
 
+	fragments := splitByMandatorySeparators(text, s.opts.MandatorySeparators)
+	if len(fragments) == 0 {
+		return nil, nil
+	}
+
+	var all []string
+	for _, fragment := range fragments {
+		chunks := s.splitFragment(fragment)
+		all = append(all, chunks...)
+	}
+	return all, nil
+}
+
+func (s *RecursiveSplitter) splitFragment(text string) []string {
 	var segments []mdSegment
 	if s.recursiveOpts.PreserveCodeBlocks {
 		// Extract code blocks as atomic units.
@@ -98,10 +112,10 @@ func (s *RecursiveSplitter) Split(ctx context.Context, text string) ([]string, e
 	}
 
 	if len(pieces) == 0 {
-		return nil, nil
+		return nil
 	}
 
-	return s.mdMergeChunks(pieces), nil
+	return s.mdMergeChunks(pieces)
 }
 
 // codeSplitStartIndex returns the preferred separator index when splitting large

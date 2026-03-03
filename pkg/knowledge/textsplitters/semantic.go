@@ -32,6 +32,10 @@ type SemanticSplitterOptions struct {
 	// Separators defines the sentence boundaries to split on, in order of priority.
 	// Default: paragraph breaks, sentence endings, semicolons, commas.
 	Separators []string
+
+	// MandatorySeparators are hard boundaries applied before semantic splitting.
+	// Each fragment is then processed with normal semantic chunking logic.
+	MandatorySeparators []string
 }
 
 // DefaultSemanticSplitterOptions returns sensible defaults for semantic splitting.
@@ -89,6 +93,23 @@ func (s *SemanticSplitter) Split(ctx context.Context, text string) ([]string, er
 		return nil, nil
 	}
 
+	fragments := splitByMandatorySeparators(text, s.opts.MandatorySeparators)
+	if len(fragments) == 0 {
+		return nil, nil
+	}
+
+	var all []string
+	for _, fragment := range fragments {
+		chunks, err := s.splitFragment(ctx, fragment)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, chunks...)
+	}
+	return all, nil
+}
+
+func (s *SemanticSplitter) splitFragment(ctx context.Context, text string) ([]string, error) {
 	// Step 1: Split into sentences
 	sentences := s.splitIntoSentences(ctx, text)
 	if len(sentences) == 0 {

@@ -616,3 +616,27 @@ func TestMarkdownSplitter_SingleLongLine(t *testing.T) {
 		}
 	}
 }
+
+func TestRecursiveSplitter_MandatorySeparators(t *testing.T) {
+	splitter, err := NewRecursiveSplitter(
+		ChunkOptions{
+			ChunkSize:           100,
+			ChunkOverlap:        0,
+			MandatorySeparators: []string{"---MANDATORY---"},
+		},
+		DefaultMarkdownRecursiveOptions(),
+		tc,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	text := "# One\n\nfirst block\n---MANDATORY---\n# Two\n\nsecond block"
+	chunks, err := splitter.Split(context.Background(), text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(chunks) != 2 {
+		t.Fatalf("expected 2 chunks, got %d: %v", len(chunks), chunks)
+	}
+}

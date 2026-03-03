@@ -7,6 +7,9 @@ type ChunkOptions struct {
 	// ChunkOverlap is the number of characters/tokens to overlap between consecutive chunks.
 	// Overlap helps preserve context across boundaries. Must be < ChunkSize.
 	ChunkOverlap int
+	// MandatorySeparators are hard boundaries applied before splitter-specific logic.
+	// Splitting happens on these separators first, then each fragment is split normally.
+	MandatorySeparators []string
 }
 
 // RecursiveOptions configures boundary selection for RecursiveSplitter.

@@ -40,6 +40,23 @@ func (s *TokenLengthSplitter) Split(ctx context.Context, text string) ([]string,
 		return nil, nil
 	}
 
+	fragments := splitByMandatorySeparators(text, s.opts.MandatorySeparators)
+	if len(fragments) == 0 {
+		return nil, nil
+	}
+
+	var all []string
+	for _, fragment := range fragments {
+		chunks, err := s.splitFragment(fragment)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, chunks...)
+	}
+	return all, nil
+}
+
+func (s *TokenLengthSplitter) splitFragment(text string) ([]string, error) {
 	runes := []rune(text)
 	size := s.opts.ChunkSize
 	overlap := s.opts.ChunkOverlap
