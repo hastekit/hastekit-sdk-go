@@ -6,52 +6,75 @@ import (
 	"testing"
 )
 
+// tc is the token counter used across markdown tests.
+// DefaultEstimatorCounter uses ~4 chars per token.
+var tc = DefaultEstimatorCounter
+
+func tokenLen(s string) int {
+	n, _ := tc.CountTokens(s)
+	return n
+}
+
 func TestNewMarkdownSplitter(t *testing.T) {
 	tests := []struct {
 		name    string
 		opts    ChunkOptions
+		counter TokenCounter
 		wantErr bool
 		errMsg  string
 	}{
 		{
 			name:    "valid defaults",
 			opts:    DefaultChunkOptions(),
+			counter: tc,
 			wantErr: false,
 		},
 		{
 			name:    "valid custom",
 			opts:    ChunkOptions{ChunkSize: 500, ChunkOverlap: 50},
+			counter: tc,
 			wantErr: false,
 		},
 		{
 			name:    "zero chunk size",
 			opts:    ChunkOptions{ChunkSize: 0, ChunkOverlap: 0},
+			counter: tc,
 			wantErr: true,
 			errMsg:  "chunk size must be positive",
 		},
 		{
 			name:    "negative chunk size",
 			opts:    ChunkOptions{ChunkSize: -1, ChunkOverlap: 0},
+			counter: tc,
 			wantErr: true,
 			errMsg:  "chunk size must be positive",
 		},
 		{
 			name:    "overlap equals chunk size",
 			opts:    ChunkOptions{ChunkSize: 10, ChunkOverlap: 10},
+			counter: tc,
 			wantErr: true,
 			errMsg:  "chunk overlap must be in [0, chunkSize)",
 		},
 		{
 			name:    "negative overlap",
 			opts:    ChunkOptions{ChunkSize: 10, ChunkOverlap: -1},
+			counter: tc,
 			wantErr: true,
 			errMsg:  "chunk overlap must be in [0, chunkSize)",
+		},
+		{
+			name:    "nil counter",
+			opts:    ChunkOptions{ChunkSize: 10, ChunkOverlap: 0},
+			counter: nil,
+			wantErr: true,
+			errMsg:  "token counter is required",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := NewMarkdownSplitter(tt.opts)
+			_, err := NewMarkdownSplitter(tt.opts, tt.counter)
 			if tt.wantErr {
 				if err == nil {
 					t.Error("expected error, got nil")
@@ -68,7 +91,7 @@ func TestNewMarkdownSplitter(t *testing.T) {
 }
 
 func TestMarkdownSplitter_EmptyInput(t *testing.T) {
-	splitter, _ := NewMarkdownSplitter(ChunkOptions{ChunkSize: 100, ChunkOverlap: 0})
+	splitter, _ := NewMarkdownSplitter(ChunkOptions{ChunkSize: 25, ChunkOverlap: 0}, tc)
 	chunks, err := splitter.Split(context.Background(), "")
 	if err != nil {
 		t.Fatal(err)
@@ -79,7 +102,7 @@ func TestMarkdownSplitter_EmptyInput(t *testing.T) {
 }
 
 func TestMarkdownSplitter_FitsInOneChunk(t *testing.T) {
-	splitter, _ := NewMarkdownSplitter(ChunkOptions{ChunkSize: 1000, ChunkOverlap: 0})
+	splitter, _ := NewMarkdownSplitter(ChunkOptions{ChunkSize: 250, ChunkOverlap: 0}, tc)
 	text := "# Title\n\nSome short content."
 	chunks, err := splitter.Split(context.Background(), text)
 	if err != nil {
@@ -94,7 +117,7 @@ func TestMarkdownSplitter_FitsInOneChunk(t *testing.T) {
 }
 
 func TestMarkdownSplitter_SplitOnH2Headers(t *testing.T) {
-	splitter, _ := NewMarkdownSplitter(ChunkOptions{ChunkSize: 60, ChunkOverlap: 0})
+	splitter, _ := NewMarkdownSplitter(ChunkOptions{ChunkSize: 15, ChunkOverlap: 0}, tc)
 	text := "# Title\n\nIntro paragraph.\n\n## Section 1\n\nContent for section one.\n\n## Section 2\n\nContent for section two."
 
 	chunks, err := splitter.Split(context.Background(), text)
@@ -120,7 +143,7 @@ func TestMarkdownSplitter_SplitOnH2Headers(t *testing.T) {
 }
 
 func TestMarkdownSplitter_SplitOnH1Headers(t *testing.T) {
-	splitter, _ := NewMarkdownSplitter(ChunkOptions{ChunkSize: 30, ChunkOverlap: 0})
+	splitter, _ := NewMarkdownSplitter(ChunkOptions{ChunkSize: 8, ChunkOverlap: 0}, tc)
 	text := "# First\n\nContent one.\n\n# Second\n\nContent two."
 
 	chunks, err := splitter.Split(context.Background(), text)
@@ -139,7 +162,7 @@ func TestMarkdownSplitter_SplitOnH1Headers(t *testing.T) {
 }
 
 func TestMarkdownSplitter_CodeBlockPreserved(t *testing.T) {
-	splitter, _ := NewMarkdownSplitter(ChunkOptions{ChunkSize: 200, ChunkOverlap: 0})
+	splitter, _ := NewMarkdownSplitter(ChunkOptions{ChunkSize: 50, ChunkOverlap: 0}, tc)
 	text := "# Intro\n\nSome text.\n\n```go\nfunc main() {\n\tfmt.Println(\"hello\")\n}\n```\n\nMore text after code."
 
 	chunks, err := splitter.Split(context.Background(), text)
@@ -165,7 +188,7 @@ func TestMarkdownSplitter_CodeBlockPreserved(t *testing.T) {
 }
 
 func TestMarkdownSplitter_LargeCodeBlock(t *testing.T) {
-	splitter, _ := NewMarkdownSplitter(ChunkOptions{ChunkSize: 30, ChunkOverlap: 0})
+	splitter, _ := NewMarkdownSplitter(ChunkOptions{ChunkSize: 8, ChunkOverlap: 0}, tc)
 	// Code block that exceeds chunk size.
 	text := "```\nline one of code\nline two of code\nline three of code\nline four of code\n```"
 
@@ -178,14 +201,15 @@ func TestMarkdownSplitter_LargeCodeBlock(t *testing.T) {
 		t.Fatalf("expected code block to be split into multiple chunks, got %d", len(chunks))
 	}
 	for i, c := range chunks {
-		if len([]rune(c)) > 30 {
-			t.Errorf("chunk %d exceeds chunk size: %d runes", i, len([]rune(c)))
+		tl := tokenLen(c)
+		if tl > 8 {
+			t.Errorf("chunk %d exceeds chunk size: %d tokens", i, tl)
 		}
 	}
 }
 
 func TestMarkdownSplitter_HorizontalRule(t *testing.T) {
-	splitter, _ := NewMarkdownSplitter(ChunkOptions{ChunkSize: 40, ChunkOverlap: 0})
+	splitter, _ := NewMarkdownSplitter(ChunkOptions{ChunkSize: 10, ChunkOverlap: 0}, tc)
 	text := "Content above rule.\n\n---\n\nContent below rule."
 
 	chunks, err := splitter.Split(context.Background(), text)
@@ -199,7 +223,7 @@ func TestMarkdownSplitter_HorizontalRule(t *testing.T) {
 }
 
 func TestMarkdownSplitter_ParagraphSplitting(t *testing.T) {
-	splitter, _ := NewMarkdownSplitter(ChunkOptions{ChunkSize: 40, ChunkOverlap: 0})
+	splitter, _ := NewMarkdownSplitter(ChunkOptions{ChunkSize: 10, ChunkOverlap: 0}, tc)
 	text := "First paragraph here.\n\nSecond paragraph here.\n\nThird paragraph here."
 
 	chunks, err := splitter.Split(context.Background(), text)
@@ -211,16 +235,17 @@ func TestMarkdownSplitter_ParagraphSplitting(t *testing.T) {
 		t.Fatalf("expected at least 2 chunks, got %d: %v", len(chunks), chunks)
 	}
 
-	// Each chunk should be within size limit.
+	// Each chunk should be within token size limit.
 	for i, c := range chunks {
-		if len([]rune(c)) > 40 {
-			t.Errorf("chunk %d exceeds chunk size: %d runes, content: %q", i, len([]rune(c)), c)
+		tl := tokenLen(c)
+		if tl > 10 {
+			t.Errorf("chunk %d exceeds chunk size: %d tokens, content: %q", i, tl, c)
 		}
 	}
 }
 
 func TestMarkdownSplitter_Overlap(t *testing.T) {
-	splitter, _ := NewMarkdownSplitter(ChunkOptions{ChunkSize: 30, ChunkOverlap: 15})
+	splitter, _ := NewMarkdownSplitter(ChunkOptions{ChunkSize: 8, ChunkOverlap: 4}, tc)
 	text := "Part A text.\n\nPart B text.\n\nPart C text."
 
 	chunks, err := splitter.Split(context.Background(), text)
@@ -237,7 +262,6 @@ func TestMarkdownSplitter_Overlap(t *testing.T) {
 		prev := chunks[i-1]
 		curr := chunks[i]
 		// The overlap means some piece from the end of prev appears at the start of curr.
-		// Extract the last "piece" (after last \n\n) of prev.
 		prevParts := strings.Split(prev, "\n\n")
 		lastPiece := prevParts[len(prevParts)-1]
 		if !strings.Contains(curr, lastPiece) {
@@ -247,7 +271,7 @@ func TestMarkdownSplitter_Overlap(t *testing.T) {
 }
 
 func TestMarkdownSplitter_MixedContent(t *testing.T) {
-	splitter, _ := NewMarkdownSplitter(ChunkOptions{ChunkSize: 120, ChunkOverlap: 0})
+	splitter, _ := NewMarkdownSplitter(ChunkOptions{ChunkSize: 30, ChunkOverlap: 0}, tc)
 	text := `# Getting Started
 
 Welcome to the guide.
@@ -275,10 +299,11 @@ That's it!`
 		t.Fatal("expected at least one chunk")
 	}
 
-	// All chunks should be within size limit.
+	// All chunks should be within token size limit.
 	for i, c := range chunks {
-		if len([]rune(c)) > 120 {
-			t.Errorf("chunk %d exceeds chunk size: %d runes", i, len([]rune(c)))
+		tl := tokenLen(c)
+		if tl > 30 {
+			t.Errorf("chunk %d exceeds chunk size: %d tokens", i, tl)
 		}
 	}
 
@@ -292,7 +317,7 @@ That's it!`
 }
 
 func TestMarkdownSplitter_HeaderAtDocumentStart(t *testing.T) {
-	splitter, _ := NewMarkdownSplitter(ChunkOptions{ChunkSize: 40, ChunkOverlap: 0})
+	splitter, _ := NewMarkdownSplitter(ChunkOptions{ChunkSize: 10, ChunkOverlap: 0}, tc)
 	text := "# Title\n\nSome content that is long enough to force a split on paragraphs.\n\nAnother paragraph."
 
 	chunks, err := splitter.Split(context.Background(), text)
@@ -314,7 +339,7 @@ func TestMarkdownSplitter_HeaderAtDocumentStart(t *testing.T) {
 }
 
 func TestMarkdownSplitter_NestedHeaders(t *testing.T) {
-	splitter, _ := NewMarkdownSplitter(ChunkOptions{ChunkSize: 80, ChunkOverlap: 0})
+	splitter, _ := NewMarkdownSplitter(ChunkOptions{ChunkSize: 20, ChunkOverlap: 0}, tc)
 	text := "# Main\n\nIntro.\n\n## Sub A\n\nContent A.\n\n### Sub Sub\n\nDeep content.\n\n## Sub B\n\nContent B."
 
 	chunks, err := splitter.Split(context.Background(), text)
@@ -464,7 +489,7 @@ func TestMdSplitKeepSep(t *testing.T) {
 }
 
 func TestMarkdownSplitter_OnlyWhitespace(t *testing.T) {
-	splitter, _ := NewMarkdownSplitter(ChunkOptions{ChunkSize: 100, ChunkOverlap: 0})
+	splitter, _ := NewMarkdownSplitter(ChunkOptions{ChunkSize: 25, ChunkOverlap: 0}, tc)
 	chunks, err := splitter.Split(context.Background(), "   \n\n\t  \n  ")
 	if err != nil {
 		t.Fatal(err)
@@ -475,8 +500,8 @@ func TestMarkdownSplitter_OnlyWhitespace(t *testing.T) {
 }
 
 func TestMarkdownSplitter_SingleLongLine(t *testing.T) {
-	splitter, _ := NewMarkdownSplitter(ChunkOptions{ChunkSize: 20, ChunkOverlap: 0})
-	text := strings.Repeat("word ", 20) // 100 chars
+	splitter, _ := NewMarkdownSplitter(ChunkOptions{ChunkSize: 5, ChunkOverlap: 0}, tc)
+	text := strings.Repeat("word ", 20) // 100 chars ≈ 25 tokens
 	chunks, err := splitter.Split(context.Background(), text)
 	if err != nil {
 		t.Fatal(err)
@@ -485,8 +510,9 @@ func TestMarkdownSplitter_SingleLongLine(t *testing.T) {
 		t.Fatalf("expected multiple chunks, got %d", len(chunks))
 	}
 	for i, c := range chunks {
-		if len([]rune(c)) > 20 {
-			t.Errorf("chunk %d exceeds size: %d runes", i, len([]rune(c)))
+		tl := tokenLen(c)
+		if tl > 5 {
+			t.Errorf("chunk %d exceeds size: %d tokens", i, tl)
 		}
 	}
 }

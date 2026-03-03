@@ -10,20 +10,35 @@ import (
 // It uses a hierarchical splitting strategy: headers first, then horizontal
 // rules, paragraph breaks, line breaks, and finally word boundaries.
 // Fenced code blocks are kept intact when possible.
+// Chunk size and overlap are measured in tokens using the provided TokenCounter.
 type MarkdownSplitter struct {
-	opts ChunkOptions
+	opts    ChunkOptions
+	counter TokenCounter
 }
 
 // NewMarkdownSplitter creates a splitter that chunks markdown by structural elements.
-// Uses ChunkOptions for chunk size and overlap (in characters).
-func NewMarkdownSplitter(opts ChunkOptions) (*MarkdownSplitter, error) {
+// Uses ChunkOptions for chunk size and overlap (in tokens as measured by counter).
+func NewMarkdownSplitter(opts ChunkOptions, counter TokenCounter) (*MarkdownSplitter, error) {
 	if opts.ChunkSize <= 0 {
 		return nil, fmt.Errorf("chunk size must be positive, got %d", opts.ChunkSize)
 	}
 	if opts.ChunkOverlap < 0 || opts.ChunkOverlap >= opts.ChunkSize {
 		return nil, fmt.Errorf("chunk overlap must be in [0, chunkSize), got %d", opts.ChunkOverlap)
 	}
-	return &MarkdownSplitter{opts: opts}, nil
+	if counter == nil {
+		return nil, fmt.Errorf("token counter is required")
+	}
+	return &MarkdownSplitter{opts: opts, counter: counter}, nil
+}
+
+// mdTokenLen returns the token count for text using the splitter's counter.
+// On error it returns ChunkSize+1 to force further splitting.
+func (s *MarkdownSplitter) mdTokenLen(text string) int {
+	n, err := s.counter.CountTokens(text)
+	if err != nil {
+		return s.opts.ChunkSize + 1
+	}
+	return n
 }
 
 // mdSeparators defines the hierarchy of markdown structural boundaries,
@@ -70,7 +85,7 @@ func (s *MarkdownSplitter) Split(ctx context.Context, text string) ([]string, er
 			if trimmed == "" {
 				continue
 			}
-			if len([]rune(trimmed)) <= s.opts.ChunkSize {
+			if s.mdTokenLen(trimmed) <= s.opts.ChunkSize {
 				pieces = append(pieces, trimmed)
 			} else {
 				// Code block exceeds chunk size — split by lines and spaces only.
@@ -147,7 +162,7 @@ func (s *MarkdownSplitter) mdSplitRecursive(text string, sepIdx int) []string {
 	if trimmed == "" {
 		return nil
 	}
-	if len([]rune(trimmed)) <= s.opts.ChunkSize {
+	if s.mdTokenLen(trimmed) <= s.opts.ChunkSize {
 		return []string{trimmed}
 	}
 
@@ -164,7 +179,7 @@ func (s *MarkdownSplitter) mdSplitRecursive(text string, sepIdx int) []string {
 			if p == "" {
 				continue
 			}
-			if len([]rune(p)) <= s.opts.ChunkSize {
+			if s.mdTokenLen(p) <= s.opts.ChunkSize {
 				pieces = append(pieces, p)
 			} else {
 				pieces = append(pieces, s.mdSplitRecursive(p, i+1)...)
@@ -176,8 +191,8 @@ func (s *MarkdownSplitter) mdSplitRecursive(text string, sepIdx int) []string {
 		}
 	}
 
-	// Fallback: character-level split.
-	fb, err := NewCharacterLengthSplitter(s.opts)
+	// Fallback: token-level split.
+	fb, err := NewTokenLengthSplitter(s.opts, s.counter)
 	if err != nil {
 		return []string{trimmed}
 	}
@@ -233,8 +248,9 @@ func mdSplitKeepSep(text, sep string) []string {
 	return result
 }
 
-// mdMergeChunks combines small pieces into chunks that stay within ChunkSize,
-// inserting ChunkOverlap characters of shared content between consecutive chunks.
+// mdMergeChunks combines small pieces into chunks that stay within ChunkSize
+// (measured in tokens), inserting ChunkOverlap tokens of shared content
+// between consecutive chunks.
 func (s *MarkdownSplitter) mdMergeChunks(pieces []string) []string {
 	if len(pieces) == 0 {
 		return nil
@@ -243,39 +259,39 @@ func (s *MarkdownSplitter) mdMergeChunks(pieces []string) []string {
 	size := s.opts.ChunkSize
 	overlap := s.opts.ChunkOverlap
 	const joiner = "\n\n"
-	joinerLen := len([]rune(joiner))
+	joinerTokens := s.mdTokenLen(joiner)
 
 	var chunks []string
 	var buf []string
-	bufLen := 0
+	bufTokens := 0
 
 	for _, piece := range pieces {
-		pl := len([]rune(piece))
+		pl := s.mdTokenLen(piece)
 
 		addLen := pl
-		if bufLen > 0 {
-			addLen += joinerLen
+		if bufTokens > 0 {
+			addLen += joinerTokens
 		}
 
-		if bufLen+addLen > size && bufLen > 0 {
+		if bufTokens+addLen > size && bufTokens > 0 {
 			chunks = append(chunks, strings.Join(buf, joiner))
 
 			if overlap > 0 {
-				buf, bufLen = mdOverlapTail(buf, joinerLen, overlap)
+				buf, bufTokens = s.mdOverlapTail(buf, joinerTokens, overlap)
 			} else {
 				buf = nil
-				bufLen = 0
+				bufTokens = 0
 			}
 
 			// Recalculate addLen after overlap.
 			addLen = pl
-			if bufLen > 0 {
-				addLen += joinerLen
+			if bufTokens > 0 {
+				addLen += joinerTokens
 			}
 		}
 
 		buf = append(buf, piece)
-		bufLen += addLen
+		bufTokens += addLen
 	}
 
 	if len(buf) > 0 {
@@ -285,17 +301,17 @@ func (s *MarkdownSplitter) mdMergeChunks(pieces []string) []string {
 	return chunks
 }
 
-// mdOverlapTail returns the trailing pieces from buf whose total length
+// mdOverlapTail returns the trailing pieces from buf whose total token length
 // (including joiners) fits within the overlap limit.
-func mdOverlapTail(buf []string, joinerLen, overlap int) ([]string, int) {
+func (s *MarkdownSplitter) mdOverlapTail(buf []string, joinerTokens, overlap int) ([]string, int) {
 	var result []string
 	total := 0
 
 	for i := len(buf) - 1; i >= 0; i-- {
-		pl := len([]rune(buf[i]))
+		pl := s.mdTokenLen(buf[i])
 		newTotal := pl
 		if total > 0 {
-			newTotal = total + joinerLen + pl
+			newTotal = total + joinerTokens + pl
 		}
 		if newTotal > overlap && total > 0 {
 			break
