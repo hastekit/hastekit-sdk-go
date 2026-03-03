@@ -6,19 +6,16 @@ import (
 	"strings"
 )
 
-// MarkdownSplitter splits markdown text by its structural elements.
-// It uses a hierarchical splitting strategy: headers first, then horizontal
-// rules, paragraph breaks, line breaks, and finally word boundaries.
-// Fenced code blocks are kept intact when possible.
+// RecursiveSplitter splits text using a recursive separator hierarchy.
 // Chunk size and overlap are measured in tokens using the provided TokenCounter.
-type MarkdownSplitter struct {
-	opts    ChunkOptions
-	counter TokenCounter
+type RecursiveSplitter struct {
+	opts          ChunkOptions
+	recursiveOpts RecursiveOptions
+	counter       TokenCounter
 }
 
-// NewMarkdownSplitter creates a splitter that chunks markdown by structural elements.
-// Uses ChunkOptions for chunk size and overlap (in tokens as measured by counter).
-func NewMarkdownSplitter(opts ChunkOptions, counter TokenCounter) (*MarkdownSplitter, error) {
+// NewRecursiveSplitter creates a recursive splitter with configurable separators.
+func NewRecursiveSplitter(opts ChunkOptions, recursiveOpts RecursiveOptions, counter TokenCounter) (*RecursiveSplitter, error) {
 	if opts.ChunkSize <= 0 {
 		return nil, fmt.Errorf("chunk size must be positive, got %d", opts.ChunkSize)
 	}
@@ -28,34 +25,31 @@ func NewMarkdownSplitter(opts ChunkOptions, counter TokenCounter) (*MarkdownSpli
 	if counter == nil {
 		return nil, fmt.Errorf("token counter is required")
 	}
-	return &MarkdownSplitter{opts: opts, counter: counter}, nil
+	if len(recursiveOpts.Separators) == 0 {
+		defaults := DefaultMarkdownRecursiveOptions()
+		recursiveOpts.Separators = defaults.Separators
+		if !recursiveOpts.PreserveCodeBlocks {
+			recursiveOpts.PreserveCodeBlocks = defaults.PreserveCodeBlocks
+		}
+	}
+	return &RecursiveSplitter{opts: opts, recursiveOpts: recursiveOpts, counter: counter}, nil
+}
+
+// NewMarkdownSplitter creates a markdown-optimized recursive splitter.
+//
+// Deprecated: use NewRecursiveSplitter with DefaultMarkdownRecursiveOptions().
+func NewMarkdownSplitter(opts ChunkOptions, counter TokenCounter) (*RecursiveSplitter, error) {
+	return NewRecursiveSplitter(opts, DefaultMarkdownRecursiveOptions(), counter)
 }
 
 // mdTokenLen returns the token count for text using the splitter's counter.
 // On error it returns ChunkSize+1 to force further splitting.
-func (s *MarkdownSplitter) mdTokenLen(text string) int {
+func (s *RecursiveSplitter) mdTokenLen(text string) int {
 	n, err := s.counter.CountTokens(text)
 	if err != nil {
 		return s.opts.ChunkSize + 1
 	}
 	return n
-}
-
-// mdSeparators defines the hierarchy of markdown structural boundaries,
-// from most significant to least significant.
-var mdSeparators = []string{
-	"\n# ",
-	"\n## ",
-	"\n### ",
-	"\n#### ",
-	"\n##### ",
-	"\n###### ",
-	"\n---\n",
-	"\n***\n",
-	"\n___\n",
-	"\n\n",
-	"\n",
-	" ",
 }
 
 // mdSegment represents a contiguous block of markdown text.
@@ -68,13 +62,18 @@ type mdSegment struct {
 // Fenced code blocks are kept intact when possible. The text is split
 // hierarchically on headers, then horizontal rules, paragraphs, lines,
 // and finally word boundaries.
-func (s *MarkdownSplitter) Split(ctx context.Context, text string) ([]string, error) {
+func (s *RecursiveSplitter) Split(ctx context.Context, text string) ([]string, error) {
 	if text == "" {
 		return nil, nil
 	}
 
-	// Extract code blocks as atomic units.
-	segments := splitByCodeBlocks(text)
+	var segments []mdSegment
+	if s.recursiveOpts.PreserveCodeBlocks {
+		// Extract code blocks as atomic units.
+		segments = splitByCodeBlocks(text)
+	} else {
+		segments = []mdSegment{{text: text}}
+	}
 
 	// Split non-code segments using the markdown separator hierarchy;
 	// code segments are kept intact (or line-split if oversized).
@@ -89,7 +88,7 @@ func (s *MarkdownSplitter) Split(ctx context.Context, text string) ([]string, er
 				pieces = append(pieces, trimmed)
 			} else {
 				// Code block exceeds chunk size — split by lines and spaces only.
-				sub := s.mdSplitRecursive(seg.text, len(mdSeparators)-2)
+				sub := s.mdSplitRecursive(seg.text, s.codeSplitStartIndex())
 				pieces = append(pieces, sub...)
 			}
 		} else {
@@ -103,6 +102,19 @@ func (s *MarkdownSplitter) Split(ctx context.Context, text string) ([]string, er
 	}
 
 	return s.mdMergeChunks(pieces), nil
+}
+
+// codeSplitStartIndex returns the preferred separator index when splitting large
+// code blocks: line breaks first, then spaces. Falls back to first separator.
+func (s *RecursiveSplitter) codeSplitStartIndex() int {
+	n := len(s.recursiveOpts.Separators)
+	if n == 0 {
+		return 0
+	}
+	if n >= 2 {
+		return n - 2
+	}
+	return 0
 }
 
 // splitByCodeBlocks splits text into segments, separating fenced code blocks
@@ -157,7 +169,7 @@ func splitByCodeBlocks(text string) []mdSegment {
 
 // mdSplitRecursive splits text into pieces each ≤ ChunkSize using the
 // separator hierarchy starting at sepIdx.
-func (s *MarkdownSplitter) mdSplitRecursive(text string, sepIdx int) []string {
+func (s *RecursiveSplitter) mdSplitRecursive(text string, sepIdx int) []string {
 	trimmed := strings.TrimSpace(text)
 	if trimmed == "" {
 		return nil
@@ -166,8 +178,8 @@ func (s *MarkdownSplitter) mdSplitRecursive(text string, sepIdx int) []string {
 		return []string{trimmed}
 	}
 
-	for i := sepIdx; i < len(mdSeparators); i++ {
-		sep := mdSeparators[i]
+	for i := sepIdx; i < len(s.recursiveOpts.Separators); i++ {
+		sep := s.recursiveOpts.Separators[i]
 		parts := mdSplitKeepSep(trimmed, sep)
 		if len(parts) <= 1 {
 			continue
@@ -251,7 +263,7 @@ func mdSplitKeepSep(text, sep string) []string {
 // mdMergeChunks combines small pieces into chunks that stay within ChunkSize
 // (measured in tokens), inserting ChunkOverlap tokens of shared content
 // between consecutive chunks.
-func (s *MarkdownSplitter) mdMergeChunks(pieces []string) []string {
+func (s *RecursiveSplitter) mdMergeChunks(pieces []string) []string {
 	if len(pieces) == 0 {
 		return nil
 	}
@@ -303,7 +315,7 @@ func (s *MarkdownSplitter) mdMergeChunks(pieces []string) []string {
 
 // mdOverlapTail returns the trailing pieces from buf whose total token length
 // (including joiners) fits within the overlap limit.
-func (s *MarkdownSplitter) mdOverlapTail(buf []string, joinerTokens, overlap int) ([]string, int) {
+func (s *RecursiveSplitter) mdOverlapTail(buf []string, joinerTokens, overlap int) ([]string, int) {
 	var result []string
 	total := 0
 

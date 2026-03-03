@@ -296,10 +296,10 @@ func (s *SemanticSplitter) enforceMaxSize(ctx context.Context, chunks []string) 
 			result = append(result, chunk)
 		} else {
 			// Use character splitter as fallback for oversized chunks
-			fallback, err := NewCharacterLengthSplitter(ChunkOptions{
+			fallback, err := NewTokenLengthSplitter(ChunkOptions{
 				ChunkSize:    s.opts.MaxChunkSize,
 				ChunkOverlap: s.opts.MaxChunkSize / 10, // 10% overlap
-			})
+			}, &EstimatorCounter{CharsPerToken: 1})
 			if err != nil {
 				// Shouldn't happen with valid MaxChunkSize, but just append as-is
 				result = append(result, chunk)

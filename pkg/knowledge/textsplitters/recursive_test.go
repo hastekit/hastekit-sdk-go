@@ -90,6 +90,106 @@ func TestNewMarkdownSplitter(t *testing.T) {
 	}
 }
 
+func TestNewRecursiveSplitter(t *testing.T) {
+	tests := []struct {
+		name          string
+		opts          ChunkOptions
+		recursiveOpts RecursiveOptions
+		counter       TokenCounter
+		wantErr       bool
+		errMsg        string
+	}{
+		{
+			name:          "valid defaults",
+			opts:          DefaultChunkOptions(),
+			recursiveOpts: RecursiveOptions{},
+			counter:       tc,
+			wantErr:       false,
+		},
+		{
+			name: "valid custom separators",
+			opts: ChunkOptions{ChunkSize: 20, ChunkOverlap: 0},
+			recursiveOpts: RecursiveOptions{
+				Separators:         []string{"|", ","},
+				PreserveCodeBlocks: false,
+			},
+			counter: tc,
+			wantErr: false,
+		},
+		{
+			name:          "zero chunk size",
+			opts:          ChunkOptions{ChunkSize: 0, ChunkOverlap: 0},
+			recursiveOpts: RecursiveOptions{},
+			counter:       tc,
+			wantErr:       true,
+			errMsg:        "chunk size must be positive",
+		},
+		{
+			name:          "overlap equals chunk size",
+			opts:          ChunkOptions{ChunkSize: 10, ChunkOverlap: 10},
+			recursiveOpts: RecursiveOptions{},
+			counter:       tc,
+			wantErr:       true,
+			errMsg:        "chunk overlap must be in [0, chunkSize)",
+		},
+		{
+			name:          "nil counter",
+			opts:          ChunkOptions{ChunkSize: 10, ChunkOverlap: 0},
+			recursiveOpts: RecursiveOptions{},
+			counter:       nil,
+			wantErr:       true,
+			errMsg:        "token counter is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := NewRecursiveSplitter(tt.opts, tt.recursiveOpts, tt.counter)
+			if tt.wantErr {
+				if err == nil {
+					t.Error("expected error, got nil")
+				} else if tt.errMsg != "" && !strings.Contains(err.Error(), tt.errMsg) {
+					t.Errorf("expected error containing %q, got %q", tt.errMsg, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestRecursiveSplitter_CustomSeparators(t *testing.T) {
+	splitter, err := NewRecursiveSplitter(
+		ChunkOptions{ChunkSize: 2, ChunkOverlap: 0},
+		RecursiveOptions{
+			Separators:         []string{"|"},
+			PreserveCodeBlocks: false,
+		},
+		tc,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	text := "a|b|c|d|e|f"
+	chunks, err := splitter.Split(context.Background(), text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(chunks) < 2 {
+		t.Fatalf("expected multiple chunks, got %d: %v", len(chunks), chunks)
+	}
+
+	joined := strings.Join(chunks, " ")
+	for _, want := range []string{"a", "b", "c", "d", "e", "f"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("expected combined chunks to contain %q, got %q", want, joined)
+		}
+	}
+}
+
 func TestMarkdownSplitter_EmptyInput(t *testing.T) {
 	splitter, _ := NewMarkdownSplitter(ChunkOptions{ChunkSize: 25, ChunkOverlap: 0}, tc)
 	chunks, err := splitter.Split(context.Background(), "")
