@@ -15,6 +15,7 @@ func (g *LLMGateway) handleChatCompletionRequest(ctx context.Context, providerNa
 	ctx, span := tracer.Start(ctx, "LLM.ChatCompletion")
 	defer span.End()
 
+	addToSpan(ctx, span)
 	span.SetAttributes(
 		attribute.String("llm.provider", string(providerName)),
 		attribute.String("llm.model", in.Model),
@@ -41,8 +42,9 @@ func (g *LLMGateway) handleChatCompletionRequest(ctx context.Context, providerNa
 }
 
 func (g *LLMGateway) handleStreamingChatCompletionRequest(ctx context.Context, providerName llm.ProviderName, p llm.Provider, in *chat_completion.Request) (chan *chat_completion.ResponseChunk, error) {
-	_, span := tracer.Start(ctx, "LLM.StreamingChatCompletion")
+	ctx, span := tracer.Start(ctx, "LLM.StreamingChatCompletion")
 
+	addToSpan(ctx, span)
 	span.SetAttributes(
 		attribute.String("llm.provider", string(providerName)),
 		attribute.String("llm.model", in.Model),

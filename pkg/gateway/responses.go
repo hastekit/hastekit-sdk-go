@@ -14,12 +14,12 @@ func (g *LLMGateway) handleResponsesRequest(ctx context.Context, providerName ll
 	ctx, span := tracer.Start(ctx, "LLM.Responses")
 	defer span.End()
 
+	addToSpan(ctx, span)
 	span.SetAttributes(
 		attribute.String("llm.provider", string(providerName)),
 		attribute.String("llm.model", in.Model),
 		attribute.Bool("llm.streaming", false),
 		attribute.Int("llm.tools_count", len(in.Tools)),
-		attribute.String("llm.request_type", "Responses"),
 	)
 
 	out, err := p.NewResponses(ctx, in)
@@ -42,12 +42,12 @@ func (g *LLMGateway) handleResponsesRequest(ctx context.Context, providerName ll
 }
 
 func (g *LLMGateway) handleStreamingResponsesRequest(ctx context.Context, providerName llm.ProviderName, p llm.Provider, in *responses.Request) (chan *responses.ResponseChunk, error) {
-	_, span := tracer.Start(ctx, "LLM.StreamingResponses")
+	ctx, span := tracer.Start(ctx, "LLM.StreamingResponses")
 
+	addToSpan(ctx, span)
 	span.SetAttributes(
 		attribute.String("llm.provider", string(providerName)),
 		attribute.String("llm.model", in.Model),
-		attribute.String("llm.request_type", "Streaming Responses"),
 		attribute.Int("tools_count", len(in.Tools)),
 	)
 

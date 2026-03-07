@@ -13,6 +13,7 @@ func (g *LLMGateway) handleEmbeddingsRequest(ctx context.Context, providerName l
 	ctx, span := tracer.Start(ctx, "LLM.Embeddings")
 	defer span.End()
 
+	addToSpan(ctx, span)
 	span.SetAttributes(
 		attribute.String("llm.provider", string(providerName)),
 		attribute.String("llm.model", in.Model),
