@@ -13,6 +13,7 @@ func (g *LLMGateway) handleSpeechRequest(ctx context.Context, providerName llm.P
 	ctx, span := tracer.Start(ctx, "LLM.Speech")
 	defer span.End()
 
+	addToSpan(ctx, span)
 	span.SetAttributes(
 		attribute.String("llm.provider", string(providerName)),
 		attribute.String("llm.model", in.Model),
@@ -42,6 +43,7 @@ func (g *LLMGateway) handleStreamingSpeechRequest(ctx context.Context, providerN
 	ctx, span := tracer.Start(ctx, "LLM.Speech")
 	defer span.End()
 
+	addToSpan(ctx, span)
 	span.SetAttributes(
 		attribute.String("llm.provider", string(providerName)),
 		attribute.String("llm.model", in.Model),

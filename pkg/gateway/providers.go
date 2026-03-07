@@ -10,22 +10,15 @@ import (
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/gemini"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/openai"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/xai"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
 )
 
 func (g *LLMGateway) getProvider(ctx context.Context, providerName llm.ProviderName, req *llm.Request, key string) (llm.Provider, error) {
-	_, span := tracer.Start(ctx, "Gateway.GetProvider")
-	defer span.End()
-
 	var baseUrl string
 	var customHeaders map[string]string
 
 	providerConfig, err := g.ConfigStore.GetProviderConfig(providerName)
 	if err != nil {
 		err = errors.New("failed to get provider config")
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 
@@ -33,8 +26,6 @@ func (g *LLMGateway) getProvider(ctx context.Context, providerName llm.ProviderN
 		baseUrl = providerConfig.BaseURL
 		customHeaders = providerConfig.CustomHeaders
 	}
-
-	span.SetAttributes(attribute.String("base_url", baseUrl))
 
 	switch providerName {
 	case llm.ProviderNameOpenAI:
