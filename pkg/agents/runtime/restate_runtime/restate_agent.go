@@ -42,6 +42,7 @@ func (w *AgentWorkflow) Run(restateCtx restate.WorkflowContext, input *WorkflowI
 	// Execute using the SAME agent instance with durability
 	return agent.Execute(restateCtx, &agents.AgentInput{
 		Namespace:         input.Namespace,
+		ThreadID:          input.ThreadID,
 		PreviousMessageID: input.PreviousMessageID,
 		Messages:          input.Messages,
 		RunContext:        input.RunContext,

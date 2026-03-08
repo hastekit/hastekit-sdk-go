@@ -19,12 +19,12 @@ func NewTemporalConversationPersistence(wrappedPersistence history.ConversationP
 	}
 }
 
-func (t *TemporalHistory) LoadMessages(ctx context.Context, namespace string, previousMessageID string) ([]history.ConversationMessage, error) {
-	return t.wrappedPersistence.LoadMessages(ctx, namespace, previousMessageID)
+func (t *TemporalHistory) LoadMessages(ctx context.Context, namespace string, threadID string, previousMessageID string) ([]history.ConversationMessage, error) {
+	return t.wrappedPersistence.LoadMessages(ctx, namespace, threadID, previousMessageID)
 }
 
-func (t *TemporalHistory) SaveMessages(ctx context.Context, namespace, msgId, previousMsgId, conversationId string, messages []responses.InputMessageUnion, meta map[string]any) error {
-	return t.wrappedPersistence.SaveMessages(ctx, namespace, msgId, previousMsgId, conversationId, messages, meta)
+func (t *TemporalHistory) SaveMessages(ctx context.Context, namespace, msgId, previousMsgId, threadId, conversationId string, messages []responses.InputMessageUnion, meta map[string]any) error {
+	return t.wrappedPersistence.SaveMessages(ctx, namespace, msgId, previousMsgId, threadId, conversationId, messages, meta)
 }
 
 func (t *TemporalHistory) SaveSummary(ctx context.Context, namespace string, summary history.Summary) error {
@@ -70,9 +70,9 @@ func (t *TemporalConversationPersistenceProxy) NewRunID(ctx context.Context) str
 	return id
 }
 
-func (t *TemporalConversationPersistenceProxy) LoadMessages(ctx context.Context, namespace string, previousMessageID string) ([]history.ConversationMessage, error) {
+func (t *TemporalConversationPersistenceProxy) LoadMessages(ctx context.Context, namespace string, threadID string, previousMessageID string) ([]history.ConversationMessage, error) {
 	var messages []history.ConversationMessage
-	err := workflow.ExecuteActivity(t.workflowCtx, t.prefix+"_LoadMessagesActivity", namespace, previousMessageID).Get(t.workflowCtx, &messages)
+	err := workflow.ExecuteActivity(t.workflowCtx, t.prefix+"_LoadMessagesActivity", namespace, threadID, previousMessageID).Get(t.workflowCtx, &messages)
 	if err != nil {
 		return messages, err
 	}
@@ -80,8 +80,8 @@ func (t *TemporalConversationPersistenceProxy) LoadMessages(ctx context.Context,
 	return messages, nil
 }
 
-func (t *TemporalConversationPersistenceProxy) SaveMessages(ctx context.Context, namespace, msgId, previousMsgId, conversationId string, messages []responses.InputMessageUnion, meta map[string]any) error {
-	return workflow.ExecuteActivity(t.workflowCtx, t.prefix+"_SaveMessagesActivity", namespace, msgId, previousMsgId, conversationId, messages, meta).Get(t.workflowCtx, nil)
+func (t *TemporalConversationPersistenceProxy) SaveMessages(ctx context.Context, namespace, msgId, previousMsgId, threadId, conversationId string, messages []responses.InputMessageUnion, meta map[string]any) error {
+	return workflow.ExecuteActivity(t.workflowCtx, t.prefix+"_SaveMessagesActivity", namespace, msgId, previousMsgId, threadId, conversationId, messages, meta).Get(t.workflowCtx, nil)
 }
 
 func (t *TemporalConversationPersistenceProxy) SaveSummary(ctx context.Context, namespace string, summary history.Summary) error {

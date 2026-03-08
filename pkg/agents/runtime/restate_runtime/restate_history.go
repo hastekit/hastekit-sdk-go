@@ -29,15 +29,15 @@ func (t *RestateHistory) NewRunID(ctx context.Context) string {
 	return restate.UUID(t.restateCtx).String()
 }
 
-func (t *RestateHistory) LoadMessages(ctx context.Context, namespace string, previousMessageID string) ([]history.ConversationMessage, error) {
+func (t *RestateHistory) LoadMessages(ctx context.Context, namespace string, threadID string, previousMessageID string) ([]history.ConversationMessage, error) {
 	return restate.Run(t.restateCtx, func(ctx restate.RunContext) ([]history.ConversationMessage, error) {
-		return t.wrappedPersistence.LoadMessages(ctx, namespace, previousMessageID)
+		return t.wrappedPersistence.LoadMessages(ctx, namespace, threadID, previousMessageID)
 	}, restate.WithName("LoadMessages"))
 }
 
-func (t *RestateHistory) SaveMessages(ctx context.Context, namespace, msgId, previousMsgId, conversationId string, messages []responses.InputMessageUnion, meta map[string]any) error {
+func (t *RestateHistory) SaveMessages(ctx context.Context, namespace, msgId, previousMsgId, threadId, conversationId string, messages []responses.InputMessageUnion, meta map[string]any) error {
 	_, err := restate.Run(t.restateCtx, func(ctx restate.RunContext) (any, error) {
-		return nil, t.wrappedPersistence.SaveMessages(ctx, namespace, msgId, previousMsgId, conversationId, messages, meta)
+		return nil, t.wrappedPersistence.SaveMessages(ctx, namespace, msgId, previousMsgId, threadId, conversationId, messages, meta)
 	}, restate.WithName("SaveMessages"))
 	return err
 }

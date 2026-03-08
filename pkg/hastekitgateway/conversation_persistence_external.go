@@ -50,21 +50,22 @@ func (p *ExternalConversationPersistence) NewRunID(ctx context.Context) string {
 }
 
 // LoadMessages implements core.ChatHistory
-func (p *ExternalConversationPersistence) LoadMessages(ctx context.Context, namespace string, previousMessageId string) ([]history.ConversationMessage, error) {
+func (p *ExternalConversationPersistence) LoadMessages(ctx context.Context, namespace string, threadId string, previousMessageId string) ([]history.ConversationMessage, error) {
 	ctx, span := tracer.Start(ctx, "ExternalConversationPersistence.LoadMessages")
 	defer span.End()
 
 	span.SetAttributes(
 		attribute.String("namespace", namespace),
+		attribute.String("thread_id", threadId),
 		attribute.String("previous_message_id", previousMessageId),
 	)
 
 	// If no previous message ID, return empty list
-	if previousMessageId == "" {
+	if threadId == "" {
 		return []history.ConversationMessage{}, nil
 	}
 
-	url := fmt.Sprintf("%s/api/agent-server/messages/summary?namespace=%s&previous_message_id=%s&project_id=%s", p.Endpoint, namespace, previousMessageId, p.projectID.String())
+	url := fmt.Sprintf("%s/api/agent-server/messages/summary?namespace=%s&thread_id=%s&previous_message_id=%s&project_id=%s", p.Endpoint, namespace, threadId, previousMessageId, p.projectID.String())
 
 	resp, err := http.DefaultClient.Get(url)
 	if err != nil {
@@ -86,6 +87,7 @@ type AddMessageRequest struct {
 	ProjectID         uuid.UUID                     `json:"project_id"`
 	Namespace         string                        `json:"namespace"`
 	MessageID         string                        `json:"message_id"`
+	ThreadID          string                        `json:"thread_id"`
 	PreviousMessageID string                        `json:"previous_message_id"`
 	Messages          []responses.InputMessageUnion `json:"messages"`
 	Meta              map[string]any                `json:"meta"`
@@ -93,12 +95,13 @@ type AddMessageRequest struct {
 }
 
 // SaveMessages implements core.ChatHistory
-func (p *ExternalConversationPersistence) SaveMessages(ctx context.Context, namespace, msgId, previousMsgId, conversationId string, messages []responses.InputMessageUnion, meta map[string]any) error {
+func (p *ExternalConversationPersistence) SaveMessages(ctx context.Context, namespace, msgId, previousMsgId, threadId string, conversationId string, messages []responses.InputMessageUnion, meta map[string]any) error {
 	ctx, span := tracer.Start(ctx, "ExternalConversationPersistence.SaveMessages")
 	defer span.End()
 
 	span.SetAttributes(
 		attribute.String("namespace", namespace),
+		attribute.String("thread_id", threadId),
 		attribute.String("previous_message_id", previousMsgId),
 		attribute.String("conversation_id", conversationId),
 		attribute.Int("messages_count", len(messages)),
@@ -110,6 +113,7 @@ func (p *ExternalConversationPersistence) SaveMessages(ctx context.Context, name
 	payload := AddMessageRequest{
 		Namespace:         namespace,
 		MessageID:         msgId,
+		ThreadID:          threadId,
 		PreviousMessageID: previousMsgId,
 		Messages:          messages,
 		Meta:              meta,

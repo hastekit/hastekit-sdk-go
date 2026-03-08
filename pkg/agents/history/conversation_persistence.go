@@ -78,29 +78,28 @@ func (p *InMemoryConversationPersistence) NewRunID(ctx context.Context) string {
 }
 
 // LoadMessages retrieves all messages up to and including the previousMessageID
-func (p *InMemoryConversationPersistence) LoadMessages(ctx context.Context, namespace string, previousMessageId string) ([]ConversationMessage, error) {
+func (p *InMemoryConversationPersistence) LoadMessages(ctx context.Context, namespace string, threadID string, previousMessageId string) ([]ConversationMessage, error) {
 	ctx, span := tracer.Start(ctx, "InMemoryConversationPersistence.LoadMessages")
 	defer span.End()
 
 	span.SetAttributes(
 		attribute.String("namespace", namespace),
+		attribute.String("thread_id", threadID),
 		attribute.String("previous_message_id", previousMessageId),
 	)
 
-	if previousMessageId == "" {
+	if threadID == "" {
 		return []ConversationMessage{}, nil
 	}
 
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	// Find the message to get its thread
-	msg, exists := p.messages[previousMessageId]
+	// Get the thread
+	thread, exists := p.threads[threadID]
 	if !exists {
 		return []ConversationMessage{}, nil
 	}
-
-	threadID := msg.ThreadID
 
 	// Check if there's a summary for this thread
 	summary, hasSummary := p.summaries[threadID]
@@ -133,7 +132,7 @@ func (p *InMemoryConversationPersistence) LoadMessages(ctx context.Context, name
 			summaryMsg := ConversationMessage{
 				MessageID:      summary.ID,
 				ThreadID:       summary.ThreadID,
-				ConversationID: msg.ConversationID,
+				ConversationID: thread.ConversationID,
 				Messages:       []responses.InputMessageUnion{summary.SummaryMessage},
 				Meta:           summary.Meta,
 			}
@@ -177,13 +176,14 @@ func (p *InMemoryConversationPersistence) LoadMessages(ctx context.Context, name
 }
 
 // SaveMessages saves messages with support for conversations and threads
-func (p *InMemoryConversationPersistence) SaveMessages(ctx context.Context, namespace, msgId, previousMsgId, conversationId string, messages []responses.InputMessageUnion, meta map[string]any) error {
+func (p *InMemoryConversationPersistence) SaveMessages(ctx context.Context, namespace, msgId, previousMsgId, threadId, conversationId string, messages []responses.InputMessageUnion, meta map[string]any) error {
 	ctx, span := tracer.Start(ctx, "InMemoryConversationPersistence.SaveMessages")
 	defer span.End()
 
 	span.SetAttributes(
 		attribute.String("namespace", namespace),
 		attribute.String("previous_message_id", previousMsgId),
+		attribute.String("thread_id", threadId),
 		attribute.String("conversation_id", conversationId),
 		attribute.Int("messages_count", len(messages)),
 	)
@@ -197,15 +197,22 @@ func (p *InMemoryConversationPersistence) SaveMessages(ctx context.Context, name
 	var convID string
 
 	// Case 1: Starting a new conversation with a provided conversationId
-	if previousMsgId == "" && conversationId != "" {
+	if previousMsgId == "" {
 		convID = conversationId
-		threadID = uuid.New().String()
+		if convID == "" {
+			convID = uuid.NewString()
+		}
+
+		threadID = threadId
+		if threadID == "" {
+			threadID = uuid.NewString()
+		}
 
 		// Create a new thread
 		p.threads[threadID] = &inMemoryThread{
 			ThreadID:        threadID,
-			ConversationID:  convID,
 			OriginMessageID: msgId,
+			ConversationID:  convID,
 			LastMessageID:   msgId,
 			Namespace:       namespace,
 			CreatedAt:       now,
