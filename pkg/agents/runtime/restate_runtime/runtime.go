@@ -18,6 +18,7 @@ type WorkflowInput struct {
 	AgentName string `json:"agent_name"`
 
 	Namespace         string
+	ThreadID          string
 	PreviousMessageID string
 	Messages          []responses.InputMessageUnion
 	RunContext        map[string]any
@@ -48,6 +49,7 @@ func (r *RestateRuntime) Run(ctx context.Context, agent *agents.Agent, in *agent
 	input := &WorkflowInput{
 		AgentName:         agent.Name,
 		Namespace:         in.Namespace,
+		ThreadID:          in.ThreadID,
 		PreviousMessageID: in.PreviousMessageID,
 		Messages:          in.Messages,
 		RunContext:        in.RunContext,

@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/constants"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
@@ -25,16 +26,16 @@ func NewAgentTool(t *responses.ToolUnion, agent *agents.Agent) *AgentTool {
 
 func (t *AgentTool) Execute(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
 	namespace := params.Namespace + "/" + params.Name
-	previousRunId := ""
+	threadId := uuid.NewString()
 
 	agentToolContextId, exists := params.SubAgentContext[t.agent.Name]
 	if exists {
-		previousRunId = agentToolContextId
+		threadId = agentToolContextId
 	}
 
 	result, err := t.agent.Execute(ctx, &agents.AgentInput{
-		Namespace:         namespace,
-		PreviousMessageID: previousRunId,
+		Namespace: namespace,
+		ThreadID:  threadId,
 		Messages: []responses.InputMessageUnion{
 			{
 				OfEasyInput: &responses.EasyMessage{
@@ -83,7 +84,7 @@ func (t *AgentTool) Execute(ctx context.Context, params *agents.ToolCall) (*agen
 			},
 		},
 		SubAgentContext: map[string]string{
-			t.agent.Name: result.RunID,
+			t.agent.Name: threadId,
 		},
 	}, nil
 }

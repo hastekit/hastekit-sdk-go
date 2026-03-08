@@ -154,6 +154,7 @@ func (e *Agent) GetRunID(ctx context.Context) string {
 
 type AgentInput struct {
 	Namespace         string                               `json:"namespace"`
+	ThreadID          string                               `json:"thread_id"`
 	PreviousMessageID string                               `json:"previous_message_id"`
 	Messages          []responses.InputMessageUnion        `json:"messages"`
 	RunContext        map[string]any                       `json:"run_context"`
@@ -191,7 +192,7 @@ func (e *Agent) ExecuteWithoutTrace(ctx context.Context, in *AgentInput) (*Agent
 	}
 
 	// Generate a run ID
-	run, err := history.NewRun(ctx, e.history, in.Namespace, in.PreviousMessageID, in.Messages)
+	run, err := history.NewRun(ctx, e.history, in.Namespace, in.ThreadID, in.PreviousMessageID, in.Messages)
 	if err != nil {
 		return &AgentOutput{Status: agentstate.RunStatusError, RunID: ""}, err
 	}

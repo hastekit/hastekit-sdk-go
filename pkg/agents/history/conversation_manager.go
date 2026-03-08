@@ -39,8 +39,8 @@ type Summary struct {
 type ConversationPersistenceAdapter interface {
 	NewConversationID(ctx context.Context) string
 	NewRunID(ctx context.Context) string
-	LoadMessages(ctx context.Context, namespace string, previousMessageID string) ([]ConversationMessage, error)
-	SaveMessages(ctx context.Context, namespace, msgId, previousMsgId, conversationId string, messages []responses.InputMessageUnion, meta map[string]any) error
+	LoadMessages(ctx context.Context, namespace string, threadID string, previousMessageID string) ([]ConversationMessage, error)
+	SaveMessages(ctx context.Context, namespace, msgId, previousMsgId, threadID string, conversationId string, messages []responses.InputMessageUnion, meta map[string]any) error
 	SaveSummary(ctx context.Context, namespace string, summary Summary) error
 }
 
@@ -93,7 +93,7 @@ type ConversationRunManager struct {
 	summaries  *SummaryResult
 }
 
-func NewRun(ctx context.Context, cm *CommonConversationManager, namespace string, previousRunID string, messages []responses.InputMessageUnion, options ...RunOption) (*ConversationRunManager, error) {
+func NewRun(ctx context.Context, cm *CommonConversationManager, namespace string, threadID string, previousMessageID string, messages []responses.InputMessageUnion, options ...RunOption) (*ConversationRunManager, error) {
 	cr := &ConversationRunManager{
 		ConversationPersistenceAdapter: cm.ConversationPersistenceAdapter,
 		summarizer:                     cm.Summarizer,
@@ -102,7 +102,7 @@ func NewRun(ctx context.Context, cm *CommonConversationManager, namespace string
 	}
 
 	// Load messages
-	_, err := cr.LoadMessages(ctx, namespace, previousRunID)
+	_, err := cr.LoadMessages(ctx, namespace, threadID, previousMessageID)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +116,7 @@ func NewRun(ctx context.Context, cm *CommonConversationManager, namespace string
 		cr.AddMessages(ctx, messages, nil)
 	} else {
 		// Continuing the previous run
-		runID = previousRunID
+		runID = cr.previousMsgId
 
 		if cr.RunState.CurrentStep == agentstate.StepAwaitApproval {
 			// Expect approval
@@ -182,7 +182,9 @@ func (cm *ConversationRunManager) GetMessages(ctx context.Context) ([]responses.
 	return append(cm.oldMessages, cm.newMessages...), nil
 }
 
-func (cm *ConversationRunManager) LoadMessages(ctx context.Context, namespace string, previousMessageID string) ([]responses.InputMessageUnion, error) {
+func (cm *ConversationRunManager) LoadMessages(ctx context.Context, namespace string, threadID string, previousMessageID string) ([]responses.InputMessageUnion, error) {
+	cm.threadId = threadID
+
 	if cm.ConversationPersistenceAdapter == nil {
 		return []responses.InputMessageUnion{}, nil
 	}
@@ -192,7 +194,7 @@ func (cm *ConversationRunManager) LoadMessages(ctx context.Context, namespace st
 		return cm.oldMessages, nil
 	}
 
-	convMessages, err := cm.ConversationPersistenceAdapter.LoadMessages(ctx, namespace, previousMessageID)
+	convMessages, err := cm.ConversationPersistenceAdapter.LoadMessages(ctx, namespace, threadID, previousMessageID)
 	if err != nil {
 		return nil, err
 	}
@@ -204,6 +206,7 @@ func (cm *ConversationRunManager) LoadMessages(ctx context.Context, namespace st
 		}
 		cm.threadId = msg.ThreadID
 		cm.conversationId = msg.ConversationID
+		cm.previousMsgId = msg.MessageID
 
 		messages = append(messages, msg.Messages...)
 
@@ -220,7 +223,6 @@ func (cm *ConversationRunManager) LoadMessages(ctx context.Context, namespace st
 	}
 
 	cm.namespace = namespace
-	cm.previousMsgId = previousMessageID
 	cm.convMessages = convMessages
 	cm.oldMessages = messages
 	cm.RunState = agentstate.LoadRunStateFromMeta(cm.lastMessageMeta)
@@ -280,7 +282,7 @@ func (cm *ConversationRunManager) SaveMessages(ctx context.Context, meta map[str
 	}
 
 	if cm.ConversationPersistenceAdapter != nil {
-		err := cm.ConversationPersistenceAdapter.SaveMessages(ctx, cm.namespace, cm.msgId, cm.previousMsgId, cm.conversationId, cm.newMessages, meta)
+		err := cm.ConversationPersistenceAdapter.SaveMessages(ctx, cm.namespace, cm.msgId, cm.previousMsgId, cm.threadId, cm.conversationId, cm.newMessages, meta)
 		if err != nil {
 			return err
 		}
