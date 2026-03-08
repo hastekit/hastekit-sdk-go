@@ -10,27 +10,40 @@ import (
 	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
 )
 
+type SubAgentContextMode string
+
+const (
+	SubAgentContextModeNone     SubAgentContextMode = "None"
+	SubAgentContextModeIsolated SubAgentContextMode = "Isolated"
+)
+
 type AgentTool struct {
 	*agents.BaseTool
-	agent *agents.Agent
+	agent       *agents.Agent
+	contextMode SubAgentContextMode
 }
 
-func NewAgentTool(t *responses.ToolUnion, agent *agents.Agent) *AgentTool {
+func NewAgentTool(t *responses.ToolUnion, agent *agents.Agent, contextMode SubAgentContextMode) *AgentTool {
 	return &AgentTool{
 		BaseTool: &agents.BaseTool{
 			ToolUnion: *t,
 		},
-		agent: agent,
+		agent:       agent,
+		contextMode: contextMode,
 	}
 }
 
 func (t *AgentTool) Execute(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
 	namespace := params.Namespace + "/" + params.Name
-	threadId := uuid.NewString()
 
-	agentToolContextId, exists := params.SubAgentContext[t.agent.Name]
-	if exists {
-		threadId = agentToolContextId
+	var threadId string
+	if t.contextMode == SubAgentContextModeIsolated {
+		agentToolContextId, exists := params.SubAgentContext[t.agent.Name]
+		if exists {
+			threadId = agentToolContextId
+		}
+	} else {
+		threadId = uuid.NewString()
 	}
 
 	result, err := t.agent.Execute(ctx, &agents.AgentInput{
