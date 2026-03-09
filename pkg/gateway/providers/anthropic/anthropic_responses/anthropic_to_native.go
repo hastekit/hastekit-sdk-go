@@ -148,7 +148,24 @@ func (msg *MessageUnion) ToNativeMessage() []responses2.InputMessageUnion {
 
 	var previousServerToolUse *ServerToolUseContent
 
-	for _, content := range msg.Content {
+	if msg.Content.OfString != nil {
+		out = append(out, responses2.InputMessageUnion{
+			OfInputMessage: &responses2.InputMessage{
+				Role: msg.Role.ToNativeRole(),
+				Content: responses2.InputContent{
+					{
+						OfInputText: &responses2.InputTextContent{
+							Text: *msg.Content.OfString,
+						},
+					},
+				},
+			},
+		})
+
+		return out
+	}
+
+	for _, content := range msg.Content.OfList {
 		if content.OfText != nil {
 			if content.OfText.Citations != nil {
 				out = append(out, responses2.InputMessageUnion{
@@ -202,8 +219,12 @@ func (msg *MessageUnion) ToNativeMessage() []responses2.InputMessageUnion {
 				OfList:   responses2.InputContent{},
 			}
 
+			if content.OfToolResult.Content.OfString != nil {
+				outputs.OfString = content.OfToolResult.Content.OfString
+			}
+
 			// TODO: outputContent can be text, image, search result or document
-			for _, outputContent := range content.OfToolResult.Content {
+			for _, outputContent := range content.OfToolResult.Content.OfList {
 				if outputContent.OfText != nil {
 					outputs.OfList = append(outputs.OfList, responses2.InputContentUnion{
 						OfInputText: &responses2.InputTextContent{
