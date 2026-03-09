@@ -35,7 +35,7 @@ func NativeRequestToRequest(in *responses2.Request) *Request {
 		Stream:      in.Stream,
 	}
 
-	if in.Instructions != nil {
+	if in.Instructions != nil && *in.Instructions != "" {
 		out.System = []TextContent{
 			{
 				Text: *in.Instructions,
@@ -161,10 +161,12 @@ func NativeMessagesToMessage(in responses2.InputUnion) []MessageUnion {
 	if in.OfString != nil {
 		out = append(out, MessageUnion{
 			Role: RoleUser,
-			Content: Contents{
-				ContentUnion{
-					OfText: &TextContent{
-						Text: *in.OfString,
+			Content: ContentUnionParam{
+				OfList: Contents{
+					ContentUnion{
+						OfText: &TextContent{
+							Text: *in.OfString,
+						},
 					},
 				},
 			},
@@ -206,7 +208,7 @@ func NativeMessagesToMessage(in responses2.InputUnion) []MessageUnion {
 
 				out = append(out, MessageUnion{
 					Role:    NativeRoleToRole(nativeMessage.OfEasyInput.Role),
-					Content: contents,
+					Content: ContentUnionParam{OfList: contents},
 				})
 			}
 
@@ -234,7 +236,7 @@ func NativeMessagesToMessage(in responses2.InputUnion) []MessageUnion {
 
 				out = append(out, MessageUnion{
 					Role:    NativeRoleToRole(nativeMessage.OfInputMessage.Role),
-					Content: contents,
+					Content: ContentUnionParam{OfList: contents},
 				})
 			}
 
@@ -246,12 +248,14 @@ func NativeMessagesToMessage(in responses2.InputUnion) []MessageUnion {
 
 				out = append(out, MessageUnion{
 					Role: RoleAssistant,
-					Content: Contents{
-						{
-							OfToolUse: &ToolUseContent{
-								ID:    nativeMessage.OfFunctionCall.CallID,
-								Name:  nativeMessage.OfFunctionCall.Name,
-								Input: args,
+					Content: ContentUnionParam{
+						OfList: Contents{
+							{
+								OfToolUse: &ToolUseContent{
+									ID:    nativeMessage.OfFunctionCall.CallID,
+									Name:  nativeMessage.OfFunctionCall.Name,
+									Input: args,
+								},
 							},
 						},
 					},
@@ -265,10 +269,12 @@ func NativeMessagesToMessage(in responses2.InputUnion) []MessageUnion {
 					output = append(output, ContentUnion{
 						OfToolResult: &ToolUseResultContent{
 							ToolUseID: nativeMessage.OfFunctionCallOutput.CallID,
-							Content: []ContentUnion{
-								{
-									OfText: &TextContent{
-										Text: *nativeMessage.OfFunctionCallOutput.Output.OfString,
+							Content: ContentUnionParam{
+								OfList: []ContentUnion{
+									{
+										OfText: &TextContent{
+											Text: *nativeMessage.OfFunctionCallOutput.Output.OfString,
+										},
 									},
 								},
 							},
@@ -282,10 +288,12 @@ func NativeMessagesToMessage(in responses2.InputUnion) []MessageUnion {
 							output = append(output, ContentUnion{
 								OfToolResult: &ToolUseResultContent{
 									ToolUseID: nativeMessage.OfFunctionCallOutput.CallID,
-									Content: []ContentUnion{
-										{
-											OfText: &TextContent{
-												Text: nativeOutput.OfInputText.Text,
+									Content: ContentUnionParam{
+										OfList: []ContentUnion{
+											{
+												OfText: &TextContent{
+													Text: nativeOutput.OfInputText.Text,
+												},
 											},
 										},
 									},
@@ -297,7 +305,7 @@ func NativeMessagesToMessage(in responses2.InputUnion) []MessageUnion {
 
 				out = append(out, MessageUnion{
 					Role:    RoleUser,
-					Content: output,
+					Content: ContentUnionParam{OfList: output},
 				})
 			}
 
@@ -316,11 +324,13 @@ func NativeMessagesToMessage(in responses2.InputUnion) []MessageUnion {
 
 					out = append(out, MessageUnion{
 						Role: RoleAssistant,
-						Content: Contents{
-							{
-								OfThinking: &ThinkingContent{
-									Thinking:  thinking,
-									Signature: *nativeMessage.OfReasoning.EncryptedContent,
+						Content: ContentUnionParam{
+							OfList: Contents{
+								{
+									OfThinking: &ThinkingContent{
+										Thinking:  thinking,
+										Signature: *nativeMessage.OfReasoning.EncryptedContent,
+									},
 								},
 							},
 						},
@@ -331,10 +341,12 @@ func NativeMessagesToMessage(in responses2.InputUnion) []MessageUnion {
 				if nativeMessage.OfReasoning.Summary == nil {
 					out = append(out, MessageUnion{
 						Role: RoleAssistant,
-						Content: Contents{
-							{
-								OfThinking: &ThinkingContent{
-									Signature: *nativeMessage.OfReasoning.EncryptedContent,
+						Content: ContentUnionParam{
+							OfList: Contents{
+								{
+									OfThinking: &ThinkingContent{
+										Signature: *nativeMessage.OfReasoning.EncryptedContent,
+									},
 								},
 							},
 						},
@@ -395,7 +407,7 @@ func NativeMessagesToMessage(in responses2.InputUnion) []MessageUnion {
 
 						out = append(out, MessageUnion{
 							Role:    RoleAssistant,
-							Content: contents,
+							Content: ContentUnionParam{OfList: contents},
 						})
 					}
 				}
@@ -437,7 +449,7 @@ func NativeMessagesToMessage(in responses2.InputUnion) []MessageUnion {
 
 				out = append(out, MessageUnion{
 					Role:    RoleAssistant,
-					Content: contents,
+					Content: ContentUnionParam{OfList: contents},
 				})
 			}
 		}

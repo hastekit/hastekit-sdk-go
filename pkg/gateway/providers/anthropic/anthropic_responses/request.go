@@ -28,11 +28,44 @@ type ThinkingParam struct {
 }
 
 type MessageUnion struct {
-	Role    Role     `json:"role"` // "user" or "assistant"
-	Content Contents `json:"content"`
+	Role    Role              `json:"role"` // "user" or "assistant"
+	Content ContentUnionParam `json:"content"`
 }
 
 type Contents []ContentUnion
+
+type ContentUnionParam struct {
+	OfString *string  `json:",omitempty"`
+	OfList   Contents `json:",omitempty"`
+}
+
+func (u *ContentUnionParam) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := sonic.Unmarshal(data, &s); err == nil {
+		u.OfString = &s
+		return nil
+	}
+
+	var list Contents
+	if err := sonic.Unmarshal(data, &list); err == nil {
+		u.OfList = list
+		return nil
+	}
+
+	return errors.New("unknown content union type")
+}
+
+func (u *ContentUnionParam) MarshalJSON() ([]byte, error) {
+	if u.OfString != nil {
+		return sonic.Marshal(u.OfString)
+	}
+
+	if u.OfList != nil {
+		return sonic.Marshal(u.OfList)
+	}
+
+	return nil, nil
+}
 
 type ContentUnion struct {
 	OfText                        *TextContent                    `json:",omitempty"`
@@ -99,35 +132,35 @@ func (u *ContentUnion) UnmarshalJSON(data []byte) error {
 
 func (u *ContentUnion) MarshalJSON() ([]byte, error) {
 	if u.OfText != nil {
-		return sonic.Marshal(*u.OfText)
+		return sonic.Marshal(u.OfText)
 	}
 
 	if u.OfToolUse != nil {
-		return sonic.Marshal(*u.OfToolUse)
+		return sonic.Marshal(u.OfToolUse)
 	}
 
 	if u.OfToolResult != nil {
-		return sonic.Marshal(*u.OfToolResult)
+		return sonic.Marshal(u.OfToolResult)
 	}
 
 	if u.OfThinking != nil {
-		return sonic.Marshal(*u.OfThinking)
+		return sonic.Marshal(u.OfThinking)
 	}
 
 	if u.OfRedactedThinking != nil {
-		return sonic.Marshal(*u.OfRedactedThinking)
+		return sonic.Marshal(u.OfRedactedThinking)
 	}
 
 	if u.OfServerToolUse != nil {
-		return sonic.Marshal(*u.OfServerToolUse)
+		return sonic.Marshal(u.OfServerToolUse)
 	}
 
 	if u.OfWebSearchResult != nil {
-		return sonic.Marshal(*u.OfWebSearchResult)
+		return sonic.Marshal(u.OfWebSearchResult)
 	}
 
 	if u.OfBashCodeExecutionToolResult != nil {
-		return sonic.Marshal(*u.OfBashCodeExecutionToolResult)
+		return sonic.Marshal(u.OfBashCodeExecutionToolResult)
 	}
 
 	return nil, nil
@@ -157,7 +190,7 @@ type ToolUseContent struct {
 type ToolUseResultContent struct {
 	Type      ContentTypeToolUseResult `json:"type"` // "tool_result"
 	ToolUseID string                   `json:"tool_use_id"`
-	Content   []ContentUnion           `json:"content"`
+	Content   ContentUnionParam        `json:"content"`
 	IsError   *bool                    `json:"is_error,omitempty"`
 }
 
