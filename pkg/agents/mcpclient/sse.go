@@ -7,12 +7,14 @@ import (
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents"
 	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
 	"github.com/mark3labs/mcp-go/client"
+	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
 type MCPClient struct {
-	Endpoint string            `json:"-"`
-	Headers  map[string]string `json:"-"`
+	Endpoint  string            `json:"-"`
+	Transport string            `json:"-"`
+	Headers   map[string]string `json:"-"`
 
 	Client                *client.Client `json:"-"`
 	Tools                 []mcp.Tool     `json:"-"`
@@ -51,7 +53,7 @@ func NewInProcessMCPServer(ctx context.Context, client *client.Client, headers m
 	}, nil
 }
 
-func NewSSEClient(ctx context.Context, endpoint string, options ...McpServerOption) (*MCPClient, error) {
+func NewClient(ctx context.Context, endpoint string, options ...McpServerOption) (*MCPClient, error) {
 	srv := &MCPClient{
 		Endpoint: endpoint,
 	}
@@ -83,6 +85,16 @@ func WithApprovalRequiredTools(tools ...string) McpServerOption {
 	}
 }
 
+func WithTransport(transport string) McpServerOption {
+	return func(srv *MCPClient) {
+		if transport == "" {
+			srv.Transport = "sse"
+		} else {
+			srv.Transport = transport
+		}
+	}
+}
+
 func (srv *MCPClient) GetName() string {
 	return "MCPClient"
 }
@@ -94,20 +106,35 @@ func (srv *MCPClient) GetClient(ctx context.Context, runContext map[string]any) 
 		headers[k] = utils.TryAndParseAsTemplate(v, runContext)
 	}
 
-	client, err := client.NewSSEMCPClient(
-		srv.Endpoint,
-		client.WithHeaders(headers),
-	)
+	var cli *client.Client
+	var err error
+	switch srv.Transport {
+	case "sse":
+		cli, err = client.NewSSEMCPClient(
+			srv.Endpoint,
+			client.WithHeaders(headers),
+		)
+	case "streamable-http":
+		cli, err = client.NewStreamableHttpClient(
+			srv.Endpoint,
+			transport.WithHTTPHeaders(headers),
+		)
+	default:
+		cli, err = client.NewSSEMCPClient(
+			srv.Endpoint,
+			client.WithHeaders(headers),
+		)
+	}
 	if err != nil {
 		return nil, err
 	}
 
-	err = client.Start(ctx)
+	err = cli.Start(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	_, err = client.Initialize(ctx, mcp.InitializeRequest{
+	_, err = cli.Initialize(ctx, mcp.InitializeRequest{
 		Request: mcp.Request{},
 		Params:  mcp.InitializeParams{},
 	})
@@ -115,7 +142,7 @@ func (srv *MCPClient) GetClient(ctx context.Context, runContext map[string]any) 
 		return nil, err
 	}
 
-	tools, err := client.ListTools(ctx, mcp.ListToolsRequest{
+	tools, err := cli.ListTools(ctx, mcp.ListToolsRequest{
 		PaginatedRequest: mcp.PaginatedRequest{},
 	})
 	if err != nil {
@@ -125,7 +152,7 @@ func (srv *MCPClient) GetClient(ctx context.Context, runContext map[string]any) 
 	return &MCPClient{
 		Endpoint:              srv.Endpoint,
 		Headers:               headers,
-		Client:                client,
+		Client:                cli,
 		Tools:                 tools.Tools,
 		Meta:                  srv.Meta,
 		ToolFilter:            srv.ToolFilter,
