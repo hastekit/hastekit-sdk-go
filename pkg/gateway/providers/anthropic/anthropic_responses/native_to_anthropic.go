@@ -463,7 +463,7 @@ func NativeResponseToResponse(in *responses2.Response) *Response {
 
 	for _, nativeOutput := range in.Output {
 		if nativeOutput.OfOutputMessage != nil {
-			for _, nativeContent := range nativeOutput.OfOutputMessage.Content {
+			for _, nativeContent := range *nativeOutput.OfOutputMessage.Content {
 				contents = append(contents, ContentUnion{
 					OfText: &TextContent{
 						Type:      "text",
@@ -750,7 +750,7 @@ func (c *NativeResponseChunkToResponseChunkConverter) handleOutputTextDelta(delt
 
 func (c *NativeResponseChunkToResponseChunkConverter) handleOutputTextAnnotationAdded(delta *responses2.ChunkOutputText[constants.ChunkTypeOutputTextAnnotationAdded]) []ResponseChunk {
 	return []ResponseChunk{
-		c.buildContentBlockDeltaCitation(delta.OutputIndex, delta.Annotation),
+		c.buildContentBlockDeltaCitation(delta.OutputIndex, *delta.Annotation),
 	}
 }
 

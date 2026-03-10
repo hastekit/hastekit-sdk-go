@@ -210,7 +210,7 @@ func (in *Response) ToNativeResponse() *responses2.Response {
 			output = append(output, responses2.OutputMessageUnion{
 				OfOutputMessage: &responses2.OutputMessage{
 					Role: constants.RoleAssistant,
-					Content: responses2.OutputContent{
+					Content: &responses2.OutputContent{
 						{
 							OfOutputText: &responses2.OutputTextContent{
 								Text: *part.Text,
@@ -528,7 +528,7 @@ func (c *ResponseChunkToNativeResponseChunkConverter) completeTextPart() []*resp
 		OfOutputMessage: &responses2.OutputMessage{
 			ID:   c.outputItemID,
 			Role: RoleModel.ToNativeRole(),
-			Content: responses2.OutputContent{
+			Content: &responses2.OutputContent{
 				{OfOutputText: &responses2.OutputTextContent{Text: text}},
 			},
 		},
@@ -780,7 +780,7 @@ func (c *ResponseChunkToNativeResponseChunkConverter) buildOutputItemAddedMessag
 				Id:      c.outputItemID,
 				Status:  "in_progress",
 				Role:    RoleModel.ToNativeRole(),
-				Content: responses2.OutputContent{},
+				Content: &responses2.OutputContent{},
 			},
 		},
 	}
@@ -819,7 +819,7 @@ func (c *ResponseChunkToNativeResponseChunkConverter) buildOutputItemAddedReason
 				Type:             "reasoning",
 				Id:               c.outputItemID,
 				Status:           "in_progress",
-				Summary:          []responses2.SummaryTextContent{},
+				Summary:          &[]responses2.SummaryTextContent{},
 				EncryptedContent: utils.Ptr(""),
 			},
 		},
@@ -901,7 +901,7 @@ func (c *ResponseChunkToNativeResponseChunkConverter) buildOutputItemDoneMessage
 				Id:      c.outputItemID,
 				Status:  "completed",
 				Role:    RoleModel.ToNativeRole(),
-				Content: responses2.OutputContent{{OfOutputText: &responses2.OutputTextContent{Text: text}}},
+				Content: &responses2.OutputContent{{OfOutputText: &responses2.OutputTextContent{Text: text}}},
 			},
 		},
 	}
@@ -1002,7 +1002,7 @@ func (c *ResponseChunkToNativeResponseChunkConverter) buildOutputItemDoneReasoni
 				Type:    "reasoning",
 				Id:      c.outputItemID,
 				Status:  "completed",
-				Summary: []responses2.SummaryTextContent{{Text: text}},
+				Summary: &[]responses2.SummaryTextContent{{Text: text}},
 			},
 		},
 	}

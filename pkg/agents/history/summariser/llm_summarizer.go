@@ -182,7 +182,7 @@ func (s *LLMHistorySummarizer) Summarize(ctx context.Context, msgIdToRunId map[s
 			}
 
 		case msg.OfOutputMessage != nil:
-			for _, content := range msg.OfOutputMessage.Content {
+			for _, content := range *msg.OfOutputMessage.Content {
 				if content.OfOutputText != nil {
 					historyBuilder.WriteString(fmt.Sprintf("%s: %s\n", msg.OfOutputMessage.Role, content.OfOutputText.Text))
 				}
@@ -223,7 +223,7 @@ func (s *LLMHistorySummarizer) Summarize(ctx context.Context, msgIdToRunId map[s
 	// Extract text from summary
 	var summaryText string
 	for _, msg := range summaryMsg {
-		for _, content := range msg.OfOutputMessage.Content {
+		for _, content := range *msg.OfOutputMessage.Content {
 			summaryText += content.OfOutputText.Text
 		}
 	}

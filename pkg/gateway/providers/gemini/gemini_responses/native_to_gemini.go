@@ -306,7 +306,7 @@ func NativeResponseToResponse(in *responses2.Response) *Response {
 
 	for _, nativeOutput := range in.Output {
 		if nativeOutput.OfOutputMessage != nil {
-			for _, nativeContent := range nativeOutput.OfOutputMessage.Content {
+			for _, nativeContent := range *nativeOutput.OfOutputMessage.Content {
 				parts = append(parts, Part{
 					Text: utils.Ptr(nativeContent.OfOutputText.Text),
 				})

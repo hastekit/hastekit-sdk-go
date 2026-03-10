@@ -346,7 +346,7 @@ func (in *Response) ToNativeResponse() *responses2.Response {
 			output = append(output, responses2.OutputMessageUnion{
 				OfOutputMessage: &responses2.OutputMessage{
 					Role: constants.RoleAssistant,
-					Content: responses2.OutputContent{
+					Content: &responses2.OutputContent{
 						{
 							OfOutputText: &responses2.OutputTextContent{
 								Text:        content.OfText.Text,
@@ -748,7 +748,7 @@ func (c *ResponseChunkToNativeResponseChunkConverter) completeTextBlock() []*res
 		OfOutputMessage: &responses2.OutputMessage{
 			ID:   c.currentOutputID,
 			Role: role,
-			Content: responses2.OutputContent{
+			Content: &responses2.OutputContent{
 				{OfOutputText: &responses2.OutputTextContent{Text: text}},
 			},
 		},
@@ -899,7 +899,7 @@ func (c *ResponseChunkToNativeResponseChunkConverter) buildOutputItemAddedMessag
 				Id:      c.currentOutputID,
 				Status:  "in_progress",
 				Role:    c.currentRole(),
-				Content: responses2.OutputContent{},
+				Content: &responses2.OutputContent{},
 			},
 		},
 	}
@@ -933,7 +933,7 @@ func (c *ResponseChunkToNativeResponseChunkConverter) buildOutputItemAddedReason
 				Type:             "reasoning",
 				Id:               c.currentOutputID,
 				Status:           "in_progress",
-				Summary:          []responses2.SummaryTextContent{},
+				Summary:          &[]responses2.SummaryTextContent{},
 				EncryptedContent: utils.Ptr(signature),
 			},
 		},
@@ -1134,7 +1134,7 @@ func (c *ResponseChunkToNativeResponseChunkConverter) buildOutputTextAnnotationA
 			ItemId:         c.currentOutputID,
 			OutputIndex:    c.outputIndex,
 			ContentIndex:   c.contentIndex,
-			Annotation: responses2.Annotation{
+			Annotation: &responses2.Annotation{
 				Type:       "url_citation",
 				Title:      citation.Title,
 				URL:        citation.Url,
@@ -1223,7 +1223,7 @@ func (c *ResponseChunkToNativeResponseChunkConverter) buildOutputItemDoneMessage
 				Id:      c.currentOutputID,
 				Status:  "completed",
 				Role:    role,
-				Content: responses2.OutputContent{{OfOutputText: &responses2.OutputTextContent{Text: text}}},
+				Content: &responses2.OutputContent{{OfOutputText: &responses2.OutputTextContent{Text: text}}},
 			},
 		},
 	}
@@ -1296,7 +1296,7 @@ func (c *ResponseChunkToNativeResponseChunkConverter) buildOutputItemDoneReasoni
 				Id:               c.currentOutputID,
 				Status:           "completed",
 				EncryptedContent: utils.Ptr(sig),
-				Summary:          []responses2.SummaryTextContent{{Text: text}},
+				Summary:          &[]responses2.SummaryTextContent{{Text: text}},
 			},
 		},
 	}

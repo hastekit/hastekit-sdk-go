@@ -39,13 +39,13 @@ func (a *Accumulator) ReadStream(stream chan *responses.ResponseChunk, cb func(c
 		switch chunk.ChunkType() {
 		case "response.output_item.done":
 			if chunk.OfOutputItemDone.Item.Type == "message" {
-				for _, content := range chunk.OfOutputItemDone.Item.Content {
+				for _, content := range *chunk.OfOutputItemDone.Item.Content {
 					if content.OfOutputText != nil {
 						finalOutput = append(finalOutput, responses.OutputMessageUnion{
 							OfOutputMessage: &responses.OutputMessage{
 								ID:   chunk.OfOutputItemDone.Item.Id,
 								Role: constants.RoleAssistant,
-								Content: responses.OutputContent{
+								Content: &responses.OutputContent{
 									content,
 								},
 							},
@@ -56,7 +56,7 @@ func (a *Accumulator) ReadStream(stream chan *responses.ResponseChunk, cb func(c
 
 			if chunk.OfOutputItemDone.Item.Type == "reasoning" {
 				// Skip empty reasoning blocks
-				if chunk.OfOutputItemDone.Item.EncryptedContent == nil && len(chunk.OfOutputItemDone.Item.Summary) == 0 {
+				if chunk.OfOutputItemDone.Item.EncryptedContent == nil && len(*chunk.OfOutputItemDone.Item.Summary) == 0 {
 					continue
 				}
 
@@ -68,7 +68,7 @@ func (a *Accumulator) ReadStream(stream chan *responses.ResponseChunk, cb func(c
 				finalOutput = append(finalOutput, responses.OutputMessageUnion{
 					OfReasoning: &responses.ReasoningMessage{
 						ID:               chunk.OfOutputItemDone.Item.Id,
-						Summary:          chunk.OfOutputItemDone.Item.Summary,
+						Summary:          *chunk.OfOutputItemDone.Item.Summary,
 						EncryptedContent: encryptedContent,
 					},
 				})

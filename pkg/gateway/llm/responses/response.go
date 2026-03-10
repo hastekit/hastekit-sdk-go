@@ -136,7 +136,7 @@ type OutputMessage struct {
 	ID      string                       `json:"id"`
 	Type    constants.MessageTypeMessage `json:"type,omitempty"`          // Always "message".
 	Role    constants.Role               `json:"role,omitempty,required"` // Any of "user", "system", "developer".
-	Content OutputContent                `json:"content,omitempty,required"`
+	Content *OutputContent               `json:"content,omitempty,required"`
 }
 
 type OutputContent []OutputContentUnion
