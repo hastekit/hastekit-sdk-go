@@ -569,11 +569,11 @@ type ChunkOutputItemData struct {
 
 	// Common fields
 	Id     string `json:"id"`
-	Status string `json:"status"`
+	Status string `json:"status,omitempty"`
 
 	// For output_item of type "message"
-	Content OutputContent  `json:"content"`
-	Role    constants.Role `json:"role"`
+	Content *OutputContent `json:"content,omitempty"`
+	Role    constants.Role `json:"role,omitempty"`
 
 	// For output_item of type "function_call"
 	CallID           *string `json:"call_id,omitempty"`
@@ -582,8 +582,8 @@ type ChunkOutputItemData struct {
 	ThoughtSignature *string `json:"thought_signature,omitempty"` // Exception: Gemini function calls can have though signature
 
 	// For "reasoning"
-	EncryptedContent *string              `json:"encrypted_content,omitempty"`
-	Summary          []SummaryTextContent `json:"summary,omitempty"`
+	EncryptedContent *string               `json:"encrypted_content,omitempty"`
+	Summary          *[]SummaryTextContent `json:"summary,omitempty"`
 
 	// For "image_generation_call"
 	Background   *string `json:"background,omitempty"`    // "opaque"
@@ -624,8 +624,8 @@ type ChunkOutputText[T any] struct {
 	Text *string `json:"text,omitempty"`
 
 	// Only on response.output_text.annotation.added
-	Annotation      Annotation `json:"annotation,omitempty"`
-	AnnotationIndex int        `json:"annotation_index"`
+	Annotation      *Annotation `json:"annotation,omitempty"`
+	AnnotationIndex int         `json:"annotation_index"`
 }
 
 type ChunkFunctionCall[T any] struct {

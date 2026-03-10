@@ -66,7 +66,7 @@ func (t *AgentTool) Execute(ctx context.Context, params *agents.ToolCall) (*agen
 	data := ""
 	for _, out := range result.Output {
 		if out.OfOutputMessage != nil {
-			for _, content := range out.OfOutputMessage.Content {
+			for _, content := range *out.OfOutputMessage.Content {
 				if content.OfOutputText != nil {
 					data += content.OfOutputText.Text
 				}
