@@ -158,6 +158,14 @@ func (m *ContentTypeInputImage) UnmarshalJSON(buf []byte) error {
 	return unmarshalConstantString(m, buf)
 }
 
+type ContentTypeInputFile string
+
+func (m *ContentTypeInputFile) Value() string                { return "input_file" }
+func (m *ContentTypeInputFile) MarshalJSON() ([]byte, error) { return sonic.Marshal(m.Value()) }
+func (m *ContentTypeInputFile) UnmarshalJSON(buf []byte) error {
+	return unmarshalConstantString(m, buf)
+}
+
 type ContentTypeSummaryText string
 
 func (m *ContentTypeSummaryText) Value() string                { return "summary_text" }
