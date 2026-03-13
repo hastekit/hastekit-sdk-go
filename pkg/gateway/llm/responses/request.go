@@ -389,8 +389,7 @@ type InputContentUnion struct {
 	OfInputText  *InputTextContent  `json:",omitempty"`
 	OfOutputText *OutputTextContent `json:",omitempty"`
 	OfInputImage *InputImageContent `json:",omitempty,inline"`
-	//OfInputFile  *ResponseInputFileParam  `json:",omitempty,inline"`
-	//OfInputAudio *ResponseInputAudioParam `json:",omitempty,inline"`
+	OfInputFile  *InputFileContent  `json:",omitempty,inline"`
 }
 
 func (u *InputContentUnion) UnmarshalJSON(data []byte) error {
@@ -417,6 +416,12 @@ func (u *InputContentUnion) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 
+	var inputFileContent InputFileContent
+	if err := sonic.Unmarshal(data, &inputFileContent); err == nil {
+		u.OfInputFile = &inputFileContent
+		return nil
+	}
+
 	return errors.New("invalid input content union")
 }
 
@@ -431,6 +436,10 @@ func (u *InputContentUnion) MarshalJSON() ([]byte, error) {
 
 	if u.OfInputImage != nil {
 		return sonic.Marshal(u.OfInputImage)
+	}
+
+	if u.OfInputFile != nil {
+		return sonic.Marshal(u.OfInputFile)
 	}
 
 	return nil, nil
@@ -452,6 +461,14 @@ type InputImageContent struct {
 	ImageURL *string                         `json:"image_url,omitempty"` // A fully qualified URL or base64 encoded image in a data URL.
 	FileID   *string                         `json:"file_id,omitempty"`
 	Detail   string                          `json:"detail"` // "low", "high", "auto"
+}
+
+type InputFileContent struct {
+	Type     constants.ContentTypeInputFile `json:"type"`
+	FileURL  *string                        `json:"file_url,omitempty"`
+	FileName *string                        `json:"filename,omitempty"`
+	FileData *string                        `json:"file_data,omitempty"`
+	FileID   *string                        `json:"file_id,omitempty"`
 }
 
 type SummaryTextContent struct {
@@ -566,7 +583,9 @@ type FunctionTool struct {
 }
 
 type ImageGenerationTool struct {
-	Type constants.ToolTypeImageGeneration `json:"type"` // image_generation
+	Type    constants.ToolTypeImageGeneration `json:"type"` // image_generation
+	Size    string                            `json:"size"`
+	Quality string                            `json:"quality"`
 }
 
 type WebSearchTool struct {
