@@ -85,6 +85,13 @@ func (g *LLMGateway) baseRequestHandler(ctx context.Context, providerName llm.Pr
 		}
 
 		resp.OfSpeech = respOut
+	case r.OfTranscription != nil:
+		respOut, err := g.handleTranscriptionRequest(ctx, providerName, p, r.OfTranscription)
+		if err != nil {
+			return nil, err
+		}
+
+		resp.OfTranscription = respOut
 	}
 
 	return resp, nil
