@@ -20,7 +20,8 @@ type GenerationConfig struct {
 }
 
 type SpeechConfigParam struct {
-	VoiceConfig VoiceConfigParam `json:"voiceConfig"`
+	VoiceConfig  VoiceConfigParam `json:"voiceConfig"`
+	LanguageCode *string          `json:"languageCode,omitempty"`
 }
 
 type VoiceConfigParam struct {
@@ -33,9 +34,10 @@ type PrebuiltVoiceConfig struct {
 
 func (r *Request) ToNativeRequest() *speech2.Request {
 	return &speech2.Request{
-		Input: r.Contents[0].String(),
-		Model: r.Model,
-		Voice: r.GenerationConfig.SpeechConfig.VoiceConfig.PrebuiltVoiceConfig.VoiceName,
+		Input:    r.Contents[0].String(),
+		Model:    r.Model,
+		Voice:    r.GenerationConfig.SpeechConfig.VoiceConfig.PrebuiltVoiceConfig.VoiceName,
+		Language: r.GenerationConfig.SpeechConfig.LanguageCode,
 	}
 }
 
@@ -45,6 +47,9 @@ func NativeRequestToRequest(in *speech2.Request) *Request {
 		Contents: []gemini_responses2.Content{
 			{
 				Parts: []gemini_responses2.Part{
+					{
+						Text: utils.Ptr("Text-To-Speech the following text:"),
+					},
 					{
 						Text: &in.Input,
 					},
@@ -59,6 +64,7 @@ func NativeRequestToRequest(in *speech2.Request) *Request {
 						VoiceName: in.Voice,
 					},
 				},
+				LanguageCode: in.Language,
 			},
 		},
 	}
