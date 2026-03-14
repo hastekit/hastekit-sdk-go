@@ -13,10 +13,12 @@ import (
 	embeddings2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/embeddings"
 	responses2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	speech2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/speech"
+	transcription2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/transcription"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/base"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/gemini/gemini_embeddings"
 	gemini_responses2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/gemini/gemini_responses"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/gemini/gemini_speech"
+	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/gemini/gemini_transcription"
 	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
 )
 
@@ -420,4 +422,52 @@ func (c *Client) NewStreamingSpeech(ctx context.Context, inp *speech2.Request) (
 	}()
 
 	return out, nil
+}
+
+func (c *Client) NewTranscription(ctx context.Context, inp *transcription2.Request) (*transcription2.Response, error) {
+	geminiRequest := gemini_transcription.NativeRequestToRequest(inp)
+
+	model := inp.Model
+	if model == "" {
+		model = "gemini-2.0-flash"
+	}
+
+	endpoint := fmt.Sprintf("%s/models/%s:generateContent", c.opts.BaseURL, model)
+
+	payload, err := sonic.Marshal(geminiRequest)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewBuffer(payload))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-goog-api-key", c.opts.ApiKey)
+
+	for k, v := range c.opts.Headers {
+		req.Header.Set(k, v)
+	}
+
+	res, err := c.opts.transport.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		var errResp map[string]any
+		err = utils.DecodeJSON(res.Body, &errResp)
+		return nil, errors.New(errResp["error"].(map[string]any)["message"].(string))
+	}
+
+	var geminiResponse *gemini_transcription.Response
+	err = utils.DecodeJSON(res.Body, &geminiResponse)
+	if err != nil {
+		return nil, err
+	}
+
+	return geminiResponse.ToNativeResponse(), nil
 }

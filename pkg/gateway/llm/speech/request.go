@@ -4,6 +4,7 @@ type Request struct {
 	Input          string  `json:"input"`
 	Model          string  `json:"model"`
 	Voice          string  `json:"voice"`
+	Language       *string `json:"language"`
 	Instruction    *string `json:"instruction,omitempty"`
 	ResponseFormat *string `json:"response_format,omitempty"`
 	Speed          *int    `json:"speed,omitempty"`
