@@ -8,7 +8,6 @@ import (
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/embeddings"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/speech"
-	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/transcription"
 )
 
 // InternalLLMGateway uses the internal LLMGatewayAdapter for server-side use.
@@ -116,17 +115,4 @@ func (p *InternalLLMGateway) NewStreamingSpeech(ctx context.Context, providerNam
 	}
 
 	return resp.SpeechStreamData, nil
-}
-
-func (p *InternalLLMGateway) NewTranscription(ctx context.Context, providerName llm.ProviderName, key string, req *transcription.Request) (*transcription.Response, error) {
-	llmReq := &llm.Request{
-		OfTranscription: req,
-	}
-
-	resp, err := p.gateway.HandleRequest(ctx, providerName, key, llmReq)
-	if err != nil {
-		return nil, err
-	}
-
-	return resp.OfTranscription, nil
 }

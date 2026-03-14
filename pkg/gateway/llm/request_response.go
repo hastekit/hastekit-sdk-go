@@ -5,7 +5,6 @@ import (
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/embeddings"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/speech"
-	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/transcription"
 )
 
 type Request struct {
@@ -13,7 +12,6 @@ type Request struct {
 	OfResponsesInput      *responses.Request
 	OfChatCompletionInput *chat_completion.Request
 	OfSpeech              *speech.Request
-	OfTranscription       *transcription.Request
 }
 
 func (r *Request) GetRequestedModel() string {
@@ -33,10 +31,6 @@ func (r *Request) GetRequestedModel() string {
 		return r.OfSpeech.Model
 	}
 
-	if r.OfTranscription != nil {
-		return r.OfTranscription.Model
-	}
-
 	return ""
 }
 
@@ -45,7 +39,6 @@ type Response struct {
 	OfResponsesOutput      *responses.Response
 	OfChatCompletionOutput *chat_completion.Response
 	OfSpeech               *speech.Response
-	OfTranscription        *transcription.Response
 	Error                  *Error
 }
 

@@ -14,7 +14,6 @@ import (
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/embeddings"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/speech"
-	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/transcription"
 	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
@@ -438,49 +437,4 @@ func (p *ExternalLLMGateway) NewStreamingSpeech(ctx context.Context, providerNam
 	}()
 
 	return out, nil
-}
-
-func (p *ExternalLLMGateway) NewTranscription(ctx context.Context, providerName llm.ProviderName, key string, req *transcription.Request) (*transcription.Response, error) {
-	// Prepend provider to model for gateway routing
-	originalModel := req.Model
-	req.Model = fmt.Sprintf("%s:%s", providerName, req.Model)
-	defer func() { req.Model = originalModel }()
-
-	payload, err := sonic.Marshal(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, p.endpoint+"/api/gateway/transcriptions", bytes.NewReader(payload))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	carrier := propagation.MapCarrier{}
-	otel.GetTextMapPropagator().Inject(ctx, carrier)
-	for k, v := range carrier {
-		httpReq.Header.Add(k, v)
-	}
-
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("x-virtual-key", key)
-
-	resp, err := p.httpClient.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		var errResp map[string]any
-		_ = utils.DecodeJSON(resp.Body, &errResp)
-		return nil, fmt.Errorf("gateway error (status %d): %v", resp.StatusCode, errResp)
-	}
-
-	var nativeResp transcription.Response
-	if err := utils.DecodeJSON(resp.Body, &nativeResp); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	return &nativeResp, nil
 }

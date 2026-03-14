@@ -7,7 +7,6 @@ import (
 	embeddings2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/embeddings"
 	responses2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	speech2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/speech"
-	transcription2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/transcription"
 )
 
 type BaseProvider struct{}
@@ -37,9 +36,5 @@ func (bp *BaseProvider) NewSpeech(ctx context.Context, in *speech2.Request) (*sp
 }
 
 func (bp *BaseProvider) NewStreamingSpeech(ctx context.Context, in *speech2.Request) (chan *speech2.ResponseChunk, error) {
-	return nil, nil
-}
-
-func (bp *BaseProvider) NewTranscription(ctx context.Context, in *transcription2.Request) (*transcription2.Response, error) {
 	return nil, nil
 }

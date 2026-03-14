@@ -9,9 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"mime/multipart"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/bytedance/sonic"
@@ -19,13 +17,11 @@ import (
 	embeddings2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/embeddings"
 	responses2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	speech2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/speech"
-	transcription2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/transcription"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/base"
 	openai_chat_completion2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/openai/openai_chat_completion"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/openai/openai_embeddings"
 	openai_responses2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/openai/openai_responses"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/openai/openai_speech"
-	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/openai/openai_transcription"
 	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
 )
 
@@ -431,101 +427,4 @@ func (c *Client) NewStreamingSpeech(ctx context.Context, in *speech2.Request) (c
 	}()
 
 	return out, nil
-}
-
-func (c *Client) NewTranscription(ctx context.Context, in *transcription2.Request) (*transcription2.Response, error) {
-	_ = openai_transcription.NativeRequestToRequest(in)
-
-	// Build multipart form body
-	var buf bytes.Buffer
-	writer := multipart.NewWriter(&buf)
-
-	// Add the audio file
-	filename := in.AudioFilename
-	if filename == "" {
-		filename = "audio.mp3"
-	}
-	filePart, err := writer.CreateFormFile("file", filename)
-	if err != nil {
-		return nil, err
-	}
-	if _, err = filePart.Write(in.Audio); err != nil {
-		return nil, err
-	}
-
-	// Add model field
-	if err = writer.WriteField("model", in.Model); err != nil {
-		return nil, err
-	}
-
-	// Add optional fields
-	if in.Language != nil {
-		if err = writer.WriteField("language", *in.Language); err != nil {
-			return nil, err
-		}
-	}
-
-	if in.Prompt != nil {
-		if err = writer.WriteField("prompt", *in.Prompt); err != nil {
-			return nil, err
-		}
-	}
-
-	if in.ResponseFormat != nil {
-		if err = writer.WriteField("response_format", *in.ResponseFormat); err != nil {
-			return nil, err
-		}
-	}
-
-	if in.Temperature != nil {
-		if err = writer.WriteField("temperature", strconv.FormatFloat(*in.Temperature, 'f', -1, 64)); err != nil {
-			return nil, err
-		}
-	}
-
-	for _, g := range in.TimestampGranularities {
-		if err = writer.WriteField("timestamp_granularities[]", g); err != nil {
-			return nil, err
-		}
-	}
-
-	if err = writer.Close(); err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodPost, c.opts.BaseURL+"/audio/transcriptions", &buf)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-	req.Header.Set("Authorization", "Bearer "+c.opts.ApiKey)
-
-	res, err := c.opts.transport.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer res.Body.Close()
-
-	if res.StatusCode != http.StatusOK {
-		var errResp map[string]any
-		err = utils.DecodeJSON(res.Body, &errResp)
-		if err != nil {
-			return nil, err
-		}
-		if errorObj, ok := errResp["error"].(map[string]any); ok {
-			if message, ok := errorObj["message"].(string); ok {
-				return nil, errors.New(message)
-			}
-		}
-		return nil, errors.New("unknown error occurred")
-	}
-
-	var openAiResponse *openai_transcription.Response
-	err = utils.DecodeJSON(res.Body, &openAiResponse)
-	if err != nil {
-		return nil, err
-	}
-
-	return openAiResponse.ToNativeResponse(), nil
 }

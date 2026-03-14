@@ -10,7 +10,6 @@ import (
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/embeddings"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/speech"
-	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/transcription"
 	utils2 "github.com/hastekit/hastekit-sdk-go/pkg/utils"
 )
 
@@ -39,9 +38,6 @@ type LLMGatewayAdapter interface {
 
 	// NewStreamingSpeech
 	NewStreamingSpeech(ctx context.Context, providerName llm.ProviderName, key string, req *speech.Request) (chan *speech.ResponseChunk, error)
-
-	// NewTranscription
-	NewTranscription(ctx context.Context, providerName llm.ProviderName, key string, req *transcription.Request) (*transcription.Response, error)
 }
 
 // LLMClient wraps an LLMGatewayAdapter and provides a high-level interface
@@ -156,16 +152,6 @@ func (c *LLMClient) NewStreamingSpeech(ctx context.Context, in *speech.Request) 
 	in.Model = model
 
 	return c.LLMGatewayAdapter.NewStreamingSpeech(ctx, providerName, c.getKey(providerName), in)
-}
-
-func (c *LLMClient) NewTranscription(ctx context.Context, in *transcription.Request) (*transcription.Response, error) {
-	providerName, model, err := c.getProviderAndModelName(in.Model)
-	if err != nil {
-		return nil, err
-	}
-	in.Model = model
-
-	return c.LLMGatewayAdapter.NewTranscription(ctx, providerName, c.getKey(providerName), in)
 }
 
 func (c *LLMClient) getKey(providerName llm.ProviderName) string {

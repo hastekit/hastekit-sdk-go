@@ -8,7 +8,6 @@ import (
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/embeddings"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/speech"
-	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/transcription"
 )
 
 type Provider interface {
@@ -19,7 +18,6 @@ type Provider interface {
 	NewStreamingChatCompletion(ctx context.Context, in *chat_completion.Request) (chan *chat_completion.ResponseChunk, error)
 	NewSpeech(ctx context.Context, in *speech.Request) (*speech.Response, error)
 	NewStreamingSpeech(ctx context.Context, in *speech.Request) (chan *speech.ResponseChunk, error)
-	NewTranscription(ctx context.Context, in *transcription.Request) (*transcription.Response, error)
 }
 
 type ProviderName string
