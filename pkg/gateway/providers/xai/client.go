@@ -3,17 +3,21 @@ package xai
 import (
 	"bufio"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/bytedance/sonic"
 	responses2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
+	speech2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/speech"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/base"
 	xai_responses2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/xai/xai_responses"
+	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/xai/xai_speech"
 	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
 )
 
@@ -57,6 +61,7 @@ func (c *Client) NewResponses(ctx context.Context, inp *responses2.Request) (*re
 		return nil, err
 	}
 
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.opts.ApiKey)
 
 	res, err := c.opts.transport.Do(req)
@@ -133,4 +138,62 @@ func (c *Client) NewStreamingResponses(ctx context.Context, inp *responses2.Requ
 	}()
 
 	return out, nil
+}
+
+func (c *Client) NewSpeech(ctx context.Context, in *speech2.Request) (*speech2.Response, error) {
+	xaiRequest := xai_speech.NativeRequestToRequest(in)
+
+	payload, err := sonic.Marshal(xaiRequest)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, c.opts.BaseURL+"/tts", bytes.NewBuffer(payload))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+c.opts.ApiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	res, err := c.opts.transport.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		var errResp map[string]any
+		err = utils.DecodeJSON(res.Body, &errResp)
+		if err != nil {
+			return nil, err
+		}
+		if errorObj, ok := errResp["error"].(map[string]any); ok {
+			if message, ok := errorObj["message"].(string); ok {
+				return nil, errors.New(message)
+			}
+		}
+		return nil, errors.New("unknown error occurred")
+	}
+
+	var reader io.Reader = res.Body
+	if res.Header.Get("Content-Encoding") == "gzip" {
+		gzipReader, err := gzip.NewReader(res.Body)
+		if err != nil {
+			return nil, err
+		}
+		defer gzipReader.Close()
+		reader = gzipReader
+	}
+
+	audioData, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, err
+	}
+
+	xaiResponse := &xai_speech.Response{
+		AudioData: audioData,
+	}
+
+	return xaiResponse.ToNativeResponse(), nil
 }

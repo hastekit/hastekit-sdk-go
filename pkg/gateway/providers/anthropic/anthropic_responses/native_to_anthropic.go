@@ -267,17 +267,8 @@ func NativeMessagesToMessage(in responses2.InputUnion) []MessageUnion {
 
 				if nativeMessage.OfFunctionCallOutput.Output.OfString != nil {
 					output = append(output, ContentUnion{
-						OfToolResult: &ToolUseResultContent{
-							ToolUseID: nativeMessage.OfFunctionCallOutput.CallID,
-							Content: ContentUnionParam{
-								OfList: []ContentUnion{
-									{
-										OfText: &TextContent{
-											Text: *nativeMessage.OfFunctionCallOutput.Output.OfString,
-										},
-									},
-								},
-							},
+						OfText: &TextContent{
+							Text: *nativeMessage.OfFunctionCallOutput.Output.OfString,
 						},
 					})
 				}
@@ -286,17 +277,8 @@ func NativeMessagesToMessage(in responses2.InputUnion) []MessageUnion {
 					for _, nativeOutput := range nativeMessage.OfFunctionCallOutput.Output.OfList {
 						if nativeOutput.OfInputText != nil {
 							output = append(output, ContentUnion{
-								OfToolResult: &ToolUseResultContent{
-									ToolUseID: nativeMessage.OfFunctionCallOutput.CallID,
-									Content: ContentUnionParam{
-										OfList: []ContentUnion{
-											{
-												OfText: &TextContent{
-													Text: nativeOutput.OfInputText.Text,
-												},
-											},
-										},
-									},
+								OfText: &TextContent{
+									Text: nativeOutput.OfInputText.Text,
 								},
 							})
 						}
@@ -304,8 +286,16 @@ func NativeMessagesToMessage(in responses2.InputUnion) []MessageUnion {
 				}
 
 				out = append(out, MessageUnion{
-					Role:    RoleUser,
-					Content: ContentUnionParam{OfList: output},
+					Role: RoleUser,
+					Content: ContentUnionParam{OfList: Contents{
+						{
+							OfToolResult: &ToolUseResultContent{
+								ToolUseID: nativeMessage.OfFunctionCallOutput.CallID,
+								Content:   ContentUnionParam{OfList: output},
+								IsError:   nil,
+							},
+						},
+					}},
 				})
 			}
 
