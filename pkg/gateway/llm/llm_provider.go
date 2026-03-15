@@ -25,11 +25,12 @@ type Provider interface {
 type ProviderName string
 
 var (
-	ProviderNameOpenAI    ProviderName = "OpenAI"
-	ProviderNameAnthropic ProviderName = "Anthropic"
-	ProviderNameGemini    ProviderName = "Gemini"
-	ProviderNameXAI       ProviderName = "xAI"
-	ProviderNameOllama    ProviderName = "Ollama"
+	ProviderNameOpenAI     ProviderName = "OpenAI"
+	ProviderNameAnthropic  ProviderName = "Anthropic"
+	ProviderNameGemini     ProviderName = "Gemini"
+	ProviderNameXAI        ProviderName = "xAI"
+	ProviderNameOllama     ProviderName = "Ollama"
+	ProviderNameElevenLabs ProviderName = "ElevenLabs"
 )
 
 func GetAllProviderNames() []ProviderName {
@@ -39,6 +40,7 @@ func GetAllProviderNames() []ProviderName {
 		ProviderNameGemini,
 		ProviderNameXAI,
 		ProviderNameOllama,
+		ProviderNameElevenLabs,
 	}
 }
 

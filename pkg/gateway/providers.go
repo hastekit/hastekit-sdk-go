@@ -7,6 +7,7 @@ import (
 
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/anthropic"
+	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/elevenlabs"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/gemini"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/openai"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/xai"
@@ -57,6 +58,13 @@ func (g *LLMGateway) getProvider(ctx context.Context, providerName llm.ProviderN
 		}), nil
 	case llm.ProviderNameOllama:
 		return openai.NewClient(&openai.ClientOptions{
+			BaseURL: baseUrl,
+			ApiKey:  key,
+			Headers: customHeaders,
+		}), nil
+
+	case llm.ProviderNameElevenLabs:
+		return elevenlabs.NewClient(&elevenlabs.ClientOptions{
 			BaseURL: baseUrl,
 			ApiKey:  key,
 			Headers: customHeaders,
