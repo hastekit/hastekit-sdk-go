@@ -1,6 +1,7 @@
 package gemini_responses
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -121,50 +122,34 @@ func MessagesToNativeMessages(msgs []Content) responses2.InputUnion {
 	}
 
 	for _, content := range msgs {
-		out.OfInputMessageList = append(out.OfInputMessageList, content.ToNativeMessage()...)
+		out.OfInputMessageList = append(out.OfInputMessageList, content.ToNativeMessage())
 	}
 
 	return out
 }
 
-func (content *Content) ToNativeMessage() []responses2.InputMessageUnion {
-	out := []responses2.InputMessageUnion{}
-
+func (content *Content) ToNativeMessage() responses2.InputMessageUnion {
+	contents := responses2.InputContent{}
 	var previousExecutableCodePart *ExecutableCodePart
-	for _, part := range content.Parts {
-		if part.Text != nil {
-			out = append(out, responses2.InputMessageUnion{
-				OfInputMessage: &responses2.InputMessage{
-					Role: content.Role.ToNativeRole(),
-					Content: responses2.InputContent{
-						{
-							OfInputText: &responses2.InputTextContent{
-								Type: "input_text",
-								Text: *part.Text,
-							},
-						},
-					},
-				},
-			})
-		}
 
+	for _, part := range content.Parts {
 		if part.FunctionCall != nil {
 			args, err := sonic.Marshal(part.FunctionCall.Args)
 			if err != nil {
 				args = []byte("{}")
 			}
 
-			out = append(out, responses2.InputMessageUnion{
+			return responses2.InputMessageUnion{
 				OfFunctionCall: &responses2.FunctionCallMessage{
 					Name:      part.FunctionCall.Name,
 					Arguments: string(args),
 				},
-			})
+			}
 		}
 
 		if part.FunctionResponse != nil {
 			for _, v := range part.FunctionResponse.Response {
-				out = append(out, responses2.InputMessageUnion{
+				return responses2.InputMessageUnion{
 					OfFunctionCallOutput: &responses2.FunctionCallOutputMessage{
 						ID:     part.FunctionResponse.ID,
 						CallID: part.FunctionResponse.ID,
@@ -173,7 +158,7 @@ func (content *Content) ToNativeMessage() []responses2.InputMessageUnion {
 							OfList:   responses2.InputContent{},
 						},
 					},
-				})
+				}
 			}
 		}
 
@@ -182,7 +167,7 @@ func (content *Content) ToNativeMessage() []responses2.InputMessageUnion {
 		}
 
 		if previousExecutableCodePart != nil && part.CodeExecutionResult != nil {
-			out = append(out, responses2.InputMessageUnion{
+			return responses2.InputMessageUnion{
 				OfCodeInterpreterCall: &responses2.CodeInterpreterCallMessage{
 					Status: "completed",
 					Code:   previousExecutableCodePart.Code,
@@ -193,12 +178,35 @@ func (content *Content) ToNativeMessage() []responses2.InputMessageUnion {
 						},
 					},
 				},
+			}
+		}
+
+		if part.Text != nil {
+			contents = append(contents, responses2.InputContentUnion{
+				OfInputText: &responses2.InputTextContent{
+					Type: "input_text",
+					Text: *part.Text,
+				},
 			})
-			previousExecutableCodePart = nil
+		}
+
+		if part.InlineData != nil {
+			if strings.HasPrefix(part.InlineData.MimeType, "image") {
+				contents = append(contents, responses2.InputContentUnion{
+					OfInputImage: &responses2.InputImageContent{
+						ImageURL: utils.Ptr(fmt.Sprintf("data:%s;base64,%s", part.InlineData.MimeType, part.InlineData.Data)),
+					},
+				})
+			}
 		}
 	}
 
-	return out
+	return responses2.InputMessageUnion{
+		OfInputMessage: &responses2.InputMessage{
+			Role:    content.Role.ToNativeRole(),
+			Content: contents,
+		},
+	}
 }
 
 func (in *Response) ToNativeResponse() *responses2.Response {

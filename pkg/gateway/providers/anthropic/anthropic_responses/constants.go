@@ -36,6 +36,12 @@ func (m ContentTypeText) Value() string                  { return "text" }
 func (m ContentTypeText) MarshalJSON() ([]byte, error)   { return sonic.Marshal(m.Value()) }
 func (m ContentTypeText) UnmarshalJSON(buf []byte) error { return unmarshalConstantString(m, buf) }
 
+type ContentTypeImage string
+
+func (m ContentTypeImage) Value() string                  { return "image" }
+func (m ContentTypeImage) MarshalJSON() ([]byte, error)   { return sonic.Marshal(m.Value()) }
+func (m ContentTypeImage) UnmarshalJSON(buf []byte) error { return unmarshalConstantString(m, buf) }
+
 type ContentTypeToolUse string
 
 func (m ContentTypeToolUse) Value() string                  { return "tool_use" }

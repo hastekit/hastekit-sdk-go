@@ -203,6 +203,29 @@ func NativeMessagesToMessage(in responses2.InputUnion) []MessageUnion {
 								},
 							})
 						}
+
+						if nativeContent.OfInputImage != nil {
+							// Base64
+							if strings.HasPrefix(*nativeContent.OfInputImage.ImageURL, "data:") {
+								contentType, data, err := utils.ParseDataURL(*nativeContent.OfInputImage.ImageURL)
+								if err != nil {
+									slog.Warn("error in parsing data url")
+									continue
+								}
+
+								contents = append(contents, ContentUnion{
+									OfImage: &ImageContent{
+										Source: ImageContentSource{
+											Type:      "base64",
+											Data:      utils.Ptr(data),
+											MediaType: utils.Ptr(contentType),
+										},
+									},
+								})
+							}
+
+							// TODO: URL & File
+						}
 					}
 				}
 
@@ -231,6 +254,29 @@ func NativeMessagesToMessage(in responses2.InputUnion) []MessageUnion {
 								Citations: NativeAnnotationsToCitations(nativeContent.OfOutputText.Annotations),
 							},
 						})
+					}
+
+					if nativeContent.OfInputImage != nil {
+						// Base64
+						if strings.HasPrefix(*nativeContent.OfInputImage.ImageURL, "data:") {
+							contentType, data, err := utils.ParseDataURL(*nativeContent.OfInputImage.ImageURL)
+							if err != nil {
+								slog.Warn("error in parsing data url")
+								continue
+							}
+
+							contents = append(contents, ContentUnion{
+								OfImage: &ImageContent{
+									Source: ImageContentSource{
+										Type:      "base64",
+										Data:      utils.Ptr(data),
+										MediaType: utils.Ptr(contentType),
+									},
+								},
+							})
+						}
+
+						// TODO: URL & File
 					}
 				}
 

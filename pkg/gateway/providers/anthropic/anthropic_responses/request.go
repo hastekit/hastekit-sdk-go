@@ -69,6 +69,7 @@ func (u *ContentUnionParam) MarshalJSON() ([]byte, error) {
 
 type ContentUnion struct {
 	OfText                        *TextContent                    `json:",omitempty"`
+	OfImage                       *ImageContent                   `json:",omitempty"`
 	OfToolUse                     *ToolUseContent                 `json:",omitempty"`
 	OfToolResult                  *ToolUseResultContent           `json:",omitempty"`
 	OfThinking                    *ThinkingContent                `json:",omitempty"`
@@ -82,6 +83,12 @@ func (u *ContentUnion) UnmarshalJSON(data []byte) error {
 	var textContext TextContent
 	if err := sonic.Unmarshal(data, &textContext); err == nil {
 		u.OfText = &textContext
+		return nil
+	}
+
+	var imageContent ImageContent
+	if err := sonic.Unmarshal(data, &imageContent); err == nil {
+		u.OfImage = &imageContent
 		return nil
 	}
 
@@ -135,6 +142,10 @@ func (u *ContentUnion) MarshalJSON() ([]byte, error) {
 		return sonic.Marshal(u.OfText)
 	}
 
+	if u.OfImage != nil {
+		return sonic.Marshal(u.OfImage)
+	}
+
 	if u.OfToolUse != nil {
 		return sonic.Marshal(u.OfToolUse)
 	}
@@ -178,6 +189,25 @@ type Citation struct {
 	Title          string `json:"title"`
 	EncryptedIndex string `json:"encrypted_index"`
 	CitedText      string `json:"cited_text"`
+}
+
+type ImageContent struct {
+	Type   ContentTypeImage   `json:"type"`
+	Source ImageContentSource `json:"source"`
+}
+
+type ImageContentSource struct {
+	Type string `json:"type"` // base64, url, file
+
+	// Only for type = base64
+	Data      *string `json:"data"`       // base64 encoded image data
+	MediaType *string `json:"media_type"` // Mime Type
+
+	// Only for type=file
+	FileID *string `json:"file_id,omitempty"`
+
+	// Only for type=url
+	URL *string `json:"url,omitempty"`
 }
 
 type ToolUseContent struct {

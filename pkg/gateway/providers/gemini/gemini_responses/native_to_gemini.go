@@ -158,6 +158,26 @@ func NativeMessagesToMessages(in responses2.InputUnion) []Content {
 								Text: utils.Ptr(nativeContent.OfOutputText.Text),
 							})
 						}
+
+						if nativeContent.OfInputImage != nil {
+							// Data URLs
+							if strings.HasPrefix(*nativeContent.OfInputImage.ImageURL, "data:") {
+								contentType, data, err := utils.ParseDataURL(*nativeContent.OfInputImage.ImageURL)
+								if err != nil {
+									slog.Warn("error in parsing data url")
+									continue
+								}
+
+								parts = append(parts, Part{
+									InlineData: &InlinePartData{
+										MimeType: contentType,
+										Data:     data,
+									},
+								})
+							}
+
+							// TODO: URLs
+						}
 					}
 				}
 
@@ -182,6 +202,26 @@ func NativeMessagesToMessages(in responses2.InputUnion) []Content {
 						parts = append(parts, Part{
 							Text: utils.Ptr(nativeContent.OfOutputText.Text),
 						})
+					}
+
+					if nativeContent.OfInputImage != nil {
+						// Data URLs
+						if strings.HasPrefix(*nativeContent.OfInputImage.ImageURL, "data:") {
+							contentType, data, err := utils.ParseDataURL(*nativeContent.OfInputImage.ImageURL)
+							if err != nil {
+								slog.Warn("error in parsing data url")
+								continue
+							}
+
+							parts = append(parts, Part{
+								InlineData: &InlinePartData{
+									MimeType: contentType,
+									Data:     data,
+								},
+							})
+						}
+
+						// TODO: URLs
 					}
 				}
 

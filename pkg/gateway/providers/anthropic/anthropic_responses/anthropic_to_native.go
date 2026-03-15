@@ -1,6 +1,7 @@
 package anthropic_responses
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/bytedance/sonic"
@@ -137,19 +138,17 @@ func MessagesToNativeMessages(msgs []MessageUnion) responses2.InputUnion {
 	}
 
 	for _, msg := range msgs {
-		out.OfInputMessageList = append(out.OfInputMessageList, msg.ToNativeMessage()...)
+		out.OfInputMessageList = append(out.OfInputMessageList, msg.ToNativeMessage())
 	}
 
 	return out
 }
 
-func (msg *MessageUnion) ToNativeMessage() []responses2.InputMessageUnion {
-	out := []responses2.InputMessageUnion{}
-
+func (msg *MessageUnion) ToNativeMessage() responses2.InputMessageUnion {
 	var previousServerToolUse *ServerToolUseContent
 
 	if msg.Content.OfString != nil {
-		out = append(out, responses2.InputMessageUnion{
+		return responses2.InputMessageUnion{
 			OfInputMessage: &responses2.InputMessage{
 				Role: msg.Role.ToNativeRole(),
 				Content: responses2.InputContent{
@@ -160,57 +159,25 @@ func (msg *MessageUnion) ToNativeMessage() []responses2.InputMessageUnion {
 					},
 				},
 			},
-		})
-
-		return out
+		}
 	}
 
+	contents := responses2.InputContent{}
 	for _, content := range msg.Content.OfList {
-		if content.OfText != nil {
-			if content.OfText.Citations != nil {
-				out = append(out, responses2.InputMessageUnion{
-					OfInputMessage: &responses2.InputMessage{
-						Role: msg.Role.ToNativeRole(),
-						Content: responses2.InputContent{
-							{
-								OfOutputText: &responses2.OutputTextContent{
-									Text:        content.OfText.Text,
-									Annotations: CitationsToNativeAnnotations(content.OfText.Citations), // Convert citation to annotation
-								},
-							},
-						},
-					},
-				})
-			} else {
-				out = append(out, responses2.InputMessageUnion{
-					OfInputMessage: &responses2.InputMessage{
-						Role: msg.Role.ToNativeRole(),
-						Content: responses2.InputContent{
-							{
-								OfInputText: &responses2.InputTextContent{
-									Text: content.OfText.Text,
-								},
-							},
-						},
-					},
-				})
-			}
-		}
-
 		if content.OfToolUse != nil {
 			argsBuf, err := sonic.Marshal(content.OfToolUse.Input)
 			if err != nil {
 				argsBuf = []byte("{}")
 			}
 
-			out = append(out, responses2.InputMessageUnion{
+			return responses2.InputMessageUnion{
 				OfFunctionCall: &responses2.FunctionCallMessage{
 					ID:        content.OfToolUse.ID,
 					CallID:    content.OfToolUse.ID,
 					Name:      content.OfToolUse.Name,
 					Arguments: string(argsBuf),
 				},
-			})
+			}
 		}
 
 		if content.OfToolResult != nil {
@@ -234,17 +201,17 @@ func (msg *MessageUnion) ToNativeMessage() []responses2.InputMessageUnion {
 				}
 			}
 
-			out = append(out, responses2.InputMessageUnion{
+			return responses2.InputMessageUnion{
 				OfFunctionCallOutput: &responses2.FunctionCallOutputMessage{
 					ID:     content.OfToolResult.ToolUseID,
 					CallID: content.OfToolResult.ToolUseID,
 					Output: outputs,
 				},
-			})
+			}
 		}
 
 		if content.OfThinking != nil {
-			out = append(out, responses2.InputMessageUnion{
+			return responses2.InputMessageUnion{
 				OfReasoning: &responses2.ReasoningMessage{
 					ID: uuid.NewString(),
 					Summary: []responses2.SummaryTextContent{{
@@ -252,17 +219,17 @@ func (msg *MessageUnion) ToNativeMessage() []responses2.InputMessageUnion {
 					}},
 					EncryptedContent: utils.Ptr(content.OfThinking.Signature),
 				},
-			})
+			}
 		}
 
 		if content.OfRedactedThinking != nil {
-			out = append(out, responses2.InputMessageUnion{
+			return responses2.InputMessageUnion{
 				OfReasoning: &responses2.ReasoningMessage{
 					ID:               uuid.NewString(),
 					Summary:          nil,
 					EncryptedContent: utils.Ptr(content.OfRedactedThinking.Data),
 				},
-			})
+			}
 		}
 
 		if content.OfServerToolUse != nil {
@@ -284,7 +251,7 @@ func (msg *MessageUnion) ToNativeMessage() []responses2.InputMessageUnion {
 					})
 				}
 
-				out = append(out, responses2.InputMessageUnion{
+				return responses2.InputMessageUnion{
 					OfWebSearchCall: &responses2.WebSearchCallMessage{
 						ID: id,
 						Action: responses2.WebSearchCallActionUnion{
@@ -298,9 +265,7 @@ func (msg *MessageUnion) ToNativeMessage() []responses2.InputMessageUnion {
 						},
 						Status: "completed",
 					},
-				})
-
-				previousServerToolUse = nil
+				}
 			}
 		}
 
@@ -313,7 +278,7 @@ func (msg *MessageUnion) ToNativeMessage() []responses2.InputMessageUnion {
 					cmd = content.OfBashCodeExecutionToolResult.Content.Stderr
 				}
 
-				out = append(out, responses2.InputMessageUnion{
+				return responses2.InputMessageUnion{
 					OfCodeInterpreterCall: &responses2.CodeInterpreterCallMessage{
 						ID:          id,
 						Status:      "completed",
@@ -326,14 +291,45 @@ func (msg *MessageUnion) ToNativeMessage() []responses2.InputMessageUnion {
 							},
 						},
 					},
-				})
+				}
+			}
+		}
 
-				previousServerToolUse = nil
+		if content.OfText != nil {
+			if content.OfText.Citations != nil {
+				contents = append(contents, responses2.InputContentUnion{
+					OfOutputText: &responses2.OutputTextContent{
+						Text:        content.OfText.Text,
+						Annotations: CitationsToNativeAnnotations(content.OfText.Citations), // Convert citation to annotation
+					},
+				})
+			} else {
+				contents = append(contents, responses2.InputContentUnion{
+					OfInputText: &responses2.InputTextContent{
+						Text: content.OfText.Text,
+					},
+				})
+			}
+		}
+
+		if content.OfImage != nil {
+			switch content.OfImage.Source.Type {
+			case "base64":
+				contents = append(contents, responses2.InputContentUnion{
+					OfInputImage: &responses2.InputImageContent{
+						ImageURL: utils.Ptr(fmt.Sprintf("data:%s;base64,%s", *content.OfImage.Source.MediaType, *content.OfImage.Source.Data)),
+					},
+				})
 			}
 		}
 	}
 
-	return out
+	return responses2.InputMessageUnion{
+		OfInputMessage: &responses2.InputMessage{
+			Role:    msg.Role.ToNativeRole(),
+			Content: contents,
+		},
+	}
 }
 
 func (in *Response) ToNativeResponse() *responses2.Response {
