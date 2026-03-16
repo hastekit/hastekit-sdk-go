@@ -13,6 +13,7 @@ func (g *LLMGateway) handleTranscriptionRequest(ctx context.Context, providerNam
 	ctx, span := tracer.Start(ctx, "LLM.Transcription")
 	defer span.End()
 
+	addToSpan(ctx, span)
 	span.SetAttributes(
 		attribute.String("llm.provider", string(providerName)),
 		attribute.String("llm.model", in.Model),
