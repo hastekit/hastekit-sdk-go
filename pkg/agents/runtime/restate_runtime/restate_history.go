@@ -22,20 +22,34 @@ func NewRestateConversationPersistence(restateCtx restate.WorkflowContext, wrapp
 
 // NewConversationID generates a unique ID for a conversation
 func (t *RestateHistory) NewConversationID(ctx context.Context) string {
+	if IsInsideRunAsync(ctx) {
+		return t.wrappedPersistence.NewConversationID(ctx)
+	}
 	return restate.UUID(t.restateCtx).String()
 }
 
 func (t *RestateHistory) NewRunID(ctx context.Context) string {
+	if IsInsideRunAsync(ctx) {
+		return t.wrappedPersistence.NewRunID(ctx)
+	}
 	return restate.UUID(t.restateCtx).String()
 }
 
 func (t *RestateHistory) LoadMessages(ctx context.Context, namespace string, threadID string, previousMessageID string) ([]history.ConversationMessage, error) {
+	if IsInsideRunAsync(ctx) {
+		return t.wrappedPersistence.LoadMessages(ctx, namespace, threadID, previousMessageID)
+	}
+
 	return restate.Run(t.restateCtx, func(ctx restate.RunContext) ([]history.ConversationMessage, error) {
 		return t.wrappedPersistence.LoadMessages(ctx, namespace, threadID, previousMessageID)
 	}, restate.WithName("LoadMessages"))
 }
 
 func (t *RestateHistory) SaveMessages(ctx context.Context, namespace, msgId, previousMsgId, threadId, conversationId string, messages []responses.InputMessageUnion, meta map[string]any) error {
+	if IsInsideRunAsync(ctx) {
+		return t.wrappedPersistence.SaveMessages(ctx, namespace, msgId, previousMsgId, threadId, conversationId, messages, meta)
+	}
+
 	_, err := restate.Run(t.restateCtx, func(ctx restate.RunContext) (any, error) {
 		return nil, t.wrappedPersistence.SaveMessages(ctx, namespace, msgId, previousMsgId, threadId, conversationId, messages, meta)
 	}, restate.WithName("SaveMessages"))
@@ -43,6 +57,10 @@ func (t *RestateHistory) SaveMessages(ctx context.Context, namespace, msgId, pre
 }
 
 func (t *RestateHistory) SaveSummary(ctx context.Context, namespace string, summary history.Summary) error {
+	if IsInsideRunAsync(ctx) {
+		return t.wrappedPersistence.SaveSummary(ctx, namespace, summary)
+	}
+
 	_, err := restate.Run(t.restateCtx, func(ctx restate.RunContext) (any, error) {
 		return nil, t.wrappedPersistence.SaveSummary(ctx, namespace, summary)
 	}, restate.WithName("SaveSummary"))

@@ -25,8 +25,7 @@ func (t *RestateMCPServer) GetName() string {
 }
 
 func (t *RestateMCPServer) ListTools(ctx context.Context, runContext map[string]any) ([]agents.Tool, error) {
-	// TODO: `RestateMCPServer` is created per workflow, so we can connect to MCP and keep the connection
-	toolDefs, err := restate.Run(t.restateCtx, func(ctx restate.RunContext) ([]agents.BaseTool, error) {
+	listMCPTools := func(ctx context.Context) ([]agents.BaseTool, error) {
 		mcpTools, err := t.wrappedMcpServer.ListTools(ctx, runContext)
 		if err != nil {
 			return nil, err
@@ -41,7 +40,18 @@ func (t *RestateMCPServer) ListTools(ctx context.Context, runContext map[string]
 		}
 
 		return tools, nil
-	}, restate.WithName("MCPListTools"))
+	}
+
+	var toolDefs []agents.BaseTool
+	var err error
+
+	if IsInsideRunAsync(ctx) {
+		toolDefs, err = listMCPTools(ctx)
+	} else {
+		toolDefs, err = restate.Run(t.restateCtx, func(ctx restate.RunContext) ([]agents.BaseTool, error) {
+			return listMCPTools(ctx)
+		}, restate.WithName("MCPListTools"))
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +81,7 @@ func NewRestateMCPTool(restateCtx restate.WorkflowContext, wrappedMcpServer agen
 }
 
 func (t *RestateMCPTool) Execute(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
-	return restate.Run(t.restateCtx, func(ctx restate.RunContext) (*agents.ToolCallResponse, error) {
+	executeMCPTool := func(ctx context.Context) (*agents.ToolCallResponse, error) {
 		mcpTools, err := t.wrappedMcpServer.ListTools(ctx, t.runContext)
 		if err != nil {
 			return nil, err
@@ -84,5 +94,15 @@ func (t *RestateMCPTool) Execute(ctx context.Context, params *agents.ToolCall) (
 		}
 
 		return nil, fmt.Errorf("no restate tool found with name %s", params.Name)
+	}
+
+	// If already inside a RunAsync, execute directly to avoid concurrent
+	// access to the shared WorkflowContext.
+	if IsInsideRunAsync(ctx) {
+		return executeMCPTool(ctx)
+	}
+
+	return restate.Run(t.restateCtx, func(ctx restate.RunContext) (*agents.ToolCallResponse, error) {
+		return executeMCPTool(ctx)
 	}, restate.WithName("MCPToolCall"))
 }

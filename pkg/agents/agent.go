@@ -36,6 +36,7 @@ type Agent struct {
 	maxLoops     int
 	streamBroker StreamBroker
 	handoffs     []*Handoff
+	toolExecutor ToolExecutor
 }
 
 type AgentOptions struct {
@@ -43,14 +44,15 @@ type AgentOptions struct {
 	Instruction SystemPromptProvider
 	Parameters  responses.Parameters
 
-	Name       string
-	LLM        llm.Provider
-	Output     map[string]any
-	Tools      []Tool
-	Handoffs   []*Handoff
-	McpServers []MCPToolset
-	Runtime    Runtime
-	MaxLoops   *int
+	Name         string
+	LLM          llm.Provider
+	Output       map[string]any
+	Tools        []Tool
+	Handoffs     []*Handoff
+	McpServers   []MCPToolset
+	Runtime      Runtime
+	MaxLoops     *int
+	ToolExecutor ToolExecutor
 }
 
 func NewAgent(opts *AgentOptions) *Agent {
@@ -75,18 +77,24 @@ func NewAgent(opts *AgentOptions) *Agent {
 		opts.History = history.NewConversationManager(history.NewInMemoryConversationPersistence())
 	}
 
+	toolExecutor := opts.ToolExecutor
+	if toolExecutor == nil {
+		toolExecutor = &DefaultToolExecutor{}
+	}
+
 	return &Agent{
-		Name:        opts.Name,
-		output:      opts.Output,
-		history:     opts.History,
-		instruction: opts.Instruction,
-		tools:       opts.Tools,
-		mcpServers:  opts.McpServers,
-		llm:         &WrappedLLM{opts.LLM},
-		parameters:  opts.Parameters,
-		runtime:     opts.Runtime,
-		maxLoops:    maxLoops,
-		handoffs:    opts.Handoffs,
+		Name:         opts.Name,
+		output:       opts.Output,
+		history:      opts.History,
+		instruction:  opts.Instruction,
+		tools:        opts.Tools,
+		mcpServers:   opts.McpServers,
+		llm:          &WrappedLLM{opts.LLM},
+		parameters:   opts.Parameters,
+		runtime:      opts.Runtime,
+		maxLoops:     maxLoops,
+		handoffs:     opts.Handoffs,
+		toolExecutor: toolExecutor,
 	}
 }
 
@@ -104,6 +112,7 @@ func (e *Agent) WithLLM(wrappedLLM LLM) *Agent {
 		maxLoops:     e.maxLoops,
 		streamBroker: e.streamBroker,
 		handoffs:     e.handoffs,
+		toolExecutor: e.toolExecutor,
 	}
 }
 
@@ -351,21 +360,24 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chun
 			}
 
 		case agentstate.StepExecuteTools:
-			// Execute pending tool calls
 			var handoffFn func() (*AgentOutput, error)
 
-			for _, toolCall := range run.RunState.PendingToolCalls {
-				tool := findTool(ctx, tools, toolCall.Name)
-				if tool == nil {
-					slog.ErrorContext(ctx, "tool not found", slog.String("tool_name", toolCall.Name))
-					continue
-				}
+			// Pre-classify tool calls and build results in original order.
+			// toolResults[i] corresponds to run.RunState.PendingToolCalls[i].
+			type pendingExec struct {
+				index int
+				tool  Tool
+				call  responses.FunctionCallMessage
+			}
 
-				var toolResult *responses.FunctionCallOutputMessage
+			toolResults := make([]*responses.FunctionCallOutputMessage, len(run.RunState.PendingToolCalls))
+			subAgentContexts := make([]map[string]string, len(run.RunState.PendingToolCalls))
+			var regularExecs []pendingExec
 
+			for i, toolCall := range run.RunState.PendingToolCalls {
 				if slices.Contains(rejectedToolCallIds, toolCall.CallID) {
-					// Tool was rejected by human
-					toolResult = &responses.FunctionCallOutputMessage{
+					// Tool was rejected by human — resolve immediately
+					toolResults[i] = &responses.FunctionCallOutputMessage{
 						ID:     toolCall.ID,
 						CallID: toolCall.CallID,
 						Output: responses.FunctionCallOutputContentUnion{
@@ -373,6 +385,7 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chun
 						},
 					}
 				} else if toolCall.Name == "transfer_to_agent" {
+					// Handoff — resolve immediately, defer actual handoff
 					var param map[string]any
 					if err := sonic.Unmarshal([]byte(toolCall.Arguments), &param); err != nil {
 						return &AgentOutput{Status: agentstate.RunStatusError, RunID: runId}, err
@@ -380,14 +393,13 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chun
 
 					for _, handoff := range e.handoffs {
 						if handoff.Name == param["agent_name"] {
-							toolResult = &responses.FunctionCallOutputMessage{
+							toolResults[i] = &responses.FunctionCallOutputMessage{
 								ID:     toolCall.ID,
 								CallID: toolCall.CallID,
 								Output: responses.FunctionCallOutputContentUnion{
 									OfString: utils.Ptr("Transferred to agent"),
 								},
 							}
-
 							handoffFn = func() (*AgentOutput, error) {
 								return handoff.Agent.ExecuteWithRun(ctx, in, cb, run)
 							}
@@ -395,8 +407,8 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chun
 						}
 					}
 
-					if handoffFn == nil {
-						toolResult = &responses.FunctionCallOutputMessage{
+					if toolResults[i] == nil {
+						toolResults[i] = &responses.FunctionCallOutputMessage{
 							ID:     toolCall.ID,
 							CallID: toolCall.CallID,
 							Output: responses.FunctionCallOutputContentUnion{
@@ -405,23 +417,76 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chun
 						}
 					}
 				} else {
-					toolCallResp, err := tool.Execute(ctx, &ToolCall{
-						FunctionCallMessage: &toolCall,
-						AgentName:           e.Name,
-						Namespace:           in.Namespace,
-						SessionID:           in.SessionID,
-						RunContext:          in.RunContext,
-						SubAgentContext:     run.SubAgentContext,
-					})
-					if err != nil {
-						return &AgentOutput{Status: agentstate.RunStatusError, RunID: runId}, err
+					// Regular tool — queue for parallel execution
+					tool := findTool(ctx, tools, toolCall.Name)
+					if tool == nil {
+						slog.ErrorContext(ctx, "tool not found", slog.String("tool_name", toolCall.Name))
+						toolResults[i] = &responses.FunctionCallOutputMessage{
+							ID:     toolCall.ID,
+							CallID: toolCall.CallID,
+							Output: responses.FunctionCallOutputContentUnion{
+								OfString: utils.Ptr("Tool not found: " + toolCall.Name),
+							},
+						}
+						continue
 					}
+					regularExecs = append(regularExecs, pendingExec{index: i, tool: tool, call: toolCall})
+				}
+			}
 
-					toolResult = toolCallResp.FunctionCallOutputMessage
-
-					if toolCallResp.SubAgentContext != nil {
-						maps.Copy(run.SubAgentContext, toolCallResp.SubAgentContext)
+			// Execute regular tools in parallel
+			if len(regularExecs) > 0 {
+				executions := make([]ToolExecution, len(regularExecs))
+				for j, pe := range regularExecs {
+					pe := pe
+					executions[j] = ToolExecution{
+						Fn: func(ctx context.Context) (*ToolCallResponse, error) {
+							return pe.tool.Execute(ctx, &ToolCall{
+								FunctionCallMessage: &pe.call,
+								AgentName:           e.Name,
+								Namespace:           in.Namespace,
+								SessionID:           in.SessionID,
+								RunContext:          in.RunContext,
+								SubAgentContext:     run.SubAgentContext,
+							})
+						},
 					}
+				}
+
+				results := e.toolExecutor.ExecuteAll(ctx, executions)
+
+				for j, pe := range regularExecs {
+					result := results[j]
+					if result.Err != nil {
+						if ctx.Err() != nil {
+							// Context cancelled — abort the run
+							return &AgentOutput{Status: agentstate.RunStatusError, RunID: runId}, result.Err
+						}
+						// Tool error — report to LLM as error result
+						slog.ErrorContext(ctx, "tool execution failed", slog.String("tool_name", pe.call.Name), slog.Any("error", result.Err))
+						toolResults[pe.index] = &responses.FunctionCallOutputMessage{
+							ID:     pe.call.ID,
+							CallID: pe.call.CallID,
+							Output: responses.FunctionCallOutputContentUnion{
+								OfString: utils.Ptr(fmt.Sprintf("Tool execution failed: %v", result.Err)),
+							},
+						}
+					} else {
+						toolResults[pe.index] = result.Response.FunctionCallOutputMessage
+						subAgentContexts[pe.index] = result.Response.SubAgentContext
+					}
+				}
+			}
+
+			// Process all results in original order
+			for i, toolResult := range toolResults {
+				if toolResult == nil {
+					continue
+				}
+
+				// Merge sub-agent context if present
+				if subAgentContexts[i] != nil {
+					maps.Copy(run.SubAgentContext, subAgentContexts[i])
 				}
 
 				// TODO: Make this a durable step to avoid resending

@@ -21,6 +21,10 @@ func NewRestateConversationSummarizer(restateCtx restate.WorkflowContext, wrappe
 }
 
 func (t *RestateConversationSummarizer) Summarize(ctx context.Context, msgIdToRunId map[string]string, messages []responses.InputMessageUnion, usage *responses.Usage) (*history.SummaryResult, error) {
+	if IsInsideRunAsync(ctx) {
+		return t.wrappedSummarizer.Summarize(ctx, msgIdToRunId, messages, usage)
+	}
+
 	return restate.Run(t.restateCtx, func(ctx restate.RunContext) (*history.SummaryResult, error) {
 		return t.wrappedSummarizer.Summarize(ctx, msgIdToRunId, messages, usage)
 	})
