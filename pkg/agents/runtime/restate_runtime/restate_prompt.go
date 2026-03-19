@@ -20,10 +20,6 @@ func NewRestatePrompt(restateCtx restate.WorkflowContext, instruction agents.Sys
 }
 
 func (r *RestatePrompt) GetPrompt(ctx context.Context, deps *agents.Dependencies) (string, error) {
-	if IsInsideRunAsync(ctx) {
-		return r.wrappedPrompt.GetPrompt(ctx, deps)
-	}
-
 	return restate.Run(r.restateCtx, func(ctx restate.RunContext) (string, error) {
 		return r.wrappedPrompt.GetPrompt(ctx, deps)
 	}, restate.WithName("GetPrompt"))

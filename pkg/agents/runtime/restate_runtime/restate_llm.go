@@ -22,7 +22,7 @@ func NewRestateLLM(restateCtx restate.WorkflowContext, wrappedLLM llm.Provider) 
 }
 
 func (l *RestateLLM) NewStreamingResponses(ctx context.Context, in *responses.Request, cb func(chunk *responses.ResponseChunk)) (*responses.Response, error) {
-	doLLMCall := func(ctx context.Context) (*responses.Response, error) {
+	return restate.Run(l.restateCtx, func(ctx restate.RunContext) (*responses.Response, error) {
 		stream, err := l.wrappedLLM.NewStreamingResponses(ctx, in)
 		if err != nil {
 			return nil, err
@@ -37,13 +37,5 @@ func (l *RestateLLM) NewStreamingResponses(ctx context.Context, in *responses.Re
 		}
 
 		return resp, nil
-	}
-
-	if IsInsideRunAsync(ctx) {
-		return doLLMCall(ctx)
-	}
-
-	return restate.Run(l.restateCtx, func(ctx restate.RunContext) (*responses.Response, error) {
-		return doLLMCall(ctx)
 	}, restate.WithName("LLMCall"))
 }

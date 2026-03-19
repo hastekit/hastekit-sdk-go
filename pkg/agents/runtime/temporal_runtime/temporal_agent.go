@@ -2,6 +2,7 @@ package temporal_runtime
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents"
@@ -27,25 +28,21 @@ func NewTemporalAgent(configs map[string]*agents.AgentOptions, options *agents.A
 func (a *TemporalAgentV2) GetActivities() map[string]interface{} {
 	activities := map[string]interface{}{}
 
-	temporalPrompt := NewTemporalPrompt(a.options.Instruction)
-	activities[a.options.Name+"_GetPromptActivity"] = temporalPrompt.GetPrompt
+	activities[a.options.Name+"_GetPromptActivity"] = a.options.Instruction.GetPrompt
 
 	temporalLLM := NewTemporalLLM(a.options.LLM, a.broker)
 	activities[a.options.Name+"_NewStreamingResponsesActivity"] = temporalLLM.NewStreamingResponsesActivity
 
-	temporalConversationPersistence := NewTemporalConversationPersistence(a.options.History.ConversationPersistenceAdapter)
-	activities[a.options.Name+"_LoadMessagesActivity"] = temporalConversationPersistence.LoadMessages
-	activities[a.options.Name+"_SaveMessagesActivity"] = temporalConversationPersistence.SaveMessages
-	activities[a.options.Name+"_SaveSummaryActivity"] = temporalConversationPersistence.SaveSummary
+	activities[a.options.Name+"_LoadMessagesActivity"] = a.options.History.ConversationPersistenceAdapter.LoadMessages
+	activities[a.options.Name+"_SaveMessagesActivity"] = a.options.History.ConversationPersistenceAdapter.SaveMessages
+	activities[a.options.Name+"_SaveSummaryActivity"] = a.options.History.ConversationPersistenceAdapter.SaveSummary
 
 	if a.options.History.Summarizer != nil {
-		temporalSummarizer := NewTemporalConversationSummarizer(a.options.History.Summarizer)
-		activities[a.options.Name+"_SummarizerActivity"] = temporalSummarizer
+		activities[a.options.Name+"_SummarizerActivity"] = a.options.History.Summarizer
 	}
 
 	for _, tool := range a.options.Tools {
-		temporalTool := NewTemporalTool(tool)
-		activities[getToolName(a.options.Name, tool)+"_ExecuteToolActivity"] = temporalTool.Execute
+		activities[getToolName(a.options.Name, tool)+"_ExecuteToolActivity"] = tool.Execute
 	}
 
 	for _, mcpClient := range a.options.McpServers {
@@ -138,5 +135,5 @@ func getToolName(prefix string, tool agents.Tool) string {
 		}
 	}
 
-	return prefix + "_" + toolName
+	return fmt.Sprintf("%s_%s", prefix, toolName)
 }

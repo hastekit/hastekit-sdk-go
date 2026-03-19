@@ -99,8 +99,6 @@ func NewTemporalMCPToolProxy(workflowCtx workflow.Context, prefix string, runCon
 }
 
 func (t *TemporalMCPToolProxy) Execute(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
-	// Use coroutine-specific workflow context if available (parallel execution),
-	// otherwise fall back to the proxy's stored context (sequential execution).
 	wfCtx := t.workflowCtx
 	if overrideCtx, ok := GetWorkflowContext(ctx); ok {
 		wfCtx = overrideCtx

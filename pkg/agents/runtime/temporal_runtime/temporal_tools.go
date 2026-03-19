@@ -51,8 +51,6 @@ func NewTemporalToolProxy(workflowCtx workflow.Context, prefix string, wrappedTo
 }
 
 func (t *TemporalToolProxy) Execute(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
-	// Use coroutine-specific workflow context if available (parallel execution),
-	// otherwise fall back to the proxy's stored context (sequential execution).
 	wfCtx := t.workflowCtx
 	if overrideCtx, ok := GetWorkflowContext(ctx); ok {
 		wfCtx = overrideCtx
@@ -84,7 +82,7 @@ func NewTemporalToolExecutor(workflowCtx workflow.Context) *TemporalToolExecutor
 	return &TemporalToolExecutor{workflowCtx: workflowCtx}
 }
 
-func (e *TemporalToolExecutor) ExecuteAll(ctx context.Context, executions []agents.ToolExecution) []agents.ToolExecutionResult {
+func (e *TemporalToolExecutor) ExecuteAll(ctx context.Context, executions []agents.ExecutableToolCall) []agents.ToolExecutionResult {
 	results := make([]agents.ToolExecutionResult, len(executions))
 
 	wg := workflow.NewWaitGroup(e.workflowCtx)
@@ -92,11 +90,7 @@ func (e *TemporalToolExecutor) ExecuteAll(ctx context.Context, executions []agen
 		i, exec := i, exec
 		wg.Add(1)
 		workflow.Go(e.workflowCtx, func(gCtx workflow.Context) {
-			// Pass the coroutine's workflow.Context through context.Context
-			// so TemporalToolProxy.Execute uses the correct coroutine context
-			// for ExecuteActivity and Future.Get calls.
-			execCtx := withWorkflowContext(ctx, gCtx)
-			results[i].Response, results[i].Err = exec.Fn(execCtx)
+			results[i].Response, results[i].Err = exec.Tool.Execute(withWorkflowContext(ctx, gCtx), exec.ToolCall)
 			wg.Done()
 		})
 	}

@@ -116,6 +116,11 @@ func (e *Agent) WithLLM(wrappedLLM LLM) *Agent {
 	}
 }
 
+func (e *Agent) WithRuntime(runtime Runtime) *Agent {
+	e.runtime = runtime
+	return e
+}
+
 func (e *Agent) PrepareMCPTools(ctx context.Context, runContext map[string]any) ([]Tool, error) {
 	coreTools := []Tool{}
 	if e.mcpServers != nil {
@@ -362,17 +367,10 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chun
 		case agentstate.StepExecuteTools:
 			var handoffFn func() (*AgentOutput, error)
 
-			// Pre-classify tool calls and build results in original order.
-			// toolResults[i] corresponds to run.RunState.PendingToolCalls[i].
-			type pendingExec struct {
-				index int
-				tool  Tool
-				call  responses.FunctionCallMessage
-			}
+			var executableToolCalls []ExecutableToolCall
 
 			toolResults := make([]*responses.FunctionCallOutputMessage, len(run.RunState.PendingToolCalls))
 			subAgentContexts := make([]map[string]string, len(run.RunState.PendingToolCalls))
-			var regularExecs []pendingExec
 
 			for i, toolCall := range run.RunState.PendingToolCalls {
 				if slices.Contains(rejectedToolCallIds, toolCall.CallID) {
@@ -430,32 +428,22 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chun
 						}
 						continue
 					}
-					regularExecs = append(regularExecs, pendingExec{index: i, tool: tool, call: toolCall})
+					executableToolCalls = append(executableToolCalls, ExecutableToolCall{Index: i, ToolName: toolCall.Name, Tool: tool, ToolCall: &ToolCall{
+						FunctionCallMessage: &toolCall,
+						AgentName:           e.Name,
+						Namespace:           in.Namespace,
+						SessionID:           in.SessionID,
+						RunContext:          in.RunContext,
+						SubAgentContext:     run.SubAgentContext,
+					}})
 				}
 			}
 
-			// Execute regular tools in parallel
-			if len(regularExecs) > 0 {
-				executions := make([]ToolExecution, len(regularExecs))
-				for j, pe := range regularExecs {
-					pe := pe
-					executions[j] = ToolExecution{
-						Fn: func(ctx context.Context) (*ToolCallResponse, error) {
-							return pe.tool.Execute(ctx, &ToolCall{
-								FunctionCallMessage: &pe.call,
-								AgentName:           e.Name,
-								Namespace:           in.Namespace,
-								SessionID:           in.SessionID,
-								RunContext:          in.RunContext,
-								SubAgentContext:     run.SubAgentContext,
-							})
-						},
-					}
-				}
+			// Execute tools in parallel
+			if len(executableToolCalls) > 0 {
+				results := e.toolExecutor.ExecuteAll(ctx, executableToolCalls)
 
-				results := e.toolExecutor.ExecuteAll(ctx, executions)
-
-				for j, pe := range regularExecs {
+				for j, pe := range executableToolCalls {
 					result := results[j]
 					if result.Err != nil {
 						if ctx.Err() != nil {
@@ -463,17 +451,17 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chun
 							return &AgentOutput{Status: agentstate.RunStatusError, RunID: runId}, result.Err
 						}
 						// Tool error — report to LLM as error result
-						slog.ErrorContext(ctx, "tool execution failed", slog.String("tool_name", pe.call.Name), slog.Any("error", result.Err))
-						toolResults[pe.index] = &responses.FunctionCallOutputMessage{
-							ID:     pe.call.ID,
-							CallID: pe.call.CallID,
+						slog.ErrorContext(ctx, "tool execution failed", slog.String("tool_name", pe.ToolCall.Name), slog.Any("error", result.Err))
+						toolResults[pe.Index] = &responses.FunctionCallOutputMessage{
+							ID:     pe.ToolCall.ID,
+							CallID: pe.ToolCall.CallID,
 							Output: responses.FunctionCallOutputContentUnion{
 								OfString: utils.Ptr(fmt.Sprintf("Tool execution failed: %v", result.Err)),
 							},
 						}
 					} else {
-						toolResults[pe.index] = result.Response.FunctionCallOutputMessage
-						subAgentContexts[pe.index] = result.Response.SubAgentContext
+						toolResults[pe.Index] = result.Response.FunctionCallOutputMessage
+						subAgentContexts[pe.Index] = result.Response.SubAgentContext
 					}
 				}
 			}

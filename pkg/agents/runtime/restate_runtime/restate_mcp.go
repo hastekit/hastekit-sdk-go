@@ -45,13 +45,9 @@ func (t *RestateMCPServer) ListTools(ctx context.Context, runContext map[string]
 	var toolDefs []agents.BaseTool
 	var err error
 
-	if IsInsideRunAsync(ctx) {
-		toolDefs, err = listMCPTools(ctx)
-	} else {
-		toolDefs, err = restate.Run(t.restateCtx, func(ctx restate.RunContext) ([]agents.BaseTool, error) {
-			return listMCPTools(ctx)
-		}, restate.WithName("MCPListTools"))
-	}
+	toolDefs, err = restate.Run(t.restateCtx, func(ctx restate.RunContext) ([]agents.BaseTool, error) {
+		return listMCPTools(ctx)
+	}, restate.WithName("MCPListTools"))
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +77,7 @@ func NewRestateMCPTool(restateCtx restate.WorkflowContext, wrappedMcpServer agen
 }
 
 func (t *RestateMCPTool) Execute(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
-	executeMCPTool := func(ctx context.Context) (*agents.ToolCallResponse, error) {
+	return restate.Run(t.restateCtx, func(ctx restate.RunContext) (*agents.ToolCallResponse, error) {
 		mcpTools, err := t.wrappedMcpServer.ListTools(ctx, t.runContext)
 		if err != nil {
 			return nil, err
@@ -94,15 +90,5 @@ func (t *RestateMCPTool) Execute(ctx context.Context, params *agents.ToolCall) (
 		}
 
 		return nil, fmt.Errorf("no restate tool found with name %s", params.Name)
-	}
-
-	// If already inside a RunAsync, execute directly to avoid concurrent
-	// access to the shared WorkflowContext.
-	if IsInsideRunAsync(ctx) {
-		return executeMCPTool(ctx)
-	}
-
-	return restate.Run(t.restateCtx, func(ctx restate.RunContext) (*agents.ToolCallResponse, error) {
-		return executeMCPTool(ctx)
 	}, restate.WithName("MCPToolCall"))
 }
