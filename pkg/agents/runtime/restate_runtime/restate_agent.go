@@ -79,10 +79,11 @@ func (w *AgentWorkflow) newRestateAgentProxy(restateCtx restate.WorkflowContext,
 		Parameters: agentOptions.Parameters,
 		MaxLoops:   agentOptions.MaxLoops,
 
-		Instruction: promptProxy,
-		History:     conversationHistory,
-		Tools:       restateTools,
-		McpServers:  mcpClients,
+		Instruction:  promptProxy,
+		History:      conversationHistory,
+		Tools:        restateTools,
+		McpServers:   mcpClients,
+		ToolExecutor: NewRestateToolExecutor(restateCtx),
 	}
 
 	for _, h := range agentOptions.Handoffs {

@@ -105,10 +105,11 @@ func (a *TemporalAgentV2) newTemporalProxyAgent(ctx workflow.Context) *agents.Ag
 		Parameters: a.options.Parameters,
 		MaxLoops:   a.options.MaxLoops,
 
-		History:     conversationHistory,
-		Instruction: promptProxy,
-		Tools:       toolProxies,
-		McpServers:  mcpProxies,
+		History:      conversationHistory,
+		Instruction:  promptProxy,
+		Tools:        toolProxies,
+		McpServers:   mcpProxies,
+		ToolExecutor: NewTemporalToolExecutor(ctx),
 	}
 
 	for _, h := range a.options.Handoffs {

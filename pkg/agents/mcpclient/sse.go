@@ -136,7 +136,9 @@ func (srv *MCPClient) GetClient(ctx context.Context, runContext map[string]any) 
 
 	_, err = cli.Initialize(ctx, mcp.InitializeRequest{
 		Request: mcp.Request{},
-		Params:  mcp.InitializeParams{},
+		Params: mcp.InitializeParams{
+			ProtocolVersion: "2025-06-18",
+		},
 	})
 	if err != nil {
 		return nil, err
