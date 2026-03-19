@@ -25,7 +25,10 @@ func (t *RestateMCPServer) GetName() string {
 }
 
 func (t *RestateMCPServer) ListTools(ctx context.Context, runContext map[string]any) ([]agents.Tool, error) {
-	listMCPTools := func(ctx context.Context) ([]agents.BaseTool, error) {
+	var toolDefs []agents.BaseTool
+	var err error
+
+	toolDefs, err = restate.Run(t.restateCtx, func(ctx restate.RunContext) ([]agents.BaseTool, error) {
 		mcpTools, err := t.wrappedMcpServer.ListTools(ctx, runContext)
 		if err != nil {
 			return nil, err
@@ -40,13 +43,6 @@ func (t *RestateMCPServer) ListTools(ctx context.Context, runContext map[string]
 		}
 
 		return tools, nil
-	}
-
-	var toolDefs []agents.BaseTool
-	var err error
-
-	toolDefs, err = restate.Run(t.restateCtx, func(ctx restate.RunContext) ([]agents.BaseTool, error) {
-		return listMCPTools(ctx)
 	}, restate.WithName("MCPListTools"))
 	if err != nil {
 		return nil, err
