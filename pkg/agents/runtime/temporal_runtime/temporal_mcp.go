@@ -99,8 +99,13 @@ func NewTemporalMCPToolProxy(workflowCtx workflow.Context, prefix string, runCon
 }
 
 func (t *TemporalMCPToolProxy) Execute(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
+	wfCtx := t.workflowCtx
+	if overrideCtx, ok := GetWorkflowContext(ctx); ok {
+		wfCtx = overrideCtx
+	}
+
 	var output *agents.ToolCallResponse
-	err := workflow.ExecuteActivity(t.workflowCtx, t.prefix+"_ExecuteMCPToolActivity", params, t.runContext).Get(t.workflowCtx, &output)
+	err := workflow.ExecuteActivity(wfCtx, t.prefix+"_ExecuteMCPToolActivity", params, t.runContext).Get(wfCtx, &output)
 	if err != nil {
 		return nil, err
 	}

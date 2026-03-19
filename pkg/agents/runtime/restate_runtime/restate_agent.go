@@ -63,11 +63,6 @@ func (w *AgentWorkflow) newRestateAgentProxy(restateCtx restate.WorkflowContext,
 	}
 	conversationHistory := history.NewConversationManager(conversationPersistenceProxy, options...)
 
-	var restateTools []agents.Tool
-	for _, tool := range agentOptions.Tools {
-		restateTools = append(restateTools, NewRestateTool(restateCtx, tool))
-	}
-
 	var mcpClients []agents.MCPToolset
 	for _, mcpClient := range agentOptions.McpServers {
 		mcpClients = append(mcpClients, NewRestateMCPServer(restateCtx, mcpClient))
@@ -79,10 +74,11 @@ func (w *AgentWorkflow) newRestateAgentProxy(restateCtx restate.WorkflowContext,
 		Parameters: agentOptions.Parameters,
 		MaxLoops:   agentOptions.MaxLoops,
 
-		Instruction: promptProxy,
-		History:     conversationHistory,
-		Tools:       restateTools,
-		McpServers:  mcpClients,
+		Instruction:  promptProxy,
+		History:      conversationHistory,
+		Tools:        agentOptions.Tools,
+		McpServers:   mcpClients,
+		ToolExecutor: NewRestateToolExecutor(restateCtx),
 	}
 
 	for _, h := range agentOptions.Handoffs {

@@ -36,6 +36,7 @@ type Agent struct {
 	maxLoops     int
 	streamBroker StreamBroker
 	handoffs     []*Handoff
+	toolExecutor ToolExecutor
 }
 
 type AgentOptions struct {
@@ -43,14 +44,15 @@ type AgentOptions struct {
 	Instruction SystemPromptProvider
 	Parameters  responses.Parameters
 
-	Name       string
-	LLM        llm.Provider
-	Output     map[string]any
-	Tools      []Tool
-	Handoffs   []*Handoff
-	McpServers []MCPToolset
-	Runtime    Runtime
-	MaxLoops   *int
+	Name         string
+	LLM          llm.Provider
+	Output       map[string]any
+	Tools        []Tool
+	Handoffs     []*Handoff
+	McpServers   []MCPToolset
+	Runtime      Runtime
+	MaxLoops     *int
+	ToolExecutor ToolExecutor
 }
 
 func NewAgent(opts *AgentOptions) *Agent {
@@ -75,18 +77,24 @@ func NewAgent(opts *AgentOptions) *Agent {
 		opts.History = history.NewConversationManager(history.NewInMemoryConversationPersistence())
 	}
 
+	toolExecutor := opts.ToolExecutor
+	if toolExecutor == nil {
+		toolExecutor = &DefaultToolExecutor{}
+	}
+
 	return &Agent{
-		Name:        opts.Name,
-		output:      opts.Output,
-		history:     opts.History,
-		instruction: opts.Instruction,
-		tools:       opts.Tools,
-		mcpServers:  opts.McpServers,
-		llm:         &WrappedLLM{opts.LLM},
-		parameters:  opts.Parameters,
-		runtime:     opts.Runtime,
-		maxLoops:    maxLoops,
-		handoffs:    opts.Handoffs,
+		Name:         opts.Name,
+		output:       opts.Output,
+		history:      opts.History,
+		instruction:  opts.Instruction,
+		tools:        opts.Tools,
+		mcpServers:   opts.McpServers,
+		llm:          &WrappedLLM{opts.LLM},
+		parameters:   opts.Parameters,
+		runtime:      opts.Runtime,
+		maxLoops:     maxLoops,
+		handoffs:     opts.Handoffs,
+		toolExecutor: toolExecutor,
 	}
 }
 
@@ -104,7 +112,13 @@ func (e *Agent) WithLLM(wrappedLLM LLM) *Agent {
 		maxLoops:     e.maxLoops,
 		streamBroker: e.streamBroker,
 		handoffs:     e.handoffs,
+		toolExecutor: e.toolExecutor,
 	}
+}
+
+func (e *Agent) WithRuntime(runtime Runtime) *Agent {
+	e.runtime = runtime
+	return e
 }
 
 func (e *Agent) PrepareMCPTools(ctx context.Context, runContext map[string]any) ([]Tool, error) {
@@ -351,21 +365,17 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chun
 			}
 
 		case agentstate.StepExecuteTools:
-			// Execute pending tool calls
 			var handoffFn func() (*AgentOutput, error)
 
-			for _, toolCall := range run.RunState.PendingToolCalls {
-				tool := findTool(ctx, tools, toolCall.Name)
-				if tool == nil {
-					slog.ErrorContext(ctx, "tool not found", slog.String("tool_name", toolCall.Name))
-					continue
-				}
+			var executableToolCalls []ExecutableToolCall
 
-				var toolResult *responses.FunctionCallOutputMessage
+			toolResults := make([]*responses.FunctionCallOutputMessage, len(run.RunState.PendingToolCalls))
+			subAgentContexts := make([]map[string]string, len(run.RunState.PendingToolCalls))
 
+			for i, toolCall := range run.RunState.PendingToolCalls {
 				if slices.Contains(rejectedToolCallIds, toolCall.CallID) {
-					// Tool was rejected by human
-					toolResult = &responses.FunctionCallOutputMessage{
+					// Tool was rejected by human — resolve immediately
+					toolResults[i] = &responses.FunctionCallOutputMessage{
 						ID:     toolCall.ID,
 						CallID: toolCall.CallID,
 						Output: responses.FunctionCallOutputContentUnion{
@@ -373,6 +383,7 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chun
 						},
 					}
 				} else if toolCall.Name == "transfer_to_agent" {
+					// Handoff — resolve immediately, defer actual handoff
 					var param map[string]any
 					if err := sonic.Unmarshal([]byte(toolCall.Arguments), &param); err != nil {
 						return &AgentOutput{Status: agentstate.RunStatusError, RunID: runId}, err
@@ -380,14 +391,13 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chun
 
 					for _, handoff := range e.handoffs {
 						if handoff.Name == param["agent_name"] {
-							toolResult = &responses.FunctionCallOutputMessage{
+							toolResults[i] = &responses.FunctionCallOutputMessage{
 								ID:     toolCall.ID,
 								CallID: toolCall.CallID,
 								Output: responses.FunctionCallOutputContentUnion{
 									OfString: utils.Ptr("Transferred to agent"),
 								},
 							}
-
 							handoffFn = func() (*AgentOutput, error) {
 								return handoff.Agent.ExecuteWithRun(ctx, in, cb, run)
 							}
@@ -395,8 +405,8 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chun
 						}
 					}
 
-					if handoffFn == nil {
-						toolResult = &responses.FunctionCallOutputMessage{
+					if toolResults[i] == nil {
+						toolResults[i] = &responses.FunctionCallOutputMessage{
 							ID:     toolCall.ID,
 							CallID: toolCall.CallID,
 							Output: responses.FunctionCallOutputContentUnion{
@@ -405,23 +415,66 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chun
 						}
 					}
 				} else {
-					toolCallResp, err := tool.Execute(ctx, &ToolCall{
+					// Regular tool — queue for parallel execution
+					tool := findTool(ctx, tools, toolCall.Name)
+					if tool == nil {
+						slog.ErrorContext(ctx, "tool not found", slog.String("tool_name", toolCall.Name))
+						toolResults[i] = &responses.FunctionCallOutputMessage{
+							ID:     toolCall.ID,
+							CallID: toolCall.CallID,
+							Output: responses.FunctionCallOutputContentUnion{
+								OfString: utils.Ptr("Tool not found: " + toolCall.Name),
+							},
+						}
+						continue
+					}
+					executableToolCalls = append(executableToolCalls, ExecutableToolCall{Index: i, ToolName: toolCall.Name, Tool: tool, ToolCall: &ToolCall{
 						FunctionCallMessage: &toolCall,
 						AgentName:           e.Name,
 						Namespace:           in.Namespace,
 						SessionID:           in.SessionID,
 						RunContext:          in.RunContext,
 						SubAgentContext:     run.SubAgentContext,
-					})
-					if err != nil {
-						return &AgentOutput{Status: agentstate.RunStatusError, RunID: runId}, err
-					}
+					}})
+				}
+			}
 
-					toolResult = toolCallResp.FunctionCallOutputMessage
+			// Execute tools in parallel
+			if len(executableToolCalls) > 0 {
+				results := e.toolExecutor.ExecuteAll(ctx, executableToolCalls)
 
-					if toolCallResp.SubAgentContext != nil {
-						maps.Copy(run.SubAgentContext, toolCallResp.SubAgentContext)
+				for j, pe := range executableToolCalls {
+					result := results[j]
+					if result.Err != nil {
+						if ctx.Err() != nil {
+							// Context cancelled — abort the run
+							return &AgentOutput{Status: agentstate.RunStatusError, RunID: runId}, result.Err
+						}
+						// Tool error — report to LLM as error result
+						slog.ErrorContext(ctx, "tool execution failed", slog.String("tool_name", pe.ToolCall.Name), slog.Any("error", result.Err))
+						toolResults[pe.Index] = &responses.FunctionCallOutputMessage{
+							ID:     pe.ToolCall.ID,
+							CallID: pe.ToolCall.CallID,
+							Output: responses.FunctionCallOutputContentUnion{
+								OfString: utils.Ptr(fmt.Sprintf("Tool execution failed: %v", result.Err)),
+							},
+						}
+					} else {
+						toolResults[pe.Index] = result.Response.FunctionCallOutputMessage
+						subAgentContexts[pe.Index] = result.Response.SubAgentContext
 					}
+				}
+			}
+
+			// Process all results in original order
+			for i, toolResult := range toolResults {
+				if toolResult == nil {
+					continue
+				}
+
+				// Merge sub-agent context if present
+				if subAgentContexts[i] != nil {
+					maps.Copy(run.SubAgentContext, subAgentContexts[i])
 				}
 
 				// TODO: Make this a durable step to avoid resending

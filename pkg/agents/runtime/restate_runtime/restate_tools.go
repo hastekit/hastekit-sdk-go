@@ -2,34 +2,43 @@ package restate_runtime
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents"
-	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	restate "github.com/restatedev/sdk-go"
 )
 
-type RestateTool struct {
-	restateCtx  restate.WorkflowContext
-	wrappedTool agents.Tool
+// RestateToolExecutor executes tools in parallel using restate.RunAsync futures.
+type RestateToolExecutor struct {
+	restateCtx restate.WorkflowContext
 }
 
-func NewRestateTool(restateCtx restate.WorkflowContext, wrappedTool agents.Tool) *RestateTool {
-	return &RestateTool{
-		restateCtx:  restateCtx,
-		wrappedTool: wrappedTool,
+func NewRestateToolExecutor(restateCtx restate.WorkflowContext) *RestateToolExecutor {
+	return &RestateToolExecutor{restateCtx: restateCtx}
+}
+
+func (e *RestateToolExecutor) ExecuteAll(ctx context.Context, executions []agents.ExecutableToolCall) []agents.ToolExecutionResult {
+	futures := make([]restate.Future, len(executions))
+	for i, exec := range executions {
+		futures[i] = restate.RunAsync[*agents.ToolCallResponse](e.restateCtx, func(runCtx restate.RunContext) (*agents.ToolCallResponse, error) {
+			return exec.Tool.Execute(runCtx, exec.ToolCall)
+		}, restate.WithName("ToolCall: "+exec.ToolCall.Name))
 	}
-}
 
-func (t *RestateTool) Execute(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
-	return restate.Run(t.restateCtx, func(ctx restate.RunContext) (*agents.ToolCallResponse, error) {
-		return t.wrappedTool.Execute(ctx, params)
-	}, restate.WithName(params.Name+"_ToolCall"))
-}
+	var results []agents.ToolExecutionResult
+	for fut, err := range restate.Wait(e.restateCtx, futures...) {
+		if err != nil {
+			slog.Error("error: ", slog.Any("error", err))
+			results = append(results, agents.ToolExecutionResult{Err: err})
+			continue
+		}
 
-func (t *RestateTool) Tool(ctx context.Context) *responses.ToolUnion {
-	return t.wrappedTool.Tool(ctx)
-}
+		response, err := fut.(restate.RunAsyncFuture[*agents.ToolCallResponse]).Result()
+		results = append(results, agents.ToolExecutionResult{
+			Response: response,
+			Err:      err,
+		})
+	}
 
-func (t *RestateTool) NeedApproval() bool {
-	return t.wrappedTool.NeedApproval()
+	return results
 }

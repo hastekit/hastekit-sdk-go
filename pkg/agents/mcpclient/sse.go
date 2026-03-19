@@ -136,14 +136,9 @@ func (srv *MCPClient) GetClient(ctx context.Context, runContext map[string]any) 
 
 	_, err = cli.Initialize(ctx, mcp.InitializeRequest{
 		Request: mcp.Request{},
-		Params:  mcp.InitializeParams{},
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	tools, err := cli.ListTools(ctx, mcp.ListToolsRequest{
-		PaginatedRequest: mcp.PaginatedRequest{},
+		Params: mcp.InitializeParams{
+			ProtocolVersion: "2025-06-18",
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -153,7 +148,6 @@ func (srv *MCPClient) GetClient(ctx context.Context, runContext map[string]any) 
 		Endpoint:              srv.Endpoint,
 		Headers:               headers,
 		Client:                cli,
-		Tools:                 tools.Tools,
 		Meta:                  srv.Meta,
 		ToolFilter:            srv.ToolFilter,
 		ApprovalRequiredTools: srv.ApprovalRequiredTools,
