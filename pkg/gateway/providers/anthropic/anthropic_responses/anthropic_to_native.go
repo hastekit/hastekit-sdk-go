@@ -37,9 +37,20 @@ func (in *Request) ToNativeRequest() *responses2.Request {
 	if in.Thinking != nil {
 		if in.Thinking.Type != nil && *in.Thinking.Type == "enabled" {
 			out.Reasoning = &responses2.ReasoningParam{
-				Summary:      utils.Ptr("auto"),
-				BudgetTokens: in.Thinking.BudgetTokens,
+				Summary: utils.Ptr("auto"),
 			}
+
+			switch *in.Thinking.BudgetTokens {
+			case 10000:
+				out.Reasoning.Effort = utils.Ptr("xhigh")
+			case 6000:
+				out.Reasoning.Effort = utils.Ptr("high")
+			case 3000:
+				out.Reasoning.Effort = utils.Ptr("medium")
+			case 1024:
+				out.Reasoning.Effort = utils.Ptr("low")
+			}
+
 			out.Include = append(out.Include, responses2.IncludableReasoningEncryptedContent)
 		}
 	}
@@ -129,6 +140,25 @@ func CitationsToNativeAnnotations(citations []Citation) []responses2.Annotation 
 	}
 
 	return annotations
+}
+
+func ThinkingEffortToNativeReasoningEffort(effort *string) *string {
+	if effort == nil {
+		return nil
+	}
+
+	switch *effort {
+	case "low":
+		return utils.Ptr("low")
+	case "medium":
+		return utils.Ptr("medium")
+	case "high":
+		return utils.Ptr("high")
+	case "max":
+		return utils.Ptr("xhigh")
+	default:
+		return utils.Ptr("low")
+	}
 }
 
 func MessagesToNativeMessages(msgs []MessageUnion) responses2.InputUnion {

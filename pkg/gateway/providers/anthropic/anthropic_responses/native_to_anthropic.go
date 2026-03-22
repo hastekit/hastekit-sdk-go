@@ -43,12 +43,23 @@ func NativeRequestToRequest(in *responses2.Request) *Request {
 		}
 	}
 
-	if in.Reasoning != nil && in.Reasoning.BudgetTokens != nil {
-		if *in.Reasoning.BudgetTokens >= 1024 && *in.Reasoning.BudgetTokens < *in.MaxOutputTokens {
-			out.Thinking = &ThinkingParam{
-				Type:         utils.Ptr("enabled"),
-				BudgetTokens: in.Reasoning.BudgetTokens,
-			}
+	if in.Reasoning != nil {
+		out.Thinking = &ThinkingParam{
+			Type: utils.Ptr("enabled"),
+		}
+
+		// Budget tokens (derived from effort)
+		switch *in.Reasoning.Effort {
+		case "none":
+			out.Thinking.Type = utils.Ptr("disabled")
+		case "low":
+			out.Thinking.BudgetTokens = utils.Ptr(1024)
+		case "medium":
+			out.Thinking.BudgetTokens = utils.Ptr(3000)
+		case "high":
+			out.Thinking.BudgetTokens = utils.Ptr(6000)
+		case "xhigh":
+			out.Thinking.BudgetTokens = utils.Ptr(10000)
 		}
 	}
 

@@ -41,9 +41,8 @@ func (in *Request) ToNativeRequest() *responses2.Request {
 		}
 
 		out.Reasoning = &responses2.ReasoningParam{
-			Effort:       &effort,
-			Summary:      utils.Ptr("auto"),
-			BudgetTokens: in.GenerationConfig.ThinkingConfig.ThinkingBudget,
+			Effort:  &effort,
+			Summary: utils.Ptr("auto"),
 		}
 
 		includables = append(includables, responses2.IncludableReasoningEncryptedContent)
