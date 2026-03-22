@@ -46,7 +46,7 @@ func (a *Accumulator) ReadStream(stream chan *responses.ResponseChunk, cb func(c
 								ID:   chunk.OfOutputItemDone.Item.Id,
 								Role: constants.RoleAssistant,
 								Content: &responses.OutputContent{
-									content,
+									{OfOutputText: content.OfOutputText},
 								},
 							},
 						})
@@ -55,6 +55,25 @@ func (a *Accumulator) ReadStream(stream chan *responses.ResponseChunk, cb func(c
 			}
 
 			if chunk.OfOutputItemDone.Item.Type == "reasoning" {
+				// reasoning_text (only OSS)
+				// We unify `reasoning_text` into `summary_text` for simplicity
+				if chunk.OfOutputItemDone.Item.Content != nil {
+					for _, content := range *chunk.OfOutputItemDone.Item.Content {
+						if content.OfReasoningText != nil {
+							finalOutput = append(finalOutput, responses.OutputMessageUnion{
+								OfReasoning: &responses.ReasoningMessage{
+									ID: chunk.OfOutputItemDone.Item.Id,
+									Summary: []responses.SummaryTextContent{
+										{
+											Text: content.OfReasoningText.Text,
+										},
+									},
+								},
+							})
+						}
+					}
+				}
+
 				// Skip empty reasoning blocks
 				if chunk.OfOutputItemDone.Item.EncryptedContent == nil && len(*chunk.OfOutputItemDone.Item.Summary) == 0 {
 					continue

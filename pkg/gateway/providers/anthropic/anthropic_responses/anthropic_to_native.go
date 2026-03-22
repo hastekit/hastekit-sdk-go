@@ -895,7 +895,7 @@ func (c *ResponseChunkToNativeResponseChunkConverter) buildOutputItemAddedMessag
 				Id:      c.currentOutputID,
 				Status:  "in_progress",
 				Role:    c.currentRole(),
-				Content: &responses2.OutputContent{},
+				Content: &responses2.ChunkOutputItemContent{},
 			},
 		},
 	}
@@ -1091,7 +1091,7 @@ func (c *ResponseChunkToNativeResponseChunkConverter) buildContentPartAddedText(
 			ItemId:         c.currentOutputID,
 			OutputIndex:    c.outputIndex,
 			ContentIndex:   c.contentIndex,
-			Part:           responses2.OutputContentUnion{OfOutputText: &responses2.OutputTextContent{Text: ""}},
+			Part:           responses2.ChunkOutputItemContentUnion{OfOutputText: &responses2.OutputTextContent{Text: ""}},
 		},
 	}
 }
@@ -1203,7 +1203,7 @@ func (c *ResponseChunkToNativeResponseChunkConverter) buildContentPartDoneText(t
 			ItemId:         c.currentOutputID,
 			OutputIndex:    c.outputIndex,
 			ContentIndex:   c.contentIndex,
-			Part:           responses2.OutputContentUnion{OfOutputText: &responses2.OutputTextContent{Text: text}},
+			Part:           responses2.ChunkOutputItemContentUnion{OfOutputText: &responses2.OutputTextContent{Text: text}},
 		},
 	}
 }
@@ -1219,7 +1219,7 @@ func (c *ResponseChunkToNativeResponseChunkConverter) buildOutputItemDoneMessage
 				Id:      c.currentOutputID,
 				Status:  "completed",
 				Role:    role,
-				Content: &responses2.OutputContent{{OfOutputText: &responses2.OutputTextContent{Text: text}}},
+				Content: &responses2.ChunkOutputItemContent{{OfOutputText: &responses2.OutputTextContent{Text: text}}},
 			},
 		},
 	}

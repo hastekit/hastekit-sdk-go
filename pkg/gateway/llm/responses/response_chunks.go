@@ -36,6 +36,9 @@ type ResponseChunk struct {
 	OfReasoningSummaryTextDelta *ChunkReasoningSummaryText[constants.ChunkTypeReasoningSummaryTextDelta] `json:",omitempty"`
 	OfReasoningSummaryTextDone  *ChunkReasoningSummaryText[constants.ChunkTypeReasoningSummaryTextDone]  `json:",omitempty"`
 
+	OfReasoningTextDelta *ChunkReasoningText[constants.ChunkTypeReasoningTextDelta]    `json:",omitempty"` // Only for OSS models
+	OfReasoningTextDone  *ChunkReasoningTextDone[constants.ChunkTypeReasoningTextDone] `json:",omitempty"` // Only for OSS models
+
 	// For output item of type "image_generation_call"
 	OfImageGenerationCallInProgress   *ChunkImageGenerationCall[constants.ChunkTypeImageGenerationCallInProgress]   `json:",omitempty"`
 	OfImageGenerationCallGenerating   *ChunkImageGenerationCall[constants.ChunkTypeImageGenerationCallGenerating]   `json:",omitempty"`
@@ -161,6 +164,18 @@ func (u *ResponseChunk) UnmarshalJSON(data []byte) error {
 	var fnCallDone *ChunkFunctionCall[constants.ChunkTypeFunctionCallArgumentsDone]
 	if err := sonic.Unmarshal(data, &fnCallDone); err == nil {
 		u.OfFunctionCallArgumentsDone = fnCallDone
+		return nil
+	}
+
+	var reasoningTextDelta *ChunkReasoningText[constants.ChunkTypeReasoningTextDelta]
+	if err := sonic.Unmarshal(data, &reasoningTextDelta); err == nil {
+		u.OfReasoningTextDelta = reasoningTextDelta
+		return nil
+	}
+
+	var reasoningTextDone *ChunkReasoningTextDone[constants.ChunkTypeReasoningTextDone]
+	if err := sonic.Unmarshal(data, &reasoningTextDone); err == nil {
+		u.OfReasoningTextDone = reasoningTextDone
 		return nil
 	}
 
@@ -318,6 +333,14 @@ func (u *ResponseChunk) MarshalJSON() ([]byte, error) {
 		return sonic.Marshal(u.OfReasoningSummaryTextDelta)
 	}
 
+	if u.OfReasoningTextDelta != nil {
+		return sonic.Marshal(u.OfReasoningTextDelta)
+	}
+
+	if u.OfReasoningTextDone != nil {
+		return sonic.Marshal(u.OfReasoningTextDone)
+	}
+
 	if u.OfImageGenerationCallInProgress != nil {
 		return sonic.Marshal(u.OfImageGenerationCallInProgress)
 	}
@@ -455,6 +478,14 @@ func (u *ResponseChunk) ChunkType() string {
 		return u.OfReasoningSummaryTextDone.Type.Value()
 	}
 
+	if u.OfReasoningTextDelta != nil {
+		return u.OfReasoningTextDelta.Type.Value()
+	}
+
+	if u.OfReasoningTextDone != nil {
+		return u.OfReasoningTextDone.Type.Value()
+	}
+
 	if u.OfImageGenerationCallInProgress != nil {
 		return u.OfImageGenerationCallInProgress.Type.Value()
 	}
@@ -565,15 +596,15 @@ type ChunkOutputItem[T any] struct {
 }
 
 type ChunkOutputItemData struct {
-	Type string `json:"type"` // "function_call" , "message", "reasoning", "image_generation_call", "web_search_call", "code_interpreter_call"
+	Type string `json:"type"` // "function_call", "message", "reasoning", "image_generation_call", "web_search_call", "code_interpreter_call"
 
 	// Common fields
 	Id     string `json:"id"`
 	Status string `json:"status,omitempty"`
 
-	// For output_item of type "message"
-	Content *OutputContent `json:"content,omitempty"`
-	Role    constants.Role `json:"role,omitempty"`
+	// For output_item of type "message" and "reasoning" (oss)
+	Content *ChunkOutputItemContent `json:"content,omitempty"`
+	Role    constants.Role          `json:"role,omitempty"`
 
 	// For output_item of type "function_call"
 	CallID           *string `json:"call_id,omitempty"`
@@ -601,13 +632,48 @@ type ChunkOutputItemData struct {
 	Outputs     []CodeInterpreterCallOutputParam `json:"outputs,omitempty"`
 }
 
+type ChunkOutputItemContent []ChunkOutputItemContentUnion
+
+type ChunkOutputItemContentUnion struct {
+	OfOutputText    *OutputTextContent    `json:",omitempty,inline"`
+	OfReasoningText *ReasoningTextContent `json:",omitempty,inline"`
+}
+
+func (u *ChunkOutputItemContentUnion) UnmarshalJSON(data []byte) error {
+	var textContext OutputTextContent
+	if err := sonic.Unmarshal(data, &textContext); err == nil {
+		u.OfOutputText = &textContext
+		return nil
+	}
+
+	var reasoningTextContent ReasoningTextContent
+	if err := sonic.Unmarshal(data, &reasoningTextContent); err == nil {
+		u.OfReasoningText = &reasoningTextContent
+		return nil
+	}
+
+	return errors.New("invalid input content union")
+}
+
+func (u *ChunkOutputItemContentUnion) MarshalJSON() ([]byte, error) {
+	if u.OfOutputText != nil {
+		return sonic.Marshal(u.OfOutputText)
+	}
+
+	if u.OfReasoningText != nil {
+		return sonic.Marshal(u.OfReasoningText)
+	}
+
+	return nil, nil
+}
+
 type ChunkContentPart[T any] struct {
-	Type           T                  `json:"type"`
-	SequenceNumber int                `json:"sequence_number"`
-	ItemId         string             `json:"item_id"`
-	OutputIndex    int                `json:"output_index"`
-	ContentIndex   int                `json:"content_index"`
-	Part           OutputContentUnion `json:"part"`
+	Type           T                           `json:"type"`
+	SequenceNumber int                         `json:"sequence_number"`
+	ItemId         string                      `json:"item_id"`
+	OutputIndex    int                         `json:"output_index"`
+	ContentIndex   int                         `json:"content_index"`
+	Part           ChunkOutputItemContentUnion `json:"part"`
 }
 
 type ChunkOutputText[T any] struct {
@@ -626,6 +692,24 @@ type ChunkOutputText[T any] struct {
 	// Only on response.output_text.annotation.added
 	Annotation      *Annotation `json:"annotation,omitempty"`
 	AnnotationIndex int         `json:"annotation_index"`
+}
+
+type ChunkReasoningText[T any] struct {
+	Type           T      `json:"type"`
+	SequenceNumber int    `json:"sequence_number"`
+	ItemId         string `json:"item_id"`
+	OutputIndex    int    `json:"output_index"`
+	ContentIndex   int    `json:"content_index"`
+	Delta          string `json:"delta"`
+}
+
+type ChunkReasoningTextDone[T any] struct {
+	Type           T      `json:"type"`
+	OutputIndex    int    `json:"output_index"`
+	ContentIndex   int    `json:"content_index"`
+	Text           string `json:"text"`
+	SequenceNumber int    `json:"sequence_number"`
+	ItemId         string `json:"item_id"`
 }
 
 type ChunkFunctionCall[T any] struct {

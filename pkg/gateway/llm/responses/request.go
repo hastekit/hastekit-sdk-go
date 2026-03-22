@@ -456,6 +456,11 @@ type OutputTextContent struct {
 	Annotations []Annotation                    `json:"annotations"`
 }
 
+type ReasoningTextContent struct {
+	Type constants.ContentTypeReasoningText `json:"type"`
+	Text string                             `json:"text"`
+}
+
 type InputImageContent struct {
 	Type     constants.ContentTypeInputImage `json:"type"`
 	ImageURL *string                         `json:"image_url,omitempty"` // A fully qualified URL or base64 encoded image in a data URL.

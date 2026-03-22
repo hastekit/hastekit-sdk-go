@@ -150,6 +150,10 @@ func (m *ContentTypeOutputText) UnmarshalJSON(buf []byte) error {
 	return unmarshalConstantString(m, buf)
 }
 
+type ContentTypeReasoningText string
+
+func (m *ContentTypeReasoningText) Value() string { return "reasoning_text" }
+
 type ContentTypeInputImage string
 
 func (m *ContentTypeInputImage) Value() string                { return "input_image" }
@@ -326,7 +330,7 @@ func (m *ChunkTypeFunctionCallArgumentsDone) UnmarshalJSON(buf []byte) error {
 	return unmarshalConstantString(m, buf)
 }
 
-// For output item of type "reasoning"
+// For output item of type "reasoning summary"
 
 type ChunkTypeReasoningSummaryPartAdded string
 
@@ -373,6 +377,32 @@ func (m *ChunkTypeReasoningSummaryTextDone) MarshalJSON() ([]byte, error) {
 	return sonic.Marshal(m.Value())
 }
 func (m *ChunkTypeReasoningSummaryTextDone) UnmarshalJSON(buf []byte) error {
+	return unmarshalConstantString(m, buf)
+}
+
+// For output item of type "reasoning text" (applicable for gpt oss models)
+
+type ChunkTypeReasoningTextDelta string
+
+func (m *ChunkTypeReasoningTextDelta) Value() string {
+	return "response.reasoning_text.delta"
+}
+func (m *ChunkTypeReasoningTextDelta) MarshalJSON() ([]byte, error) {
+	return sonic.Marshal(m.Value())
+}
+func (m *ChunkTypeReasoningTextDelta) UnmarshalJSON(buf []byte) error {
+	return unmarshalConstantString(m, buf)
+}
+
+type ChunkTypeReasoningTextDone string
+
+func (m *ChunkTypeReasoningTextDone) Value() string {
+	return "response.reasoning_text.done"
+}
+func (m *ChunkTypeReasoningTextDone) MarshalJSON() ([]byte, error) {
+	return sonic.Marshal(m.Value())
+}
+func (m *ChunkTypeReasoningTextDone) UnmarshalJSON(buf []byte) error {
 	return unmarshalConstantString(m, buf)
 }
 
