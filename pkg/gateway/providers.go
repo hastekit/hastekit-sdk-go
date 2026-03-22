@@ -63,6 +63,13 @@ func (g *LLMGateway) getProvider(ctx context.Context, providerName llm.ProviderN
 			Headers: customHeaders,
 		}), nil
 
+	case llm.ProviderNameOpenRouter:
+		return openai.NewClient(&openai.ClientOptions{
+			BaseURL: baseUrl,
+			ApiKey:  key,
+			Headers: customHeaders,
+		}), nil
+
 	case llm.ProviderNameElevenLabs:
 		return elevenlabs.NewClient(&elevenlabs.ClientOptions{
 			BaseURL: baseUrl,
