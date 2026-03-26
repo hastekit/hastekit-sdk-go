@@ -114,6 +114,9 @@ func (t *BashTool) Execute(ctx context.Context, params *agents.ToolCall) (*agent
 	}
 
 	cli, workdir, err := t.sandboxHelper.getClient(ctx, params)
+	if err != nil {
+		return nil, err
+	}
 
 	// Run bash command
 	res, err := cli.RunBashCommand(ctx, &sandbox.BashExecRequest{
@@ -303,7 +306,7 @@ func NewWriteFileTool(svc sandbox.Manager, image string, env map[string]string) 
 		BaseTool: &agents.BaseTool{
 			ToolUnion: responses.ToolUnion{
 				OfFunction: &responses.FunctionTool{
-					Name:        "delete_file",
+					Name:        "write_file",
 					Description: utils.Ptr("Write content to file at the given path"),
 					Parameters: map[string]any{
 						"type": "object",
