@@ -1,16 +1,46 @@
-// Package codesplitters provides AST-aware code chunking that implements the
-// textsplitters.TextSplitter interface. Language-specific parsing is handled by
-// LanguageParser implementations (e.g. GoParser), making it easy to add support
-// for new languages.
+// Package codesplitters provides AST-aware code chunking for source files.
+// Language-specific parsing is handled by LanguageParser implementations
+// (e.g. goparser.GoParser), making it easy to add support for new languages.
 package codesplitters
 
 import (
 	"context"
 	"fmt"
 	"strings"
-
-	"github.com/hastekit/hastekit-sdk-go/pkg/knowledge/textsplitters"
+	"unicode/utf8"
 )
+
+// TextSplitter splits text into chunks.
+type TextSplitter interface {
+	Split(ctx context.Context, text string) ([]string, error)
+}
+
+// TokenCounter returns the number of tokens in text. Implementations can use
+// model-specific tokenizers (e.g. tiktoken) or approximations.
+type TokenCounter interface {
+	CountTokens(text string) (int, error)
+}
+
+// EstimatorCounter estimates token count from character count (~4 chars per token).
+type EstimatorCounter struct {
+	CharsPerToken int
+}
+
+// DefaultEstimatorCounter uses 4 characters per token (typical for English).
+var DefaultEstimatorCounter = &EstimatorCounter{CharsPerToken: 4}
+
+// CountTokens returns ceil(rune_count / CharsPerToken).
+func (e *EstimatorCounter) CountTokens(text string) (int, error) {
+	if e.CharsPerToken <= 0 {
+		return 0, fmt.Errorf("chars per token must be positive, got %d", e.CharsPerToken)
+	}
+	n := utf8.RuneCountInString(text)
+	tokens := (n + e.CharsPerToken - 1) / e.CharsPerToken
+	if tokens < 1 && n > 0 {
+		tokens = 1
+	}
+	return tokens, nil
+}
 
 // LanguageParser extracts structured code chunks from source code for a
 // specific programming language. Implementations use language-specific parsers
@@ -83,20 +113,20 @@ func DefaultOptions() Options {
 type CodeSplitter struct {
 	parser  LanguageParser
 	opts    Options
-	counter textsplitters.TokenCounter
+	counter TokenCounter
 }
 
 // Compile-time check that CodeSplitter implements TextSplitter.
-var _ textsplitters.TextSplitter = (*CodeSplitter)(nil)
+var _ TextSplitter = (*CodeSplitter)(nil)
 
 // NewCodeSplitter creates a CodeSplitter for the given language parser.
 // counter is used for token estimation; if nil, the default estimator (4 chars/token) is used.
-func NewCodeSplitter(parser LanguageParser, opts Options, counter textsplitters.TokenCounter) (*CodeSplitter, error) {
+func NewCodeSplitter(parser LanguageParser, opts Options, counter TokenCounter) (*CodeSplitter, error) {
 	if parser == nil {
 		return nil, fmt.Errorf("language parser is required")
 	}
 	if counter == nil {
-		counter = textsplitters.DefaultEstimatorCounter
+		counter = DefaultEstimatorCounter
 	}
 	if opts.MaxTokens <= 0 {
 		opts.MaxTokens = 512
@@ -282,7 +312,7 @@ func buildHeader(chunk CodeChunk) string {
 }
 
 // getOverlapLines returns the last lines that fit within the overlap token budget.
-func getOverlapLines(lines []string, overlapTokens int, counter textsplitters.TokenCounter) []string {
+func getOverlapLines(lines []string, overlapTokens int, counter TokenCounter) []string {
 	if overlapTokens <= 0 || len(lines) == 0 {
 		return nil
 	}
