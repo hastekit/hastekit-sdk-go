@@ -40,7 +40,10 @@ func (t *sandboxHelper) getClient(ctx context.Context, params *agents.ToolCall) 
 	}
 
 	// Restore the working directory from state.
-	workdir := params.State[t.getSandboxCwdStateKey()]
+	workdir, ok := params.State[t.getSandboxCwdStateKey()]
+	if !ok || workdir == "" {
+		workdir = "/workspace"
+	}
 
 	// Create a sandbox daemon client
 	cli := sandbox.NewDaemonClient(sb)
