@@ -36,14 +36,12 @@ func NewAgentTool(t *responses.ToolUnion, agent *agents.Agent, contextMode SubAg
 func (t *AgentTool) Execute(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
 	namespace := params.Namespace + "/" + params.Name
 
-	var threadId string
+	threadId := uuid.NewString()
 	if t.contextMode == SubAgentContextModeIsolated {
 		agentToolContextId, exists := params.SubAgentContext[t.agent.Name]
 		if exists {
 			threadId = agentToolContextId
 		}
-	} else {
-		threadId = uuid.NewString()
 	}
 
 	result, err := t.agent.Execute(ctx, &agents.AgentInput{
