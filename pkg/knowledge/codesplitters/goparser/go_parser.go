@@ -1,10 +1,16 @@
-package codesplitters
+// Package goparser provides a tree-sitter-based Go language parser that
+// implements the codesplitters.LanguageParser interface.
+//
+// This package is separated from the core codesplitters package because it
+// depends on tree-sitter C bindings. Import it only when you need Go parsing.
+package goparser
 
 import (
 	"fmt"
 	"strings"
 	"unicode"
 
+	"github.com/hastekit/hastekit-sdk-go/pkg/knowledge/codesplitters"
 	treesitter "github.com/tree-sitter/go-tree-sitter"
 	treesittergo "github.com/tree-sitter/tree-sitter-go/bindings/go"
 )
@@ -20,7 +26,7 @@ const goQuery = `
 type GoParser struct{}
 
 // Compile-time check.
-var _ LanguageParser = (*GoParser)(nil)
+var _ codesplitters.LanguageParser = (*GoParser)(nil)
 
 // NewGoParser creates a new Go language parser.
 func NewGoParser() *GoParser {
@@ -32,7 +38,7 @@ func (p *GoParser) Extensions() []string { return []string{".go"} }
 
 // Parse parses Go source code and returns code chunks for each top-level
 // function, method, and type declaration.
-func (p *GoParser) Parse(source []byte) ([]CodeChunk, error) {
+func (p *GoParser) Parse(source []byte) ([]codesplitters.CodeChunk, error) {
 	parser := treesitter.NewParser()
 	defer parser.Close()
 
@@ -62,7 +68,7 @@ func (p *GoParser) Parse(source []byte) ([]CodeChunk, error) {
 	cursor := treesitter.NewQueryCursor()
 	defer cursor.Close()
 
-	var chunks []CodeChunk
+	var chunks []codesplitters.CodeChunk
 	matches := cursor.Matches(query, root, source)
 	for match := matches.Next(); match != nil; match = matches.Next() {
 		declNode := nodeForCapture(match, query, "decl")
@@ -74,7 +80,7 @@ func (p *GoParser) Parse(source []byte) ([]CodeChunk, error) {
 		name := nameNode.Utf8Text(source)
 		kind := normalizeGoKind(declNode.Kind())
 
-		chunk := CodeChunk{
+		chunk := codesplitters.CodeChunk{
 			Kind:       kind,
 			Name:       name,
 			Package:    pkgName,
