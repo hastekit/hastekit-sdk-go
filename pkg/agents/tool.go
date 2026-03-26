@@ -8,17 +8,17 @@ import (
 
 type ToolCall struct {
 	*responses.FunctionCallMessage
-	AgentName       string            `json:"agent_name"`
-	AgentVersion    string            `json:"agent_version"`
-	Namespace       string            `json:"namespace"`
-	SessionID       string            `json:"session_id"`
-	RunContext      map[string]any    `json:"run_context"`
-	SubAgentContext map[string]string `json:"sub_agent_context,omitempty"`
+	AgentName    string            `json:"agent_name"`
+	AgentVersion string            `json:"agent_version"`
+	Namespace    string            `json:"namespace"`
+	SessionID    string            `json:"session_id"`
+	RunContext   map[string]any    `json:"run_context"`
+	State        map[string]string `json:"state,omitempty"`
 }
 
 type ToolCallResponse struct {
 	*responses.FunctionCallOutputMessage
-	SubAgentContext map[string]string `json:"sub_agent_context,omitempty"`
+	StateUpdates map[string]string `json:"state_updates,omitempty"`
 }
 
 type Tool interface {

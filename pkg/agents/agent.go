@@ -366,7 +366,7 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chun
 			var executableToolCalls []ExecutableToolCall
 
 			toolResults := make([]*responses.FunctionCallOutputMessage, len(run.RunState.PendingToolCalls))
-			subAgentContexts := make([]map[string]string, len(run.RunState.PendingToolCalls))
+			stateUpdates := make([]map[string]string, len(run.RunState.PendingToolCalls))
 
 			for i, toolCall := range run.RunState.PendingToolCalls {
 				if slices.Contains(rejectedToolCallIds, toolCall.CallID) {
@@ -434,7 +434,7 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chun
 							Namespace:           in.Namespace,
 							SessionID:           in.SessionID,
 							RunContext:          in.RunContext,
-							SubAgentContext:     run.SubAgentContext,
+							State:               run.State,
 						},
 					})
 				}
@@ -462,7 +462,7 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chun
 						}
 					} else {
 						toolResults[pe.Index] = result.Response.FunctionCallOutputMessage
-						subAgentContexts[pe.Index] = result.Response.SubAgentContext
+						stateUpdates[pe.Index] = result.Response.StateUpdates
 					}
 				}
 			}
@@ -474,8 +474,8 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chun
 				}
 
 				// Merge sub-agent context if present
-				if subAgentContexts[i] != nil {
-					maps.Copy(run.SubAgentContext, subAgentContexts[i])
+				if stateUpdates[i] != nil {
+					maps.Copy(run.State, stateUpdates[i])
 				}
 
 				// TODO: Make this a durable step to avoid resending

@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents"
@@ -38,9 +39,9 @@ func (t *AgentTool) Execute(ctx context.Context, params *agents.ToolCall) (*agen
 
 	threadId := uuid.NewString()
 	if t.contextMode == SubAgentContextModeIsolated {
-		agentToolContextId, exists := params.SubAgentContext[t.agent.Name]
+		subAgentThreadId, exists := params.State[t.getSubAgentThreadIdStateKey()]
 		if exists {
-			threadId = agentToolContextId
+			threadId = subAgentThreadId
 		}
 	}
 
@@ -94,8 +95,12 @@ func (t *AgentTool) Execute(ctx context.Context, params *agents.ToolCall) (*agen
 				OfString: utils.Ptr(data),
 			},
 		},
-		SubAgentContext: map[string]string{
-			t.agent.Name: threadId,
+		StateUpdates: map[string]string{
+			t.getSubAgentThreadIdStateKey(): threadId,
 		},
 	}, nil
+}
+
+func (t *AgentTool) getSubAgentThreadIdStateKey() string {
+	return fmt.Sprintf("sub_agent_thread_id/%s", t.agent.Name)
 }

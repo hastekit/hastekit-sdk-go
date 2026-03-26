@@ -86,8 +86,12 @@ type ConversationRunManager struct {
 	newMessages     []responses.InputMessageUnion
 	usage           *responses.Usage
 	lastMessageMeta map[string]any
-	SubAgentContext map[string]string
-	RunState        *agentstate.RunState
+
+	// State is used to store any key-value pairs that need to be persisted along with the run
+	State map[string]string
+
+	// RunState is used to store the state of the run, such as the current step and the usage of the run
+	RunState *agentstate.RunState
 
 	summarizer HistorySummarizer
 	summaries  *SummaryResult
@@ -98,7 +102,7 @@ func NewRun(ctx context.Context, cm *CommonConversationManager, namespace string
 		ConversationPersistenceAdapter: cm.ConversationPersistenceAdapter,
 		summarizer:                     cm.Summarizer,
 		msgIdToRunId:                   make(map[string]string),
-		SubAgentContext:                make(map[string]string),
+		State:                          make(map[string]string),
 	}
 
 	// Load messages
@@ -254,7 +258,7 @@ func (cm *ConversationRunManager) SaveMessages(ctx context.Context, meta map[str
 		meta = map[string]any{}
 	}
 
-	meta["subAgentContext"] = cm.SubAgentContext
+	meta["state"] = cm.State
 
 	if cm.summaries != nil {
 		sum := Summary{
@@ -312,7 +316,7 @@ func (cm *ConversationRunManager) TrackUsage(usage *responses.Usage) {
 }
 
 func (cm *ConversationRunManager) loadSubAgentContext(ctx context.Context) {
-	data := cm.lastMessageMeta["subAgentContext"]
+	data := cm.lastMessageMeta["state"]
 
 	if data == nil {
 		return
@@ -320,12 +324,12 @@ func (cm *ConversationRunManager) loadSubAgentContext(ctx context.Context) {
 
 	buf, err := sonic.Marshal(data)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to marshal sub agent context", "error", err)
+		slog.ErrorContext(ctx, "failed to marshal state", "error", err)
 		return
 	}
 
-	if err = sonic.Unmarshal(buf, &cm.SubAgentContext); err != nil {
-		slog.ErrorContext(ctx, "failed to unmarshal sub agent context", "error", err)
+	if err = sonic.Unmarshal(buf, &cm.State); err != nil {
+		slog.ErrorContext(ctx, "failed to unmarshal state", "error", err)
 		return
 	}
 }

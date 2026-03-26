@@ -53,6 +53,7 @@ type BashExecResponse struct {
 	Stderr        string `json:"stderr"`
 	ExitCode      int    `json:"exit_code"`
 	DurationMilli int64  `json:"duration_ms"`
+	Cwd           string `json:"cwd,omitempty"` // current working directory after command execution
 }
 
 // FileContent is the response from daemon file read/write.
