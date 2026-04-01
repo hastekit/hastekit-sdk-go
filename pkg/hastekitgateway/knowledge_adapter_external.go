@@ -19,12 +19,12 @@ type ExternalKnowledgePersistence struct {
 	httpClient *http.Client
 }
 
-func NewExternalKnowledgePersistence(endpoint string, projectId uuid.UUID, name string) *ExternalKnowledgePersistence {
+func NewExternalKnowledgePersistence(endpoint string, projectId uuid.UUID, name string, httpClient *http.Client) *ExternalKnowledgePersistence {
 	return &ExternalKnowledgePersistence{
 		endpoint:   endpoint,
 		projectId:  projectId,
 		name:       name,
-		httpClient: &http.Client{},
+		httpClient: httpClient,
 	}
 }
 
