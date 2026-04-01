@@ -31,6 +31,7 @@ var (
 	ProviderNameXAI        ProviderName = "xAI"
 	ProviderNameOllama     ProviderName = "Ollama"
 	ProviderNameElevenLabs ProviderName = "ElevenLabs"
+	ProviderNameBedrock    ProviderName = "Bedrock"
 )
 
 func GetAllProviderNames() []ProviderName {
@@ -41,6 +42,7 @@ func GetAllProviderNames() []ProviderName {
 		ProviderNameXAI,
 		ProviderNameOllama,
 		ProviderNameElevenLabs,
+		ProviderNameBedrock,
 	}
 }
 
