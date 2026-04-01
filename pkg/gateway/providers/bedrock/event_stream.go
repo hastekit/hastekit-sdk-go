@@ -1,13 +1,10 @@
 package bedrock
 
 import (
-	"encoding/base64"
 	"encoding/binary"
 	"fmt"
 	"hash/crc32"
 	"io"
-
-	"github.com/bytedance/sonic"
 )
 
 // AWS Event Stream binary message format:
@@ -23,12 +20,6 @@ import (
 type eventStreamMessage struct {
 	Headers map[string]string
 	Payload []byte
-}
-
-// bedrockChunkEnvelope is the JSON wrapper Bedrock uses around each Anthropic chunk.
-// The "bytes" field contains the base64-encoded Anthropic JSON event.
-type bedrockChunkEnvelope struct {
-	Bytes string `json:"bytes"`
 }
 
 // decodeEventStreamMessage reads a single AWS event stream message from the reader.
@@ -147,24 +138,4 @@ func decodeEventStreamMessage(r io.Reader) (*eventStreamMessage, error) {
 		Headers: headers,
 		Payload: payload,
 	}, nil
-}
-
-// decodeBedrockChunkPayload extracts the Anthropic JSON chunk from a Bedrock event stream payload.
-// Bedrock wraps each chunk in {"bytes":"<base64-encoded-anthropic-json>"}.
-func decodeBedrockChunkPayload(payload []byte) ([]byte, error) {
-	var envelope bedrockChunkEnvelope
-	if err := sonic.Unmarshal(payload, &envelope); err != nil {
-		return nil, fmt.Errorf("unmarshaling bedrock envelope: %w", err)
-	}
-
-	if envelope.Bytes == "" {
-		return nil, fmt.Errorf("empty bytes field in bedrock envelope")
-	}
-
-	decoded, err := base64.StdEncoding.DecodeString(envelope.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("base64 decoding bedrock chunk: %w", err)
-	}
-
-	return decoded, nil
 }

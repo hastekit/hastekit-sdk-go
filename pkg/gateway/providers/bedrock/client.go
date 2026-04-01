@@ -8,12 +8,11 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"strings"
 
 	"github.com/bytedance/sonic"
 	responses2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
-	anthropic_responses "github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/anthropic/anthropic_responses"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/base"
+	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/bedrock/bedrock_responses"
 	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
 )
 
@@ -36,35 +35,36 @@ func NewClient(opts *ClientOptions) *Client {
 		opts.transport = http.DefaultClient
 	}
 
+	if opts.BaseURL == "" {
+		opts.BaseURL = "https://bedrock-runtime.us-east-1.amazonaws.com"
+	}
+
 	return &Client{
 		opts: opts,
 	}
 }
 
-// buildInvokeURL constructs the Bedrock invoke URL for the given model.
-// Format: {BaseURL}/model/{modelId}/invoke
-func buildInvokeURL(baseURL, model string) string {
-	return baseURL + "/model/" + url.PathEscape(model) + "/invoke"
+// buildConverseURL constructs the Bedrock Converse URL for the given model.
+// Format: {BaseURL}/model/{modelId}/converse
+func buildConverseURL(baseURL, model string) string {
+	return baseURL + "/model/" + url.PathEscape(model) + "/converse"
 }
 
-// buildStreamURL constructs the Bedrock streaming invoke URL for the given model.
-// Format: {BaseURL}/model/{modelId}/invoke-with-response-stream
-func buildStreamURL(baseURL, model string) string {
-	return baseURL + "/model/" + url.PathEscape(model) + "/invoke-with-response-stream"
+// buildConverseStreamURL constructs the Bedrock ConverseStream URL for the given model.
+// Format: {BaseURL}/model/{modelId}/converse-stream
+func buildConverseStreamURL(baseURL, model string) string {
+	return baseURL + "/model/" + url.PathEscape(model) + "/converse-stream"
 }
 
 func (c *Client) NewResponses(ctx context.Context, inp *responses2.Request) (*responses2.Response, error) {
-	anthropicRequest := anthropic_responses.NativeRequestToRequest(inp)
+	converseReq := bedrock_responses.NativeRequestToConverseRequest(inp)
 
-	// Bedrock does not use streaming for non-streaming requests
-	anthropicRequest.Stream = utils.Ptr(false)
-
-	payload, err := sonic.Marshal(anthropicRequest)
+	payload, err := sonic.Marshal(converseReq)
 	if err != nil {
 		return nil, err
 	}
 
-	reqURL := buildInvokeURL(c.opts.BaseURL, anthropicRequest.Model)
+	reqURL := buildConverseURL(c.opts.BaseURL, inp.Model)
 	req, err := http.NewRequest(http.MethodPost, reqURL, bytes.NewBuffer(payload))
 	if err != nil {
 		return nil, err
@@ -72,6 +72,7 @@ func (c *Client) NewResponses(ctx context.Context, inp *responses2.Request) (*re
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.opts.ApiKey)
 
 	// Apply custom headers (used for AWS auth headers like Authorization, x-amz-date, etc.)
 	for k, v := range c.opts.Headers {
@@ -86,34 +87,27 @@ func (c *Client) NewResponses(ctx context.Context, inp *responses2.Request) (*re
 
 	if res.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(res.Body)
-		return nil, errors.New("bedrock invoke failed (" + res.Status + "): " + string(body))
+		return nil, errors.New("bedrock converse failed (" + res.Status + "): " + string(body))
 	}
 
-	var anthropicResponse *anthropic_responses.Response
-	err = utils.DecodeJSON(res.Body, &anthropicResponse)
+	var converseResponse bedrock_responses.ConverseResponse
+	err = utils.DecodeJSON(res.Body, &converseResponse)
 	if err != nil {
 		return nil, err
 	}
 
-	if anthropicResponse.Error != nil {
-		return nil, errors.New(anthropicResponse.Error.Message)
-	}
-
-	return anthropicResponse.ToNativeResponse(), nil
+	return converseResponse.ToNativeResponse(inp.Model), nil
 }
 
 func (c *Client) NewStreamingResponses(ctx context.Context, inp *responses2.Request) (chan *responses2.ResponseChunk, error) {
-	anthropicRequest := anthropic_responses.NativeRequestToRequest(inp)
+	converseReq := bedrock_responses.NativeRequestToConverseRequest(inp)
 
-	// Streaming must be enabled
-	anthropicRequest.Stream = utils.Ptr(true)
-
-	payload, err := sonic.Marshal(anthropicRequest)
+	payload, err := sonic.Marshal(converseReq)
 	if err != nil {
 		return nil, err
 	}
 
-	reqURL := buildStreamURL(c.opts.BaseURL, anthropicRequest.Model)
+	reqURL := buildConverseStreamURL(c.opts.BaseURL, inp.Model)
 	req, err := http.NewRequest(http.MethodPost, reqURL, bytes.NewBuffer(payload))
 	if err != nil {
 		return nil, err
@@ -121,6 +115,7 @@ func (c *Client) NewStreamingResponses(ctx context.Context, inp *responses2.Requ
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/vnd.amazon.eventstream")
+	req.Header.Set("Authorization", "Bearer "+c.opts.ApiKey)
 
 	// Apply custom headers (used for AWS auth headers)
 	for k, v := range c.opts.Headers {
@@ -135,7 +130,7 @@ func (c *Client) NewStreamingResponses(ctx context.Context, inp *responses2.Requ
 	if res.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(res.Body)
 		res.Body.Close()
-		return nil, errors.New("bedrock streaming invoke failed (" + res.Status + "): " + string(body))
+		return nil, errors.New("bedrock converse-stream failed (" + res.Status + "): " + string(body))
 	}
 
 	out := make(chan *responses2.ResponseChunk)
@@ -144,7 +139,7 @@ func (c *Client) NewStreamingResponses(ctx context.Context, inp *responses2.Requ
 		defer res.Body.Close()
 		defer close(out)
 
-		converter := anthropic_responses.ResponseChunkToNativeResponseChunkConverter{}
+		converter := bedrock_responses.NewConverseStreamToNativeConverter(inp.Model)
 
 		for {
 			msg, err := decodeEventStreamMessage(res.Body)
@@ -166,45 +161,24 @@ func (c *Client) NewStreamingResponses(ctx context.Context, inp *responses2.Requ
 				return
 			}
 
-			// Only process "event" messages with "chunk" event type
+			// Only process "event" messages
 			if messageType != "event" {
 				continue
 			}
 
-			// Decode the Bedrock envelope: {"bytes":"<base64-encoded-anthropic-chunk>"}
-			anthropicJSON, err := decodeBedrockChunkPayload(msg.Payload)
+			// Use the event-type header to unmarshal payload into the correct struct
+			eventType := msg.Headers[":event-type"]
+			event, err := bedrock_responses.UnmarshalEventPayload(eventType, msg.Payload)
 			if err != nil {
-				slog.WarnContext(ctx, "error decoding bedrock chunk payload", slog.Any("error", err))
+				slog.WarnContext(ctx, "error decoding converse stream event",
+					slog.String("event-type", eventType),
+					slog.Any("error", err),
+				)
 				continue
 			}
 
-			// The decoded bytes contain the Anthropic SSE data.
-			// It may have the "data:" prefix or just be raw JSON.
-			chunkData := string(anthropicJSON)
-
-			// Handle SSE-style events: may contain "event:" and "data:" lines
-			lines := strings.Split(chunkData, "\n")
-			for _, line := range lines {
-				line = strings.TrimRight(line, "\r")
-				if strings.HasPrefix(line, "data:") {
-					line = strings.TrimPrefix(line, "data:")
-					line = strings.TrimSpace(line)
-				} else if line == "" || strings.HasPrefix(line, "event:") {
-					continue
-				}
-
-				anthropicChunk := &anthropic_responses.ResponseChunk{}
-				if err := sonic.Unmarshal([]byte(line), anthropicChunk); err != nil {
-					slog.WarnContext(ctx, "unable to unmarshal bedrock anthropic response chunk",
-						slog.String("data", line),
-						slog.Any("error", err),
-					)
-					continue
-				}
-
-				for _, nativeChunk := range converter.ResponseChunkToNativeResponseChunk(anthropicChunk) {
-					out <- nativeChunk
-				}
+			for _, nativeChunk := range converter.ConvertEvent(event) {
+				out <- nativeChunk
 			}
 		}
 	}()
