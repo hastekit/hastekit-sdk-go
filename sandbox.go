@@ -11,7 +11,7 @@ func (c *SDK) NewSandboxManager() sandbox.Manager {
 		return nil
 	}
 
-	return hastekitgateway.NewSandboxClient(c.endpoint)
+	return hastekitgateway.NewSandboxClient(c.endpoint, c.httpClient)
 }
 
 func (c *SDK) NewKnowledgeManager(name string) tools.KnowledgePersistence {
@@ -19,5 +19,5 @@ func (c *SDK) NewKnowledgeManager(name string) tools.KnowledgePersistence {
 		return nil
 	}
 
-	return hastekitgateway.NewExternalKnowledgePersistence(c.endpoint, c.projectId, name)
+	return hastekitgateway.NewExternalKnowledgePersistence(c.endpoint, c.projectId, name, c.httpClient)
 }

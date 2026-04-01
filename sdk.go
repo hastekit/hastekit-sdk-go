@@ -23,6 +23,7 @@ type SDK struct {
 	*gateway.LLMClient
 
 	endpoint       string
+	orgId          uuid.UUID
 	projectId      uuid.UUID
 	virtualKey     string
 	directMode     bool
@@ -30,6 +31,7 @@ type SDK struct {
 	restateConfig  RestateConfig
 	temporalConfig TemporalConfig
 	redisConfig    RedisConfig
+	httpClient     *http.Client
 
 	agents               map[string]*agents.Agent
 	restateAgentConfigs  map[string]*agents.AgentOptions
@@ -45,6 +47,9 @@ type ServerConfig struct {
 
 	// For LLM calls
 	VirtualKey string
+
+	// Org ID
+	OrgID string
 
 	// For conversations
 	ProjectName string
@@ -73,6 +78,16 @@ type ClientOptions struct {
 	RedisConfig    RedisConfig
 }
 
+type authTransport struct {
+	underlying http.RoundTripper
+	token      string
+}
+
+func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req.Header.Set("X-Org-ID", t.token)
+	return t.underlying.RoundTrip(req)
+}
+
 func New(opts *ClientOptions) (*SDK, error) {
 	if opts.ProviderConfigs == nil && opts.ServerConfig.Endpoint == "" {
 		return nil, fmt.Errorf("must provide either ServerConfig.Endpoint or LLMConfigs")
@@ -94,6 +109,16 @@ func New(opts *ClientOptions) (*SDK, error) {
 		}
 	}
 
+	httpClient := http.DefaultClient
+	if opts.ServerConfig.Endpoint != "" {
+		httpClient = &http.Client{
+			Transport: &authTransport{
+				underlying: http.DefaultTransport,
+				token:      opts.ServerConfig.OrgID,
+			},
+		}
+	}
+
 	sdk := &SDK{
 		llmConfigs:     configStore,
 		directMode:     configStore != nil,
@@ -102,6 +127,7 @@ func New(opts *ClientOptions) (*SDK, error) {
 		restateConfig:  opts.RestateConfig,
 		temporalConfig: opts.TemporalConfig,
 		redisConfig:    opts.RedisConfig,
+		httpClient:     httpClient,
 
 		agents:               map[string]*agents.Agent{},
 		restateAgentConfigs:  map[string]*agents.AgentOptions{},
@@ -117,7 +143,7 @@ func New(opts *ClientOptions) (*SDK, error) {
 	}
 
 	// Convert project name to ID
-	resp, err := http.DefaultClient.Get(fmt.Sprintf("%s/api/agent-server/projects", opts.ServerConfig.Endpoint))
+	resp, err := sdk.httpClient.Get(fmt.Sprintf("%s/api/agent-server/projects", opts.ServerConfig.Endpoint))
 	if err != nil {
 		return nil, err
 	}

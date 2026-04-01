@@ -34,5 +34,5 @@ func (c *SDK) getGatewayAdapter() gateway.LLMGatewayAdapter {
 		return gateway.NewInternalLLMGateway(gateway.NewLLMGateway(c.llmConfigs))
 	}
 
-	return hastekitgateway.NewExternalLLMGateway(c.endpoint)
+	return hastekitgateway.NewExternalLLMGateway(c.endpoint, c.httpClient)
 }

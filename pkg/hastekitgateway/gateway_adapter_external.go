@@ -28,10 +28,10 @@ type ExternalLLMGateway struct {
 }
 
 // NewExternalLLMGateway creates a provider that calls agent-server via HTTP.
-func NewExternalLLMGateway(endpoint string) *ExternalLLMGateway {
+func NewExternalLLMGateway(endpoint string, httpClient *http.Client) *ExternalLLMGateway {
 	return &ExternalLLMGateway{
 		endpoint:   strings.TrimSuffix(endpoint, "/"),
-		httpClient: &http.Client{},
+		httpClient: httpClient,
 	}
 }
 
