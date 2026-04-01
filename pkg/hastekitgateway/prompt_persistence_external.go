@@ -11,18 +11,20 @@ import (
 )
 
 type ExternalPromptPersistence struct {
-	Endpoint  string
-	projectID uuid.UUID
-	name      string
-	label     string
+	Endpoint   string
+	projectID  uuid.UUID
+	name       string
+	label      string
+	httpClient *http.Client
 }
 
-func NewExternalPromptPersistence(endpoint string, projectID uuid.UUID, name string, label string) *ExternalPromptPersistence {
+func NewExternalPromptPersistence(endpoint string, projectID uuid.UUID, name string, label string, httpClient *http.Client) *ExternalPromptPersistence {
 	return &ExternalPromptPersistence{
-		Endpoint:  endpoint,
-		projectID: projectID,
-		name:      name,
-		label:     label,
+		Endpoint:   endpoint,
+		projectID:  projectID,
+		name:       name,
+		label:      label,
+		httpClient: httpClient,
 	}
 }
 
@@ -48,7 +50,7 @@ func (p *ExternalPromptPersistence) LoadPrompt(ctx context.Context) (string, err
 	// Read the prompt from file
 	url := fmt.Sprintf("%s/api/agent-server/prompts/%s/label/%s?project_id=%s", p.Endpoint, p.name, p.label, p.projectID)
 
-	resp, err := http.DefaultClient.Get(url)
+	resp, err := p.httpClient.Get(url)
 	if err != nil {
 		return "", err
 	}

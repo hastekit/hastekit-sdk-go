@@ -28,14 +28,16 @@ type Response[T any] struct {
 }
 
 type ExternalConversationPersistence struct {
-	Endpoint  string
-	projectID uuid.UUID
+	Endpoint   string
+	projectID  uuid.UUID
+	httpClient *http.Client
 }
 
-func NewExternalConversationPersistence(endpoint string, projectID uuid.UUID) *ExternalConversationPersistence {
+func NewExternalConversationPersistence(endpoint string, projectID uuid.UUID, httpClient *http.Client) *ExternalConversationPersistence {
 	return &ExternalConversationPersistence{
-		Endpoint:  endpoint,
-		projectID: projectID,
+		Endpoint:   endpoint,
+		projectID:  projectID,
+		httpClient: httpClient,
 	}
 }
 
@@ -67,7 +69,7 @@ func (p *ExternalConversationPersistence) LoadMessages(ctx context.Context, name
 
 	url := fmt.Sprintf("%s/api/agent-server/messages/summary?namespace=%s&thread_id=%s&previous_message_id=%s&project_id=%s", p.Endpoint, namespace, threadId, previousMessageId, p.projectID.String())
 
-	resp, err := http.DefaultClient.Get(url)
+	resp, err := p.httpClient.Get(url)
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +136,7 @@ func (p *ExternalConversationPersistence) SaveMessages(ctx context.Context, name
 
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := p.httpClient.Do(req)
 	if err != nil {
 		span.RecordError(err)
 		return err
@@ -171,7 +173,7 @@ func (p *ExternalConversationPersistence) SaveSummary(ctx context.Context, names
 
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := p.httpClient.Do(req)
 	if err != nil {
 		span.RecordError(err)
 		return err
