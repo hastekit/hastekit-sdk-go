@@ -32,6 +32,7 @@ var (
 	ProviderNameOllama     ProviderName = "Ollama"
 	ProviderNameOpenRouter ProviderName = "OpenRouter"
 	ProviderNameElevenLabs ProviderName = "ElevenLabs"
+	ProviderNameBedrock    ProviderName = "Bedrock"
 )
 
 func GetAllProviderNames() []ProviderName {
@@ -43,6 +44,7 @@ func GetAllProviderNames() []ProviderName {
 		ProviderNameOllama,
 		ProviderNameOpenRouter,
 		ProviderNameElevenLabs,
+		ProviderNameBedrock,
 	}
 }
 
