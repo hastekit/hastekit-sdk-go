@@ -70,6 +70,12 @@ func (c *Client) NewResponses(ctx context.Context, inp *responses2.Request) (*re
 	}
 	defer res.Body.Close()
 
+	if res.StatusCode != http.StatusOK {
+		var errResp map[string]any
+		err = utils.DecodeJSON(res.Body, &errResp)
+		return nil, fmt.Errorf("error: %v", errResp)
+	}
+
 	var xaiResponse *xai_responses2.Response
 	err = utils.DecodeJSON(res.Body, &xaiResponse)
 	if err != nil {

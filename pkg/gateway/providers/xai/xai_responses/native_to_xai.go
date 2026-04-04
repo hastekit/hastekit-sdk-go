@@ -17,6 +17,17 @@ func NativeRequestToRequest(in *responses2.Request) *Request {
 		r.Reasoning.Effort = nil
 	}
 
+	// Filter out image generation tools as xAI doesn't support image generation as a tool.
+	// xAI supports image generation via a separate api.
+	tools := []responses2.ToolUnion{}
+	for _, tool := range in.Tools {
+		if tool.OfImageGeneration != nil {
+			continue
+		}
+		tools = append(tools, tool)
+	}
+	r.Tools = tools
+
 	return r
 }
 
