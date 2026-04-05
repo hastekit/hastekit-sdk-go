@@ -8,6 +8,8 @@ import (
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/chat_completion"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/embeddings"
+	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/image_edit"
+	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/image_generation"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/speech"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/transcription"
@@ -42,6 +44,12 @@ type LLMGatewayAdapter interface {
 
 	// NewTranscription
 	NewTranscription(ctx context.Context, providerName llm.ProviderName, key string, req *transcription.Request) (*transcription.Response, error)
+
+	// NewImageGeneration
+	NewImageGeneration(ctx context.Context, providerName llm.ProviderName, key string, req *image_generation.Request) (*image_generation.Response, error)
+
+	// NewImageEdit
+	NewImageEdit(ctx context.Context, providerName llm.ProviderName, key string, req *image_edit.Request) (*image_edit.Response, error)
 }
 
 // LLMClient wraps an LLMGatewayAdapter and provides a high-level interface
@@ -166,6 +174,26 @@ func (c *LLMClient) NewTranscription(ctx context.Context, in *transcription.Requ
 	in.Model = model
 
 	return c.LLMGatewayAdapter.NewTranscription(ctx, providerName, c.getKey(providerName), in)
+}
+
+func (c *LLMClient) NewImageGeneration(ctx context.Context, in *image_generation.Request) (*image_generation.Response, error) {
+	providerName, model, err := c.getProviderAndModelName(in.Model)
+	if err != nil {
+		return nil, err
+	}
+	in.Model = model
+
+	return c.LLMGatewayAdapter.NewImageGeneration(ctx, providerName, c.getKey(providerName), in)
+}
+
+func (c *LLMClient) NewImageEdit(ctx context.Context, in *image_edit.Request) (*image_edit.Response, error) {
+	providerName, model, err := c.getProviderAndModelName(in.Model)
+	if err != nil {
+		return nil, err
+	}
+	in.Model = model
+
+	return c.LLMGatewayAdapter.NewImageEdit(ctx, providerName, c.getKey(providerName), in)
 }
 
 func (c *LLMClient) getKey(providerName llm.ProviderName) string {

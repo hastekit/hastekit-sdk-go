@@ -92,6 +92,20 @@ func (g *LLMGateway) baseRequestHandler(ctx context.Context, providerName llm.Pr
 		}
 
 		resp.OfTranscription = respOut
+	case r.OfImageGeneration != nil:
+		respOut, err := g.handleImageGenerationRequest(ctx, providerName, p, r.OfImageGeneration)
+		if err != nil {
+			return nil, err
+		}
+
+		resp.OfImageGeneration = respOut
+	case r.OfImageEdit != nil:
+		respOut, err := g.handleImageEditRequest(ctx, providerName, p, r.OfImageEdit)
+		if err != nil {
+			return nil, err
+		}
+
+		resp.OfImageEdit = respOut
 	}
 
 	return resp, nil

@@ -13,9 +13,13 @@ import (
 	"strings"
 
 	"github.com/bytedance/sonic"
+	image_edit2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/image_edit"
+	image_generation2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/image_generation"
 	responses2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	speech2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/speech"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/base"
+	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/xai/xai_image_edit"
+	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/xai/xai_image_generation"
 	xai_responses2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/xai/xai_responses"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/xai/xai_speech"
 	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
@@ -202,4 +206,94 @@ func (c *Client) NewSpeech(ctx context.Context, in *speech2.Request) (*speech2.R
 	}
 
 	return xaiResponse.ToNativeResponse(), nil
+}
+
+func (c *Client) NewImageGeneration(ctx context.Context, in *image_generation2.Request) (*image_generation2.Response, error) {
+	xaiRequest := xai_image_generation.NativeRequestToRequest(in)
+
+	payload, err := sonic.Marshal(xaiRequest)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, c.opts.BaseURL+"/images/generations", bytes.NewBuffer(payload))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.opts.ApiKey)
+
+	res, err := c.opts.transport.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		var errResp map[string]any
+		err = utils.DecodeJSON(res.Body, &errResp)
+		if err != nil {
+			return nil, err
+		}
+		if errorObj, ok := errResp["error"].(map[string]any); ok {
+			if message, ok := errorObj["message"].(string); ok {
+				return nil, errors.New(message)
+			}
+		}
+		return nil, errors.New("unknown error occurred")
+	}
+
+	var xaiResponse *xai_image_generation.Response
+	err = utils.DecodeJSON(res.Body, &xaiResponse)
+	if err != nil {
+		return nil, err
+	}
+
+	return xaiResponse.ToNativeResponse(), nil
+}
+
+func (c *Client) NewImageEdit(ctx context.Context, in *image_edit2.Request) (*image_edit2.Response, error) {
+	xaiRequest := xai_image_edit.NativeRequestToRequest(in)
+
+	payload, err := sonic.Marshal(xaiRequest)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, c.opts.BaseURL+"/images/edits", bytes.NewBuffer(payload))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.opts.ApiKey)
+
+	res, err := c.opts.transport.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		var errResp map[string]any
+		err = utils.DecodeJSON(res.Body, &errResp)
+		if err != nil {
+			return nil, err
+		}
+		if errorObj, ok := errResp["error"].(map[string]any); ok {
+			if message, ok := errorObj["message"].(string); ok {
+				return nil, errors.New(message)
+			}
+		}
+		return nil, errors.New("unknown error occurred")
+	}
+
+	var xaiEditResponse *xai_image_edit.Response
+	err = utils.DecodeJSON(res.Body, &xaiEditResponse)
+	if err != nil {
+		return nil, err
+	}
+
+	return xaiEditResponse.ToNativeResponse(), nil
 }

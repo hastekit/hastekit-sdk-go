@@ -11,11 +11,15 @@ import (
 
 	"github.com/bytedance/sonic"
 	embeddings2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/embeddings"
+	image_edit2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/image_edit"
+	image_generation2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/image_generation"
 	responses2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	speech2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/speech"
 	transcription2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/transcription"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/base"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/gemini/gemini_embeddings"
+	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/gemini/gemini_image_edit"
+	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/gemini/gemini_image_generation"
 	gemini_responses2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/gemini/gemini_responses"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/gemini/gemini_speech"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/gemini/gemini_transcription"
@@ -470,4 +474,124 @@ func (c *Client) NewTranscription(ctx context.Context, inp *transcription2.Reque
 	}
 
 	return geminiResponse.ToNativeResponse(), nil
+}
+
+func (c *Client) NewImageGeneration(ctx context.Context, inp *image_generation2.Request) (*image_generation2.Response, error) {
+	geminiRequest := gemini_image_generation.NativeRequestToRequest(inp)
+
+	model := inp.Model
+	if model == "" {
+		model = "gemini-2.5-flash-preview-image"
+	}
+
+	endpoint := fmt.Sprintf("%s/models/%s:generateContent", c.opts.BaseURL, model)
+
+	payload, err := sonic.Marshal(geminiRequest)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewBuffer(payload))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-goog-api-key", c.opts.ApiKey)
+
+	for k, v := range c.opts.Headers {
+		req.Header.Set(k, v)
+	}
+
+	res, err := c.opts.transport.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		var errResp map[string]any
+		err = utils.DecodeJSON(res.Body, &errResp)
+		if err != nil {
+			return nil, err
+		}
+		if errorObj, ok := errResp["error"].(map[string]any); ok {
+			if message, ok := errorObj["message"].(string); ok {
+				return nil, fmt.Errorf("gemini API error: %s", message)
+			}
+		}
+		return nil, errors.New("unknown error occurred")
+	}
+
+	var geminiResponse *gemini_image_generation.Response
+	err = utils.DecodeJSON(res.Body, &geminiResponse)
+	if err != nil {
+		return nil, err
+	}
+
+	if geminiResponse.Error != nil {
+		return nil, fmt.Errorf("gemini API error: %s (code: %d, status: %s)", geminiResponse.Error.Message, geminiResponse.Error.Code, geminiResponse.Error.Status)
+	}
+
+	return geminiResponse.ToNativeResponse(), nil
+}
+
+func (c *Client) NewImageEdit(ctx context.Context, inp *image_edit2.Request) (*image_edit2.Response, error) {
+	geminiRequest := gemini_image_edit.NativeRequestToRequest(inp)
+
+	model := inp.Model
+	if model == "" {
+		model = "gemini-2.5-flash-preview-image"
+	}
+
+	endpoint := fmt.Sprintf("%s/models/%s:generateContent", c.opts.BaseURL, model)
+
+	payload, err := sonic.Marshal(geminiRequest)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewBuffer(payload))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-goog-api-key", c.opts.ApiKey)
+
+	for k, v := range c.opts.Headers {
+		req.Header.Set(k, v)
+	}
+
+	res, err := c.opts.transport.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		var errResp map[string]any
+		err = utils.DecodeJSON(res.Body, &errResp)
+		if err != nil {
+			return nil, err
+		}
+		if errorObj, ok := errResp["error"].(map[string]any); ok {
+			if message, ok := errorObj["message"].(string); ok {
+				return nil, fmt.Errorf("gemini API error: %s", message)
+			}
+		}
+		return nil, errors.New("unknown error occurred")
+	}
+
+	var geminiEditResponse *gemini_image_edit.Response
+	err = utils.DecodeJSON(res.Body, &geminiEditResponse)
+	if err != nil {
+		return nil, err
+	}
+
+	if geminiEditResponse.Error != nil {
+		return nil, fmt.Errorf("gemini API error: %s (code: %d, status: %s)", geminiEditResponse.Error.Message, geminiEditResponse.Error.Code, geminiEditResponse.Error.Status)
+	}
+
+	return geminiEditResponse.ToNativeResponse(), nil
 }

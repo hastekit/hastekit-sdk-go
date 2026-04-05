@@ -6,6 +6,8 @@ import (
 
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/chat_completion"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/embeddings"
+	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/image_edit"
+	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/image_generation"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/speech"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/transcription"
@@ -20,6 +22,8 @@ type Provider interface {
 	NewSpeech(ctx context.Context, in *speech.Request) (*speech.Response, error)
 	NewStreamingSpeech(ctx context.Context, in *speech.Request) (chan *speech.ResponseChunk, error)
 	NewTranscription(ctx context.Context, in *transcription.Request) (*transcription.Response, error)
+	NewImageGeneration(ctx context.Context, in *image_generation.Request) (*image_generation.Response, error)
+	NewImageEdit(ctx context.Context, in *image_edit.Request) (*image_edit.Response, error)
 }
 
 type ProviderName string

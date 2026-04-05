@@ -9,20 +9,27 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime"
 	"mime/multipart"
 	"net/http"
+	"net/textproto"
+	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/bytedance/sonic"
 	chat_completion2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/chat_completion"
 	embeddings2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/embeddings"
+	image_edit2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/image_edit"
+	image_generation2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/image_generation"
 	responses2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	speech2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/speech"
 	transcription2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/transcription"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/base"
 	openai_chat_completion2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/openai/openai_chat_completion"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/openai/openai_embeddings"
+	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/openai/openai_image_edit"
+	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/openai/openai_image_generation"
 	openai_responses2 "github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/openai/openai_responses"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/openai/openai_speech"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/providers/openai/openai_transcription"
@@ -528,4 +535,175 @@ func (c *Client) NewTranscription(ctx context.Context, in *transcription2.Reques
 	}
 
 	return openAiResponse.ToNativeResponse(), nil
+}
+
+func (c *Client) NewImageGeneration(ctx context.Context, in *image_generation2.Request) (*image_generation2.Response, error) {
+	openAiRequest := openai_image_generation.NativeRequestToRequest(in)
+
+	payload, err := sonic.Marshal(openAiRequest)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, c.opts.BaseURL+"/images/generations", bytes.NewBuffer(payload))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.opts.ApiKey)
+
+	res, err := c.opts.transport.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		var errResp map[string]any
+		err = utils.DecodeJSON(res.Body, &errResp)
+		if err != nil {
+			return nil, err
+		}
+		if errorObj, ok := errResp["error"].(map[string]any); ok {
+			if message, ok := errorObj["message"].(string); ok {
+				return nil, errors.New(message)
+			}
+		}
+		return nil, errors.New("unknown error occurred")
+	}
+
+	var openAiResponse *openai_image_generation.Response
+	err = utils.DecodeJSON(res.Body, &openAiResponse)
+	if err != nil {
+		return nil, err
+	}
+
+	if openAiResponse.Error != nil {
+		return nil, errors.New(openAiResponse.Error.Message)
+	}
+
+	return openAiResponse.ToNativeResponse(), nil
+}
+
+func (c *Client) NewImageEdit(ctx context.Context, in *image_edit2.Request) (*image_edit2.Response, error) {
+	// OpenAI image edit uses multipart/form-data with image[] for multiple images
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+
+	// Add images using image[] field name (supports up to 16 images for GPT image models)
+	// Use CreatePart instead of CreateFormFile to set the correct Content-Type per image
+	for i, img := range in.Images {
+		filename := img.Filename
+		if filename == "" {
+			filename = fmt.Sprintf("image_%d.png", i)
+		}
+
+		contentType := "application/octet-stream"
+		if ext := filepath.Ext(filename); ext != "" {
+			if detected := mime.TypeByExtension(ext); detected != "" {
+				contentType = detected
+			}
+		}
+
+		header := make(textproto.MIMEHeader)
+		header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="image[]"; filename="%s"`, filename))
+		header.Set("Content-Type", contentType)
+
+		filePart, err := writer.CreatePart(header)
+		if err != nil {
+			return nil, err
+		}
+		if _, err = filePart.Write(img.Data); err != nil {
+			return nil, err
+		}
+	}
+
+	// Add prompt
+	if err := writer.WriteField("prompt", in.Prompt); err != nil {
+		return nil, err
+	}
+
+	// Add model
+	if in.Model != "" {
+		if err := writer.WriteField("model", in.Model); err != nil {
+			return nil, err
+		}
+	}
+
+	// Add optional fields
+	if in.N != nil {
+		if err := writer.WriteField("n", strconv.Itoa(*in.N)); err != nil {
+			return nil, err
+		}
+	}
+
+	if in.Size != nil {
+		if err := writer.WriteField("size", *in.Size); err != nil {
+			return nil, err
+		}
+	}
+
+	if in.Quality != nil {
+		if err := writer.WriteField("quality", *in.Quality); err != nil {
+			return nil, err
+		}
+	}
+
+	// Response format is only supported for DALL-E 2
+	if in.ResponseFormat != nil && in.Model == "dall-e-2" {
+		if err := writer.WriteField("response_format", *in.ResponseFormat); err != nil {
+			return nil, err
+		}
+	}
+
+	if in.OutputFormat != nil {
+		if err := writer.WriteField("output_format", *in.OutputFormat); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := writer.Close(); err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, c.opts.BaseURL+"/images/edits", &buf)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.Header.Set("Authorization", "Bearer "+c.opts.ApiKey)
+
+	res, err := c.opts.transport.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		var errResp map[string]any
+		err = utils.DecodeJSON(res.Body, &errResp)
+		if err != nil {
+			return nil, err
+		}
+		if errorObj, ok := errResp["error"].(map[string]any); ok {
+			if message, ok := errorObj["message"].(string); ok {
+				return nil, errors.New(message)
+			}
+		}
+		return nil, errors.New("unknown error occurred")
+	}
+
+	var openAiEditResponse *openai_image_edit.Response
+	err = utils.DecodeJSON(res.Body, &openAiEditResponse)
+	if err != nil {
+		return nil, err
+	}
+
+	if openAiEditResponse.Error != nil {
+		return nil, errors.New(openAiEditResponse.Error.Message)
+	}
+
+	return openAiEditResponse.ToNativeResponse(), nil
 }

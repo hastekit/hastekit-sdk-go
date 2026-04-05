@@ -6,6 +6,8 @@ import (
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/chat_completion"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/embeddings"
+	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/image_edit"
+	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/image_generation"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/speech"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/transcription"
@@ -129,4 +131,30 @@ func (p *InternalLLMGateway) NewTranscription(ctx context.Context, providerName 
 	}
 
 	return resp.OfTranscription, nil
+}
+
+func (p *InternalLLMGateway) NewImageGeneration(ctx context.Context, providerName llm.ProviderName, key string, req *image_generation.Request) (*image_generation.Response, error) {
+	llmReq := &llm.Request{
+		OfImageGeneration: req,
+	}
+
+	resp, err := p.gateway.HandleRequest(ctx, providerName, key, llmReq)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp.OfImageGeneration, nil
+}
+
+func (p *InternalLLMGateway) NewImageEdit(ctx context.Context, providerName llm.ProviderName, key string, req *image_edit.Request) (*image_edit.Response, error) {
+	llmReq := &llm.Request{
+		OfImageEdit: req,
+	}
+
+	resp, err := p.gateway.HandleRequest(ctx, providerName, key, llmReq)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp.OfImageEdit, nil
 }

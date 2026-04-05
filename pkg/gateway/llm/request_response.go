@@ -3,6 +3,8 @@ package llm
 import (
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/chat_completion"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/embeddings"
+	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/image_edit"
+	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/image_generation"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/speech"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/transcription"
@@ -14,6 +16,8 @@ type Request struct {
 	OfChatCompletionInput *chat_completion.Request
 	OfSpeech              *speech.Request
 	OfTranscription       *transcription.Request
+	OfImageGeneration     *image_generation.Request
+	OfImageEdit           *image_edit.Request
 }
 
 func (r *Request) GetRequestedModel() string {
@@ -37,6 +41,14 @@ func (r *Request) GetRequestedModel() string {
 		return r.OfTranscription.Model
 	}
 
+	if r.OfImageGeneration != nil {
+		return r.OfImageGeneration.Model
+	}
+
+	if r.OfImageEdit != nil {
+		return r.OfImageEdit.Model
+	}
+
 	return ""
 }
 
@@ -46,6 +58,8 @@ type Response struct {
 	OfChatCompletionOutput *chat_completion.Response
 	OfSpeech               *speech.Response
 	OfTranscription        *transcription.Response
+	OfImageGeneration      *image_generation.Response
+	OfImageEdit            *image_edit.Response
 	Error                  *Error
 }
 
