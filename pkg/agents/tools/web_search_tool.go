@@ -12,7 +12,9 @@ type WebSearchTool struct {
 }
 
 func NewWebSearchTool() *WebSearchTool {
-	return &WebSearchTool{}
+	return &WebSearchTool{
+		BaseTool: &agents.BaseTool{},
+	}
 }
 
 func (t *WebSearchTool) Execute(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {

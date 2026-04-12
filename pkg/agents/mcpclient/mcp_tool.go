@@ -24,7 +24,7 @@ type McpTool struct {
 	Meta   *mcp.Meta      `json:"-"`
 }
 
-func NewMcpTool(t mcp.Tool, cli *client.Client, Meta *mcp.Meta, requiresApproval bool) *McpTool {
+func NewMcpTool(t mcp.Tool, cli *client.Client, Meta *mcp.Meta, requiresApproval bool, deferred bool) *McpTool {
 	inputSchema := map[string]any{
 		"type":       "object",
 		"properties": map[string]any{},
@@ -43,6 +43,7 @@ func NewMcpTool(t mcp.Tool, cli *client.Client, Meta *mcp.Meta, requiresApproval
 	return &McpTool{
 		BaseTool: &agents.BaseTool{
 			RequiresApproval: requiresApproval,
+			Deferred:         deferred,
 			ToolUnion: responses.ToolUnion{
 				OfFunction: &responses.FunctionTool{
 					Name:        t.Name,

@@ -25,15 +25,21 @@ type Tool interface {
 	Execute(ctx context.Context, params *ToolCall) (*ToolCallResponse, error)
 	Tool(ctx context.Context) *responses.ToolUnion
 	NeedApproval() bool
+	IsDeferred() bool
 }
 
 type BaseTool struct {
 	ToolUnion        responses.ToolUnion
 	RequiresApproval bool
+	Deferred         bool
 }
 
 func (t *BaseTool) NeedApproval() bool {
 	return t.RequiresApproval
+}
+
+func (t *BaseTool) IsDeferred() bool {
+	return t.Deferred
 }
 
 func (t *BaseTool) Tool(ctx context.Context) *responses.ToolUnion {

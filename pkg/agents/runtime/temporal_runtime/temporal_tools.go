@@ -53,3 +53,7 @@ func (t *TemporalToolProxy) Tool(ctx context.Context) *responses.ToolUnion {
 func (t *TemporalToolProxy) NeedApproval() bool {
 	return t.wrappedTool.NeedApproval()
 }
+
+func (t *TemporalToolProxy) IsDeferred() bool {
+	return t.wrappedTool.IsDeferred()
+}

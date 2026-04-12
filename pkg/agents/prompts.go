@@ -5,8 +5,9 @@ import (
 )
 
 type Dependencies struct {
-	RunContext map[string]any
-	Handoffs   []*Handoff
+	RunContext    map[string]any
+	Handoffs      []*Handoff
+	DeferredTools []Tool
 }
 
 type SystemPromptProvider interface {
