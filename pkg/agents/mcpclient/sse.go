@@ -21,6 +21,7 @@ type MCPClient struct {
 	Meta                  *mcp.Meta      `json:"-"`
 	ToolFilter            []string       `json:"-"`
 	ApprovalRequiredTools []string       `json:"-"`
+	DeferredTools         []string       `json:"-"`
 }
 
 func NewInProcessMCPServer(ctx context.Context, client *client.Client, headers map[string]any) (*MCPClient, error) {
@@ -82,6 +83,12 @@ func WithToolFilter(toolFilter ...string) McpServerOption {
 func WithApprovalRequiredTools(tools ...string) McpServerOption {
 	return func(srv *MCPClient) {
 		srv.ApprovalRequiredTools = tools
+	}
+}
+
+func WithDeferredTools(tools ...string) McpServerOption {
+	return func(srv *MCPClient) {
+		srv.DeferredTools = tools
 	}
 }
 
@@ -159,6 +166,7 @@ func (srv *MCPClient) GetClient(ctx context.Context, runContext map[string]any) 
 		Meta:                  srv.Meta,
 		ToolFilter:            srv.ToolFilter,
 		ApprovalRequiredTools: srv.ApprovalRequiredTools,
+		DeferredTools:         srv.DeferredTools,
 	}, nil
 }
 
@@ -170,15 +178,24 @@ func (srv *MCPClient) GetTools(opts ...McpServerOption) []agents.Tool {
 	}
 
 	for _, tool := range srv.Tools {
+		// Filter tools
 		if len(srv.ToolFilter) > 0 && !slices.Contains(srv.ToolFilter, tool.Name) {
 			continue
 		}
+
+		// Check if tool requires approval
 		requiresApproval := false
 		if len(srv.ApprovalRequiredTools) > 0 && slices.Contains(srv.ApprovalRequiredTools, tool.Name) {
 			requiresApproval = true
 		}
 
-		mcpTools = append(mcpTools, NewMcpTool(tool, srv.Client, srv.Meta, requiresApproval))
+		// Check if tool is deferred
+		deferred := false
+		if len(srv.DeferredTools) > 0 && slices.Contains(srv.DeferredTools, tool.Name) {
+			deferred = true
+		}
+
+		mcpTools = append(mcpTools, NewMcpTool(tool, srv.Client, srv.Meta, requiresApproval, deferred))
 	}
 
 	return mcpTools

@@ -86,6 +86,7 @@ func (sp *SimplePrompt) GetPrompt(ctx context.Context, deps *agents.Dependencies
 
 	prompt += skillsToPrompts(sp.skills)
 	prompt += handoffsToPrompts(deps.Handoffs)
+	prompt += deferredToolsToPrompts(ctx, deps.DeferredTools)
 
 	if deps.RunContext == nil {
 		return prompt, nil
@@ -143,7 +144,7 @@ func handoffsToPrompts(handoffs []*agents.Handoff) string {
 	var p strings.Builder
 
 	p.WriteString("\n\n" + "## Agents\n\n")
-	p.WriteString("Agents are specialized in certain tasks or domain. Use the `transfer_to_agent` tool to delegate or transfer to the specialized agents, based on the task at hand.")
+	p.WriteString("Agents are specialized in certain tasks or domain. Use the `transfer_to_agent` tool to delegate or transfer to the specialized agents, based on the task at hand.\n")
 	p.WriteString("<available_agents>")
 	for _, handoff := range handoffs {
 		p.WriteString("<agent>")
@@ -154,6 +155,26 @@ func handoffsToPrompts(handoffs []*agents.Handoff) string {
 		p.WriteString("</agent>")
 	}
 	p.WriteString("</available_agents>")
+	p.WriteString("\n---\n")
+
+	return p.String()
+}
+
+func deferredToolsToPrompts(ctx context.Context, deferredTools []agents.Tool) string {
+	if deferredTools == nil || len(deferredTools) == 0 {
+		return ""
+	}
+
+	var p strings.Builder
+
+	p.WriteString("\n\n" + "## Deferred Tools\n")
+	p.WriteString("Deferred tools are tools that are not available in the current context. Use the `execute_deferred_tool` tool to execute the deferred tool. \n")
+	p.WriteString("<available-deferred-tools>>")
+	for _, tool := range deferredTools {
+		p.WriteString(fmt.Sprintf("<deferred-tool><name>%s</name></deferred-tool>", tool.Tool(ctx).OfFunction.Name))
+	}
+	p.WriteString("</available-deferred-tools>")
+	p.WriteString("\n---\n")
 
 	return p.String()
 }

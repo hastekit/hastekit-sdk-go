@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"maps"
 	"slices"
+	"strings"
 
 	"github.com/bytedance/sonic"
 	"github.com/google/uuid"
@@ -240,10 +241,31 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chun
 
 	// Create tool schemas for input payload
 	var toolDefs []responses.ToolUnion
+	var deferredTools []Tool
 	if len(tools) > 0 {
-		toolDefs = make([]responses.ToolUnion, len(tools))
-		for idx, coreTool := range tools {
+		// Collect deferred tools
+		for _, coreTool := range tools {
+			if coreTool.IsDeferred() {
+				deferredTools = append(deferredTools, coreTool)
+			}
+		}
+
+		// Add a search tool if any deferred tools are present
+		if len(deferredTools) > 0 {
+			tools = append(tools, NewToolSearchTool(deferredTools))
+		}
+
+		// Convert core tools to tool definitions
+		toolDefs = make([]responses.ToolUnion, len(tools)-len(deferredTools))
+		idx := 0
+		for _, coreTool := range tools {
+			// Skip deferred tools
+			if coreTool.IsDeferred() {
+				continue
+			}
+
 			toolDefs[idx] = *coreTool.Tool(ctx)
+			idx += 1
 		}
 	}
 
@@ -268,8 +290,9 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chun
 	instruction := "You are a helpful assistant."
 	if e.instruction != nil {
 		instruction, err = e.instruction.GetPrompt(ctx, &Dependencies{
-			RunContext: in.RunContext,
-			Handoffs:   e.handoffs,
+			RunContext:    in.RunContext,
+			Handoffs:      e.handoffs,
+			DeferredTools: deferredTools,
 		})
 		if err != nil {
 			return &AgentOutput{Status: agentstate.RunStatusError, RunID: runId}, err
@@ -302,12 +325,22 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chun
 				return &AgentOutput{Status: agentstate.RunStatusError, RunID: runId}, err
 			}
 
+			var activatedDeferredToolsDef []responses.ToolUnion
+			if str, ok := run.State["activated_deferred_tools"]; ok {
+				activatedToolNames := strings.Split(str, ",")
+				for _, tool := range deferredTools {
+					if t := tool.Tool(ctx); t.OfFunction != nil && slices.Contains(activatedToolNames, t.OfFunction.Name) {
+						activatedDeferredToolsDef = append(activatedDeferredToolsDef, *t)
+					}
+				}
+			}
+
 			resp, err := e.llm.NewStreamingResponses(ctx, &responses.Request{
 				Instructions: utils.Ptr(instruction),
 				Input: responses.InputUnion{
 					OfInputMessageList: convMessages,
 				},
-				Tools:      toolDefs,
+				Tools:      append(toolDefs, activatedDeferredToolsDef...),
 				Parameters: parameters,
 			}, cb)
 			if err != nil {

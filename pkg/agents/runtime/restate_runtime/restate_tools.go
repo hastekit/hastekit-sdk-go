@@ -33,3 +33,7 @@ func (t *RestateTool) Tool(ctx context.Context) *responses.ToolUnion {
 func (t *RestateTool) NeedApproval() bool {
 	return t.wrappedTool.NeedApproval()
 }
+
+func (t *RestateTool) IsDeferred() bool {
+	return t.wrappedTool.IsDeferred()
+}
