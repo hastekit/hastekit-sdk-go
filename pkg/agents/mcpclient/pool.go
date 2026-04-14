@@ -73,6 +73,12 @@ func poolKey(endpoint, transportType string, headers map[string]string) string {
 // Checkout returns an existing healthy connection or creates a new one.
 // The mcp-go SSE client supports concurrent CallTool calls via JSON-RPC request IDs,
 // so a single connection per server is sufficient.
+//
+// IMPORTANT: Pool-managed connections use context.Background() for their SSE stream
+// lifecycle, NOT the caller's context. This is critical because in Temporal/Restate,
+// the activity/handler context is cancelled after the function returns. If the SSE
+// reader goroutine were tied to that context, it would die after the first tool call,
+// making the pooled connection unusable for subsequent calls.
 func (p *connectionPool) Checkout(ctx context.Context, endpoint, transportType string, headers map[string]string) (*client.Client, error) {
 	key := poolKey(endpoint, transportType, headers)
 
@@ -91,8 +97,9 @@ func (p *connectionPool) Checkout(ctx context.Context, endpoint, transportType s
 		}
 	}
 
-	// Create new connection
-	cli, err := createConnection(ctx, endpoint, transportType, headers)
+	// Create new connection using context.Background() so the SSE stream
+	// survives beyond the caller's context (e.g. a Temporal activity context).
+	cli, err := createConnection(context.Background(), endpoint, transportType, headers)
 	if err != nil {
 		return nil, err
 	}
