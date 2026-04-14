@@ -2,7 +2,6 @@ package restate_runtime
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents"
 	restate "github.com/restatedev/sdk-go"
@@ -25,7 +24,7 @@ func (t *RestateMCPServer) GetName() string {
 }
 
 func (t *RestateMCPServer) ListTools(ctx context.Context, runContext map[string]any) ([]agents.Tool, error) {
-	// TODO: `RestateMCPServer` is created per workflow, so we can connect to MCP and keep the connection
+	// ListTools uses the schema cache in MCPClient — no live connection needed on cache hit.
 	toolDefs, err := restate.Run(t.restateCtx, func(ctx restate.RunContext) ([]agents.BaseTool, error) {
 		mcpTools, err := t.wrappedMcpServer.ListTools(ctx, runContext)
 		if err != nil {
@@ -37,6 +36,7 @@ func (t *RestateMCPServer) ListTools(ctx context.Context, runContext map[string]
 			tools = append(tools, agents.BaseTool{
 				ToolUnion:        *tool.Tool(ctx),
 				RequiresApproval: tool.NeedApproval(),
+				Deferred:         tool.IsDeferred(),
 			})
 		}
 
@@ -71,18 +71,29 @@ func NewRestateMCPTool(restateCtx restate.WorkflowContext, wrappedMcpServer agen
 }
 
 func (t *RestateMCPTool) Execute(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
+	// Execute via restate.Run for determinism. The underlying MCPClient.CallToolDirect
+	// uses the connection pool — no ListTools call needed.
 	return restate.Run(t.restateCtx, func(ctx restate.RunContext) (*agents.ToolCallResponse, error) {
+		// Use CallToolDirect on the wrapped MCPToolset if it supports it,
+		// otherwise fall back to ListTools + find (for non-MCPClient implementations).
+		type directCaller interface {
+			CallToolDirect(ctx context.Context, runContext map[string]any, params *agents.ToolCall) (*agents.ToolCallResponse, error)
+		}
+
+		if dc, ok := t.wrappedMcpServer.(directCaller); ok {
+			return dc.CallToolDirect(ctx, t.runContext, params)
+		}
+
+		// Fallback: ListTools uses schema cache so this is still fast
 		mcpTools, err := t.wrappedMcpServer.ListTools(ctx, t.runContext)
 		if err != nil {
 			return nil, err
 		}
-
 		for _, tool := range mcpTools {
-			if t := tool.Tool(ctx); t != nil && t.OfFunction != nil && params.Name == t.OfFunction.Name {
+			if td := tool.Tool(ctx); td != nil && td.OfFunction != nil && params.Name == td.OfFunction.Name {
 				return tool.Execute(ctx, params)
 			}
 		}
-
-		return nil, fmt.Errorf("no restate tool found with name %s", params.Name)
+		return nil, err
 	}, restate.WithName("MCPToolCall"))
 }

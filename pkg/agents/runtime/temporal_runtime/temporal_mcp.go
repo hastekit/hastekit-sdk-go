@@ -29,6 +29,7 @@ func (t *TemporalMCPServer) ListTools(ctx context.Context, runContext map[string
 		tools = append(tools, agents.BaseTool{
 			ToolUnion:        *tool.Tool(ctx),
 			RequiresApproval: tool.NeedApproval(),
+			Deferred:         tool.IsDeferred(),
 		})
 	}
 
@@ -36,14 +37,24 @@ func (t *TemporalMCPServer) ListTools(ctx context.Context, runContext map[string
 }
 
 func (t *TemporalMCPServer) ExecuteTool(ctx context.Context, params *agents.ToolCall, runContext map[string]any) (*agents.ToolCallResponse, error) {
-	// TODO: directly call the tool without listing
+	// Use CallToolDirect if the wrapped MCPToolset supports it (e.g. MCPClient),
+	// which calls the tool directly via the connection pool without re-listing.
+	type directCaller interface {
+		CallToolDirect(ctx context.Context, runContext map[string]any, params *agents.ToolCall) (*agents.ToolCallResponse, error)
+	}
+
+	if dc, ok := t.wrappedMcpServer.(directCaller); ok {
+		return dc.CallToolDirect(ctx, runContext, params)
+	}
+
+	// Fallback: ListTools uses schema cache so this is still efficient
 	mcpTools, err := t.wrappedMcpServer.ListTools(ctx, runContext)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, tool := range mcpTools {
-		if t := tool.Tool(ctx); t != nil && t.OfFunction != nil && params.Name == t.OfFunction.Name {
+		if td := tool.Tool(ctx); td != nil && td.OfFunction != nil && params.Name == td.OfFunction.Name {
 			return tool.Execute(ctx, params)
 		}
 	}
