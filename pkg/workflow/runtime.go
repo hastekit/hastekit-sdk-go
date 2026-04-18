@@ -15,10 +15,10 @@ import (
 // ships one Runtime (InProcessRuntime); Temporal-, Restate-, or any
 // other backing is supplied by the host in a sibling package.
 //
-// A Runtime MUST return the RunState even on error so callers can
-// inspect partial results.
+// A Runtime MUST return the *Input even on error so callers can
+// inspect partial RunContext / Results.
 type Runtime interface {
-	Execute(ctx context.Context, c *Compiled, in *Input, opts RuntimeOptions) (*RunState, error)
+	Execute(ctx context.Context, c *Compiled, in *Input, opts RuntimeOptions) (*Input, error)
 }
 
 // RuntimeOptions carries run-level configuration into a Runtime
@@ -39,9 +39,7 @@ type invokeConfig struct {
 	runtimeOpts RuntimeOptions
 }
 
-// InvokeOption configures a single Invoke call. Pass the result of
-// WithRuntime / WithLogger / WithMaxSteps (or custom options) to
-// Compiled.Execute or Graph.Invoke.
+// InvokeOption configures a single Invoke call.
 type InvokeOption func(*invokeConfig)
 
 // WithRuntime selects the Runtime used for the invocation. If no
@@ -63,10 +61,10 @@ func WithMaxSteps(n int) InvokeOption {
 }
 
 // ConditionalEdge attaches a runtime router to a node. When the node
-// completes, Router is called with the latest RunState and must
-// return one of the keys in Targets; the walker then dispatches the
-// mapped node as the next step. Returning a key not in Targets — or a
-// key mapped to EndNode — ends the branch.
+// completes, Router is called with the latest Input and must return
+// one of the keys in Targets; the walker dispatches the mapped node
+// as the next step. Returning a key not in Targets — or a key
+// mapped to EndNode — ends the branch.
 type ConditionalEdge struct {
 	Router  Router
 	Targets map[string]string
@@ -79,7 +77,7 @@ type ConditionalEdge struct {
 // of root node ids (the walker's starting wave).
 //
 // Compiled is read-only to Runtimes; mutable execution state lives
-// on RunState.
+// on Input.
 type Compiled struct {
 	Nodes        map[string]Node
 	OutEdges     map[string][]Edge
@@ -88,13 +86,13 @@ type Compiled struct {
 }
 
 // Execute executes the compiled graph with in as the invocation
-// input. Nodes read rs.Input() for RunID/Trigger/Metadata and
-// rs.State() for node outputs merged by the walker.
+// input. Nodes read in.RunContext, in.Trigger, in.Metadata, in.RunID
+// directly inside their Execute bodies.
 //
 // The Runtime is supplied through WithRuntime; if omitted, Execute
 // defaults to InProcessRuntime. Use WithLogger / WithMaxSteps to
 // tune observability and the step cap.
-func (c *Compiled) Execute(ctx context.Context, in *Input, opts ...InvokeOption) (*RunState, error) {
+func (c *Compiled) Execute(ctx context.Context, in *Input, opts ...InvokeOption) (*Input, error) {
 	cfg := invokeConfig{runtime: InProcessRuntime{}}
 	for _, opt := range opts {
 		opt(&cfg)
@@ -118,7 +116,7 @@ const defaultMaxSteps = 500
 // The only thing InProcessRuntime contributes beyond the walker is
 // the NodeExecutor — which runs each node in a goroutine and calls
 // Node.Execute directly.
-func (InProcessRuntime) Execute(ctx context.Context, c *Compiled, in *Input, opts RuntimeOptions) (*RunState, error) {
+func (InProcessRuntime) Execute(ctx context.Context, c *Compiled, in *Input, opts RuntimeOptions) (*Input, error) {
 	w := NewWalker(opts)
 	return w.Walk(ctx, c, in, inProcessExecutor{logger: w.Logger})
 }
@@ -147,21 +145,12 @@ func (e inProcessExecutor) ExecuteWave(ctx context.Context, invs []Invocation) [
 	return results
 }
 
-// runInvocation builds a per-node RunState (bound to the invocation
-// Input, seeded with the shared state snapshot) and calls
-// Node.Execute. Its partial output update flows back to the walker
-// which merges it into the shared state.
-//
-// The per-node RunState is intentional: it keeps the in-process
-// executor byte-for-byte compatible with a durable executor whose
-// activities only see an Input + state snapshot. A node whose
-// Execute works under InProcessRuntime also works under any Runtime
-// that follows this contract.
+// runInvocation calls the node's Execute with the shared Input. No
+// per-node RunState wrapping — nodes read everything off in directly.
+// The walker guarantees no concurrent writes to in.RunContext during
+// a wave, so in-flight reads here are race-free.
 func runInvocation(ctx context.Context, inv Invocation, onFail context.CancelFunc) Result {
-	local := NewRunState(inv.Input)
-	local.MergeState(inv.State)
-
-	output, port, err := inv.Node.Execute(ctx, local)
+	output, port, err := inv.Node.Execute(ctx, inv.Input)
 	if err != nil {
 		onFail()
 		return Result{NodeID: inv.NodeID, Err: fmt.Errorf("node %q failed: %w", inv.NodeID, err)}

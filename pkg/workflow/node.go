@@ -22,15 +22,16 @@ const (
 //
 //   - Validate is called at Compile time. Return an error for bad
 //     configuration; no execution has happened yet.
-//   - Execute is called at run time. The node reads whatever it needs
-//     from the shared state via rs.State() or rs.Get(key), and returns
-//     a partial state update (the output map) plus the port name
-//     edges should follow. The walker shallow-merges the output into
-//     the shared state — last writer wins.
+//   - Execute is called at run time. The node reads whatever it
+//     needs off in (RunContext for upstream outputs, Trigger /
+//     Metadata for per-run data) and returns a partial state update
+//     (the output map) plus the port name edges should follow. The
+//     walker shallow-merges the output into in.RunContext — last
+//     writer wins.
 type Node interface {
 	Type() NodeType
 	Validate() error
-	Execute(ctx context.Context, rs *RunState) (output map[string]any, port string, err error)
+	Execute(ctx context.Context, in *Input) (output map[string]any, port string, err error)
 }
 
 // BaseNode is a convenience base every Node can embed to get Type()

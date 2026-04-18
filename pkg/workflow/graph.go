@@ -65,11 +65,11 @@ type Graph struct {
 	buildErrs []error
 }
 
-// Router inspects the current RunState after a node completes and
+// Router inspects the current Input after a node completes and
 // returns a label that the graph's ConditionalEdge mapping resolves
 // into the next node. Returning a label not in the mapping (or one
 // mapped to EndNode) ends that branch.
-type Router func(rs *RunState) string
+type Router func(in *Input) string
 
 // NewGraph constructs an empty Graph. The id is carried through into
 // Compiled and used in error messages.
@@ -120,7 +120,7 @@ func (g *Graph) AddEdgeOnPort(src, port, dst string) *Graph {
 // override with WithRuntime. It is a convenience wrapper: when the
 // caller plans to run the same graph many times, compile once with
 // g.Compile() and call Compiled.Execute repeatedly instead.
-func (g *Graph) Invoke(ctx context.Context, in *Input, opts ...InvokeOption) (*RunState, error) {
+func (g *Graph) Invoke(ctx context.Context, in *Input, opts ...InvokeOption) (*Input, error) {
 	c, err := g.Compile()
 	if err != nil {
 		return nil, err

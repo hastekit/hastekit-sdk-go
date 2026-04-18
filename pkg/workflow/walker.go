@@ -23,32 +23,19 @@ type NodeExecutor interface {
 }
 
 // Invocation is one unit of work the walker sends to the executor.
-// It is self-contained: everything the executor needs to execute
-// a node (or, for a durable runtime, to hand it off as an activity)
-// is carried here. Nothing outside Invocation should be consulted by
-// the executor.
+// Everything the executor needs to run a node (or hand it off as an
+// activity) is carried here — the Node instance, its graph id, and
+// the run Input. Input.RunContext IS the shared state; nodes read
+// it directly.
 type Invocation struct {
-	// Node is the built, validated Node instance. In-process
-	// executors call Node.Execute directly; durable executors
-	// typically use Node.Type() as the activity name.
-	Node Node
-	// NodeID is the identity inside the current graph run.
+	Node   Node
 	NodeID string
-	// State is a snapshot of the shared state as of the wave's start.
-	// The executor seeds a local RunState with this before calling
-	// Node.Execute so the in-process and durable paths see the same
-	// view. Nodes read state through rs.State() / rs.Get().
-	State map[string]any
-	// Input is the run-level input the Walker was called with.
-	// Executors forward it into the per-invocation RunState so nodes
-	// can read rs.Input().Trigger / rs.Input().Metadata uniformly
-	// across runtimes.
-	Input *Input
+	Input  *Input
 }
 
-// Result is the outcome of one node execution, returned by the
-// executor to the walker. Output is the node's partial state
-// update; the walker shallow-merges it into the shared state.
+// Result is the outcome of one node execution. Output is the node's
+// partial state update; the walker shallow-merges it into
+// Input.RunContext.
 type Result struct {
 	NodeID string
 	Output map[string]any
@@ -78,16 +65,19 @@ func NewWalker(opts RuntimeOptions) *Walker {
 	return &Walker{Logger: logger, MaxSteps: maxSteps}
 }
 
-// Walk executes the compiled graph through ne. It returns a RunState
-// populated with the final state and per-node results (the contract
-// the Runtime exposes to callers). Walk always returns a non-nil
-// RunState, even on error, so observers can inspect partial results.
+// Walk executes the compiled graph through ne. It always returns the
+// non-nil *Input (even on error) so observers can inspect partial
+// RunContext / Results. The walker writes node outputs into
+// in.RunContext and tracks status in in.Results — no separate state
+// object.
 //
-// The state map starts empty; each node's output is shallow-merged
-// into it after execution. Trigger data and host metadata live on
-// the Input struct — accessible to nodes via rs.Input().
-func (w *Walker) Walk(ctx context.Context, c *Compiled, in *Input, ne NodeExecutor) (*RunState, error) {
-	rs := NewRunState(in)
+// Concurrency: during a wave, nodes read in.RunContext via their
+// executors. The walker only writes to in.RunContext AFTER the
+// executor's wave finishes (between waves), so concurrent reads
+// inside a wave never race with writes.
+func (w *Walker) Walk(ctx context.Context, c *Compiled, in *Input, ne NodeExecutor) (*Input, error) {
+	in = ensureInit(in)
+
 	steps := 0
 	wave := append([]string(nil), c.Roots...)
 	visited := make(map[string]bool, len(c.Nodes))
@@ -97,28 +87,25 @@ func (w *Walker) Walk(ctx context.Context, c *Compiled, in *Input, ne NodeExecut
 		if len(unique) == 0 {
 			break
 		}
-
 		if steps+len(unique) > w.MaxSteps {
-			return rs, fmt.Errorf("workflow: exceeded max steps (%d)", w.MaxSteps)
+			return in, fmt.Errorf("workflow: exceeded max steps (%d)", w.MaxSteps)
 		}
 
 		// Dispatch in a stable order; the same wave must always
-		// produce the same activity-call sequence when running under a
-		// deterministic runtime (Temporal).
+		// produce the same activity-call sequence when running under
+		// a deterministic runtime (Temporal).
 		sort.Strings(unique)
 		for _, id := range unique {
 			visited[id] = true
 		}
 
-		state := rs.snapshotState()
 		invs := make([]Invocation, len(unique))
 		for i, id := range unique {
 			node := c.Nodes[id]
-			rs.SetNodeResult(id, &NodeResult{NodeID: id, Status: NodeStatusRunning})
+			in.Results[id] = &NodeResult{NodeID: id, Status: NodeStatusRunning}
 			invs[i] = Invocation{
 				Node:   node,
 				NodeID: id,
-				State:  state,
 				Input:  in,
 			}
 			steps++
@@ -131,31 +118,30 @@ func (w *Walker) Walk(ctx context.Context, c *Compiled, in *Input, ne NodeExecut
 		var nextCandidates []string
 		for _, r := range results {
 			if r.Err != nil {
-				rs.SetNodeResult(r.NodeID, &NodeResult{
+				in.Results[r.NodeID] = &NodeResult{
 					NodeID: r.NodeID,
 					Status: NodeStatusFailed,
 					Error:  r.Err.Error(),
-				})
+				}
 				w.Logger.Error("node execution failed", "node_id", r.NodeID, "error", r.Err)
 				waveErrs = append(waveErrs, fmt.Errorf("node %q: %w", r.NodeID, r.Err))
 				continue
 			}
-			if r.Output != nil {
-				rs.MergeState(r.Output)
+			for k, v := range r.Output {
+				in.RunContext[k] = v
 			}
-			rs.SetNodeResult(r.NodeID, &NodeResult{
+			in.Results[r.NodeID] = &NodeResult{
 				NodeID: r.NodeID,
 				Status: NodeStatusCompleted,
 				Port:   r.Port,
 				Output: r.Output,
-			})
+			}
 
 			// Conditional edges take precedence over static port edges.
-			// The router runs against the latest state (which includes
-			// this node's merged output) and returns a label; the
-			// walker follows that label's target in the cond mapping.
+			// The router runs against the updated Input and returns a
+			// label; the walker follows that label's target.
 			if cond, ok := c.Conditionals[r.NodeID]; ok {
-				label := cond.Router(rs)
+				label := cond.Router(in)
 				target, mapped := cond.Targets[label]
 				if !mapped {
 					w.Logger.Info("conditional edge: unmapped label, branch ends",
@@ -182,7 +168,7 @@ func (w *Walker) Walk(ctx context.Context, c *Compiled, in *Input, ne NodeExecut
 			}
 		}
 		if len(waveErrs) > 0 {
-			return rs, errors.Join(waveErrs...)
+			return in, errors.Join(waveErrs...)
 		}
 
 		wave = nextCandidates
@@ -197,10 +183,10 @@ func (w *Walker) Walk(ctx context.Context, c *Compiled, in *Input, ne NodeExecut
 	sort.Strings(ids)
 	for _, id := range ids {
 		if !visited[id] {
-			rs.SetNodeResult(id, &NodeResult{NodeID: id, Status: NodeStatusSkipped})
+			in.Results[id] = &NodeResult{NodeID: id, Status: NodeStatusSkipped}
 		}
 	}
-	return rs, nil
+	return in, nil
 }
 
 func dedupUnvisited(ids []string, visited map[string]bool) []string {

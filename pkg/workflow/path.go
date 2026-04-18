@@ -2,22 +2,9 @@ package workflow
 
 import "strings"
 
-// resolvePath walks a dot-separated path like "user.name.first"
-// against the RunState's flat state map. The first segment is a
-// top-level state key; subsequent segments traverse nested maps.
-//
-// Path resolution is the engine's one concession to "data plane"
-// plumbing — nodes can use it (or the exported ResolvePath) to pick
-// a value out of state by dotted path instead of walking maps by
-// hand. It's deliberately cheap and string-typed; richer expression
-// languages are a host concern.
-func resolvePath(rs *RunState, path string) (any, bool) {
-	return resolvePathInState(path, rs.snapshotState())
-}
-
-// resolvePathInState is the shape resolvePath takes when the walker
-// is working with a plain state snapshot (no RunState). Durable
-// runtimes share the same resolver by going through this entry point.
+// resolvePathInState walks a dot-separated path against a flat
+// state map. The first segment is a top-level key; subsequent
+// segments traverse nested maps.
 func resolvePathInState(path string, state map[string]any) (any, bool) {
 	if path == "" || state == nil {
 		return nil, false
@@ -53,9 +40,12 @@ func traversePath(data map[string]any, path string) (any, bool) {
 	return current, true
 }
 
-// ResolvePath is an exported wrapper over path resolution, handed to
-// hosts that want to read state by dotted path without reaching into
-// RunState internals.
-func ResolvePath(rs *RunState, path string) (any, bool) {
-	return resolvePath(rs, path)
+// ResolvePath walks a dotted path against in.RunContext. Exposed so
+// hosts that want to read per-node output by dotted path get a
+// consistent helper without peeking into Input internals.
+func ResolvePath(in *Input, path string) (any, bool) {
+	if in == nil {
+		return nil, false
+	}
+	return resolvePathInState(path, in.RunContext)
 }

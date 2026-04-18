@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 
+	"github.com/google/uuid"
 	"github.com/hastekit/hastekit-sdk-go/pkg/workflow"
 )
 
@@ -19,7 +20,7 @@ func (n Node1) Validate() error {
 	return nil
 }
 
-func (n Node1) Execute(ctx context.Context, rs *workflow.RunState) (output map[string]any, port string, err error) {
+func (n Node1) Execute(ctx context.Context, rs *workflow.Input) (output map[string]any, port string, err error) {
 	r := rand.Int()
 	fmt.Println("Node1 executing...Generated random number: ", fmt.Sprintf("%d", r))
 
@@ -37,8 +38,8 @@ func (n Node2) Validate() error {
 	return nil
 }
 
-func (n Node2) Execute(ctx context.Context, rs *workflow.RunState) (output map[string]any, port string, err error) {
-	_, _ = rs.Get("node1")
+func (n Node2) Execute(ctx context.Context, rs *workflow.Input) (output map[string]any, port string, err error) {
+	//_, _ = rs.Get("node1")
 	fmt.Println("Node2 executing...")
 
 	fmt.Println("Even")
@@ -57,7 +58,7 @@ func (n Node3) Validate() error {
 	return nil
 }
 
-func (n Node3) Execute(ctx context.Context, rs *workflow.RunState) (output map[string]any, port string, err error) {
+func (n Node3) Execute(ctx context.Context, rs *workflow.Input) (output map[string]any, port string, err error) {
 	fmt.Println("ODD")
 	return map[string]any{"node3": "world"}, "default", nil
 }
@@ -71,8 +72,9 @@ func main() {
 
 	graph.AddEdge("START", "node1")
 
-	graph.AddConditionalEdge("node1", func(rs *workflow.RunState) string {
-		if d, ok := rs.Get("node1"); ok {
+	graph.AddConditionalEdge("node1", func(rs *workflow.Input) string {
+
+		if d, ok := rs.RunContext["node1"]; ok {
 			if r, ok := d.(int); ok {
 				if r%2 == 0 {
 					return "node2"
@@ -93,8 +95,11 @@ func main() {
 
 	fmt.Println(compiled)
 
-	results, err := compiled.Execute(context.Background(), map[string]any{
-		"greeting": "hi",
+	results, err := compiled.Execute(context.Background(), &workflow.Input{
+		RunID:      uuid.NewString(),
+		Trigger:    workflow.TriggerEvent{},
+		RunContext: nil,
+		Metadata:   nil,
 	})
 	if err != nil {
 		fmt.Println(err)
