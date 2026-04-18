@@ -1,34 +1,31 @@
 package workflow
 
-// Input is the typed input a workflow run receives AND accumulates —
-// one struct that carries every piece of per-run state the engine
-// and nodes need: identity, the triggering event, the shared
-// RunContext that grows as nodes run, per-node Results, and a
-// free-form Metadata bag for host-specific extensions.
+// Input is the typed, single run-level object a workflow invocation
+// receives and accumulates into. It carries:
 //
-// The engine takes Input by reference and mutates RunContext +
-// Results as the run progresses. The typed header fields (RunID,
-// Trigger, Metadata) are expected to stay immutable once the walker
-// begins, but the SDK does not enforce that.
+//   - Identity (RunID) and the triggering event.
+//   - RunContext: an opaque map[string]any that the walker fills
+//     with whatever partial updates each node returns (shallow /
+//     deep merge via MergeContext). The SDK has no opinion about
+//     how hosts structure it — callers like the workflow-builder
+//     gateway group data under their own keys (e.g. "inputs" /
+//     "outputs" per nodeID) while raw SDK callers may keep it flat.
+//   - Status: per-node lifecycle markers (running / completed /
+//     failed / skipped). Deliberately minimal; per-node outputs
+//     live in RunContext, not here.
+//   - Metadata: free-form host bag (project_id, connector_id, …).
 //
-// Metadata is intentionally untyped: the SDK has no opinion about
-// tenancy, auth scope, or routing. Hosts put whatever their nodes
-// need there (project_id, connector_id, ...) and read it back in
-// Execute.
+// All writes come from the walker's sequential merge loop (between
+// waves) and its pre-dispatch Status markers. Node executors don't
+// write directly to Input, so no mutex is needed — reads during a
+// wave see a stable RunContext because nothing mutates it
+// concurrently.
 type Input struct {
-	RunID   string       `json:"run_id"`
-	Trigger TriggerEvent `json:"trigger"`
-	// RunContext is the shared mutable state that accumulates node
-	// outputs across the run. It is the single source of truth for
-	// "what has each node produced so far" — the walker shallow-
-	// merges each node's partial output update into this map after
-	// the node completes.
-	RunContext map[string]any `json:"run_context,omitempty"`
-	// Results records per-node execution status + outcome (the
-	// "status plane"). Populated by the walker as nodes fire;
-	// observers (HTTP responses, traces) read it after the run.
-	Results  map[string]*NodeResult `json:"results,omitempty"`
-	Metadata map[string]any         `json:"metadata,omitempty"`
+	RunID      string                `json:"run_id"`
+	Trigger    TriggerEvent          `json:"trigger"`
+	RunContext map[string]any        `json:"run_context,omitempty"`
+	Status     map[string]NodeStatus `json:"status,omitempty"`
+	Metadata   map[string]any        `json:"metadata,omitempty"`
 }
 
 // TriggerEvent describes what caused a workflow to run.
@@ -38,9 +35,56 @@ type TriggerEvent struct {
 	Payload map[string]any `json:"payload,omitempty"`
 }
 
-// ensureInit fills in the mutable sub-maps the walker needs to
-// operate. Nil Input is promoted to an empty one. Called by
-// Walker.Walk so callers don't have to pre-populate anything.
+// NodeStatus tracks a node's lifecycle marker.
+type NodeStatus string
+
+const (
+	NodeStatusRunning   NodeStatus = "running"
+	NodeStatusCompleted NodeStatus = "completed"
+	NodeStatusFailed    NodeStatus = "failed"
+	NodeStatusSkipped   NodeStatus = "skipped"
+)
+
+// MergeContext merges update into in.RunContext. Keys whose values
+// are maps on BOTH sides merge recursively (last writer wins at
+// leaves); all other values replace. This lets hosts that group
+// per-node data under shared sub-keys (e.g. "inputs" / "outputs")
+// compose partial updates across a wave without clobbering siblings.
+func (in *Input) MergeContext(update map[string]any) {
+	if len(update) == 0 {
+		return
+	}
+	if in.RunContext == nil {
+		in.RunContext = map[string]any{}
+	}
+	deepMerge(in.RunContext, update)
+}
+
+// SetStatus records a node's lifecycle marker.
+func (in *Input) SetStatus(nodeID string, s NodeStatus) {
+	if in.Status == nil {
+		in.Status = map[string]NodeStatus{}
+	}
+	in.Status[nodeID] = s
+}
+
+// deepMerge shallow-copies src's top-level keys into dst, recursing
+// when both sides hold a map for the same key.
+func deepMerge(dst, src map[string]any) {
+	for k, v := range src {
+		if nested, ok := v.(map[string]any); ok {
+			if existing, ok := dst[k].(map[string]any); ok {
+				deepMerge(existing, nested)
+				continue
+			}
+		}
+		dst[k] = v
+	}
+}
+
+// ensureInit fills in the mutable sub-maps the walker needs and
+// promotes a nil *Input to an empty one. Called by Walker.Walk so
+// callers never have to pre-populate RunContext / Status.
 func ensureInit(in *Input) *Input {
 	if in == nil {
 		in = &Input{}
@@ -48,8 +92,8 @@ func ensureInit(in *Input) *Input {
 	if in.RunContext == nil {
 		in.RunContext = map[string]any{}
 	}
-	if in.Results == nil {
-		in.Results = map[string]*NodeResult{}
+	if in.Status == nil {
+		in.Status = map[string]NodeStatus{}
 	}
 	return in
 }

@@ -42,7 +42,9 @@ func traversePath(data map[string]any, path string) (any, bool) {
 
 // ResolvePath walks a dotted path against in.RunContext. Exposed so
 // hosts that want to read per-node output by dotted path get a
-// consistent helper without peeking into Input internals.
+// consistent helper; the shape of RunContext is host-defined (e.g.
+// the workflow-builder gateway groups entries under "inputs" /
+// "outputs" sub-keys).
 func ResolvePath(in *Input, path string) (any, bool) {
 	if in == nil {
 		return nil, false

@@ -65,16 +65,15 @@ func NewWalker(opts RuntimeOptions) *Walker {
 	return &Walker{Logger: logger, MaxSteps: maxSteps}
 }
 
-// Walk executes the compiled graph through ne. It always returns the
-// non-nil *Input (even on error) so observers can inspect partial
-// RunContext / Results. The walker writes node outputs into
-// in.RunContext and tracks status in in.Results — no separate state
-// object.
+// Walk executes the compiled graph through ne. It always returns
+// the non-nil *Input (even on error) so observers can inspect the
+// partially-populated RunContext + Status. The walker merges each
+// node's Result.Output into in.RunContext via MergeContext (deep
+// merge) and records lifecycle markers in in.Status.
 //
-// Concurrency: during a wave, nodes read in.RunContext via their
-// executors. The walker only writes to in.RunContext AFTER the
-// executor's wave finishes (between waves), so concurrent reads
-// inside a wave never race with writes.
+// Concurrency: nodes only read in.RunContext during a wave; the
+// walker is the sole writer and does so sequentially between
+// waves, so a mutex isn't needed.
 func (w *Walker) Walk(ctx context.Context, c *Compiled, in *Input, ne NodeExecutor) (*Input, error) {
 	in = ensureInit(in)
 
@@ -102,12 +101,8 @@ func (w *Walker) Walk(ctx context.Context, c *Compiled, in *Input, ne NodeExecut
 		invs := make([]Invocation, len(unique))
 		for i, id := range unique {
 			node := c.Nodes[id]
-			in.Results[id] = &NodeResult{NodeID: id, Status: NodeStatusRunning}
-			invs[i] = Invocation{
-				Node:   node,
-				NodeID: id,
-				Input:  in,
-			}
+			in.SetStatus(id, NodeStatusRunning)
+			invs[i] = Invocation{Node: node, NodeID: id, Input: in}
 			steps++
 			w.Logger.Info("dispatching node", "node_id", id, "type", node.Type())
 		}
@@ -118,24 +113,13 @@ func (w *Walker) Walk(ctx context.Context, c *Compiled, in *Input, ne NodeExecut
 		var nextCandidates []string
 		for _, r := range results {
 			if r.Err != nil {
-				in.Results[r.NodeID] = &NodeResult{
-					NodeID: r.NodeID,
-					Status: NodeStatusFailed,
-					Error:  r.Err.Error(),
-				}
+				in.SetStatus(r.NodeID, NodeStatusFailed)
 				w.Logger.Error("node execution failed", "node_id", r.NodeID, "error", r.Err)
 				waveErrs = append(waveErrs, fmt.Errorf("node %q: %w", r.NodeID, r.Err))
 				continue
 			}
-			for k, v := range r.Output {
-				in.RunContext[k] = v
-			}
-			in.Results[r.NodeID] = &NodeResult{
-				NodeID: r.NodeID,
-				Status: NodeStatusCompleted,
-				Port:   r.Port,
-				Output: r.Output,
-			}
+			in.MergeContext(r.Output)
+			in.SetStatus(r.NodeID, NodeStatusCompleted)
 
 			// Conditional edges take precedence over static port edges.
 			// The router runs against the updated Input and returns a
@@ -174,16 +158,11 @@ func (w *Walker) Walk(ctx context.Context, c *Compiled, in *Input, ne NodeExecut
 		wave = nextCandidates
 	}
 
-	// Anything not visited didn't fire — mark it skipped so observers
-	// see the full per-node outcome.
-	ids := make([]string, 0, len(c.Nodes))
+	// Anything in the compiled graph that didn't fire gets marked
+	// skipped so observers see a complete per-node picture.
 	for id := range c.Nodes {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	for _, id := range ids {
 		if !visited[id] {
-			in.Results[id] = &NodeResult{NodeID: id, Status: NodeStatusSkipped}
+			in.SetStatus(id, NodeStatusSkipped)
 		}
 	}
 	return in, nil

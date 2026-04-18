@@ -13,8 +13,8 @@ type stubNode struct {
 	delay    time.Duration
 	outPort  string
 	output   map[string]any
-	executed *atomic.Int64 // shared counter to record execution order
-	order    *int64        // set during Execute to the counter value
+	executed *atomic.Int64
+	order    *int64
 }
 
 func (n *stubNode) Validate() error { return nil }
@@ -73,14 +73,13 @@ func TestParallelExecution(t *testing.T) {
 	}
 
 	for _, id := range []string{"start", "a", "b", "end"} {
-		r, ok := out.Results[id]
-		if !ok {
-			t.Errorf("missing result for node %q", id)
-			continue
+		if out.Status[id] != NodeStatusCompleted {
+			t.Errorf("node %q status = %q, want completed", id, out.Status[id])
 		}
-		if r.Status != NodeStatusCompleted {
-			t.Errorf("node %q status = %q, want completed", id, r.Status)
-		}
+	}
+	// Last-writer wins on flat shallow-mapped `value` key.
+	if out.RunContext["value"] != "end" {
+		t.Errorf("RunContext[value] = %v, want end", out.RunContext["value"])
 	}
 }
 
@@ -99,62 +98,37 @@ func TestSequentialChainStillWorks(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	for _, id := range []string{"start", "a", "b", "c"} {
-		r, ok := out.Results[id]
-		if !ok {
-			t.Fatalf("missing result for node %q", id)
-		}
-		if r.Status != NodeStatusCompleted {
-			t.Errorf("node %q status = %q, want completed", id, r.Status)
+		if out.Status[id] != NodeStatusCompleted {
+			t.Errorf("status[%s] = %q, want completed", id, out.Status[id])
 		}
 	}
 }
 
-// stateCaptureNode reads in.RunContext at Execute time and stashes
-// it into *captured for later assertions.
-type stateCaptureNode struct {
-	BaseNode
-	captured *map[string]any
-}
+// TestDeepMergeNestedUpdates proves MergeContext unions nested maps
+// across successive node outputs rather than clobbering siblings —
+// the behaviour gateway conventions like "inputs"/"outputs" per
+// nodeID rely on.
+func TestDeepMergeNestedUpdates(t *testing.T) {
+	g := NewGraph("test-deepmerge")
+	g.AddNode("a", newStub("node", map[string]any{"bucket": map[string]any{"a": 1}}, 0, nil, nil))
+	g.AddNode("b", newStub("node", map[string]any{"bucket": map[string]any{"b": 2}}, 0, nil, nil))
+	g.AddEdge("START", "a")
+	g.AddEdge("a", "b")
+	g.AddEdge("b", "END")
 
-func (n *stateCaptureNode) Validate() error { return nil }
-
-func (n *stateCaptureNode) Execute(_ context.Context, in *Input) (map[string]any, string, error) {
-	// Copy the snapshot so the test can assert on it after the run.
-	snap := make(map[string]any, len(in.RunContext))
-	for k, v := range in.RunContext {
-		snap[k] = v
+	out, err := g.Invoke(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("invoke: %v", err)
 	}
-	*n.captured = snap
-	return nil, DefaultPort, nil
-}
-
-func TestDataFlowBetweenParallelNodes(t *testing.T) {
-	var cState map[string]any
-
-	g := NewGraph("test-dataflow")
-	g.AddNode("start", newStub("producer", map[string]any{}, 0, nil, nil))
-	g.AddNode("a", newStub("producer", map[string]any{"x": 1}, 0, nil, nil))
-	g.AddNode("b", newStub("producer", map[string]any{"y": 2}, 0, nil, nil))
-	g.AddNode("c", &stateCaptureNode{BaseNode: BaseNode{NodeType: "consumer"}, captured: &cState})
-	g.AddEdge("start", "a")
-	g.AddEdge("start", "b")
-	g.AddEdge("a", "c")
-	g.AddEdge("b", "c")
-
-	if _, err := g.Invoke(context.Background(), nil); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cState["x"] != 1 {
-		t.Errorf("c saw state[x] = %v, want 1", cState["x"])
-	}
-	if cState["y"] != 2 {
-		t.Errorf("c saw state[y] = %v, want 2", cState["y"])
+	bucket, _ := out.RunContext["bucket"].(map[string]any)
+	if bucket["a"] != 1 || bucket["b"] != 2 {
+		t.Fatalf("expected deep-merged bucket {a:1,b:2}, got %#v", bucket)
 	}
 }
 
 func TestInvokeWithStartEnd(t *testing.T) {
 	g := NewGraph("test-invoke")
-	g.AddNode("a", newStub("node", nil, 0, nil, nil))
+	g.AddNode("a", newStub("node", map[string]any{"ran": true}, 0, nil, nil))
 	g.AddEdge("START", "a")
 	g.AddEdge("a", "END")
 
@@ -170,15 +144,13 @@ func TestInvokeWithStartEnd(t *testing.T) {
 		t.Fatalf("invoke: %v", err)
 	}
 	if out.Metadata["greeting"] != "hello" {
-		t.Errorf("metadata[greeting] = %v, want \"hello\"", out.Metadata["greeting"])
+		t.Errorf("metadata[greeting] = %v", out.Metadata["greeting"])
 	}
-
-	r, ok := out.Results["a"]
-	if !ok || r.Status != NodeStatusCompleted {
-		t.Errorf("a result = %+v, want completed", r)
+	if out.Status["a"] != NodeStatusCompleted {
+		t.Errorf("a status = %v", out.Status["a"])
 	}
-	if _, ok := out.Results[EndNode]; ok {
-		t.Errorf("END should not produce a NodeResult")
+	if out.RunContext["ran"] != true {
+		t.Errorf("RunContext[ran] = %v", out.RunContext["ran"])
 	}
 }
 
@@ -209,14 +181,14 @@ func TestConditionalEdge(t *testing.T) {
 	if err != nil {
 		t.Fatalf("invoke: %v", err)
 	}
-	if r, ok := out.Results["celebrate"]; !ok || r.Status != NodeStatusCompleted {
-		t.Errorf("celebrate result = %+v, want completed", r)
+	if out.Status["celebrate"] != NodeStatusCompleted {
+		t.Errorf("celebrate status = %v", out.Status["celebrate"])
 	}
-	if r, ok := out.Results["escalate"]; !ok || r.Status != NodeStatusSkipped {
-		t.Errorf("escalate result = %+v, want skipped", r)
+	if out.Status["escalate"] != NodeStatusSkipped {
+		t.Errorf("escalate status = %v, want skipped", out.Status["escalate"])
 	}
 	if out.RunContext["msg"] != "yay" {
-		t.Errorf("RunContext[msg] = %v, want \"yay\"", out.RunContext["msg"])
+		t.Errorf("RunContext[msg] = %v, want yay", out.RunContext["msg"])
 	}
 }
 

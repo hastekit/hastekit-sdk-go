@@ -5,16 +5,6 @@ import "context"
 // NodeType identifies the kind of node in a workflow.
 type NodeType string
 
-// NodeStatus represents the execution status of a node.
-type NodeStatus string
-
-const (
-	NodeStatusRunning   NodeStatus = "running"
-	NodeStatusCompleted NodeStatus = "completed"
-	NodeStatusFailed    NodeStatus = "failed"
-	NodeStatusSkipped   NodeStatus = "skipped"
-)
-
 // Node is the interface every workflow node implements. A Node
 // describes behaviour only — it has no identity inside the graph.
 // Identity (the per-instance id) is assigned by the Graph when the
