@@ -8,27 +8,17 @@ import (
 )
 
 // DefaultPort is the conventional name for a node's primary output
-// port. AddEdge uses it; branching nodes (if_else, switch_case,
-// api_call error path, …) emit other port names.
+// port.
 const DefaultPort = "default"
 
-// StartNode and EndNode are reserved, implicit node IDs that bookend
-// a workflow. Neither needs to be registered via AddNode:
-//
-//   - StartNode is the entry sentinel. AddEdge("START", "first") marks
-//     "first" as a root. Invocation input is seeded as the initial
-//     state (not under any namespace), so nodes read it directly.
-//   - EndNode is the terminal sentinel. AddEdge("last", "END") marks
-//     a branch as finished; the walker records END edges but never
-//     schedules END for execution.
+// StartNode and EndNode are reserved, implicit node IDs that
+// bookend a workflow. Neither needs to be registered via AddNode.
 const (
 	StartNode = "START"
 	EndNode   = "END"
 )
 
-// Edge connects two nodes. The FromPort field determines which output
-// of the source node activates this edge (e.g. "true"/"false" for
-// if-else, DefaultPort for linear flow, or a case label for switch).
+// Edge connects two nodes on a named output port of the source.
 type Edge struct {
 	FromNode string
 	FromPort string
@@ -37,25 +27,9 @@ type Edge struct {
 
 func edgeKey(nodeID, port string) string { return nodeID + ":" + port }
 
-// Graph is a fluent builder for workflow graphs — the langgraph-style
-// programmatic API.
-//
-//	g := workflow.NewGraph("hello")
-//	g.AddNode("greet", newGreetNode())
-//	g.AddEdge("START", "greet")
-//	g.AddEdge("greet", "END")
-//
-//	rs, err := g.Execute(ctx, input)
-//
-// Every mutating method returns the graph for chaining. Builder-time
-// errors (empty id, nil node, duplicate id) are collected rather than
-// panicked; Compile surfaces them as a joined error so a long chain
-// never blows up mid-construction.
-//
-// Identity belongs to the graph, not the node — a Node describes
-// behaviour, the graph assigns it an id. There is no declarative
-// input wiring: nodes read whatever they need directly from the
-// shared state via RunState.
+// Graph is a fluent builder for workflow graphs. Mutating methods
+// return the graph for chaining. Builder-time errors are collected
+// and surfaced as a joined error by Compile.
 type Graph struct {
 	id           string
 	nodes        map[string]Node
@@ -66,13 +40,12 @@ type Graph struct {
 }
 
 // Router inspects the current Input after a node completes and
-// returns a label that the graph's ConditionalEdge mapping resolves
-// into the next node. Returning a label not in the mapping (or one
-// mapped to EndNode) ends that branch.
+// returns a label the ConditionalEdge's target map resolves into
+// the next node. Unknown labels (or labels mapped to EndNode) end
+// the branch.
 type Router func(in *Input) string
 
-// NewGraph constructs an empty Graph. The id is carried through into
-// Compiled and used in error messages.
+// NewGraph constructs an empty Graph with the given id.
 func NewGraph(id string) *Graph {
 	return &Graph{
 		id:           id,
@@ -85,7 +58,7 @@ func NewGraph(id string) *Graph {
 func (g *Graph) ID() string { return g.id }
 
 // AddNode installs node under id. id must be non-empty and unique
-// within the graph; issues are recorded and surfaced by Compile.
+// within the graph.
 func (g *Graph) AddNode(id string, node Node) *Graph {
 	if id == "" {
 		g.buildErrs = append(g.buildErrs, errors.New("AddNode: id is required"))
@@ -115,11 +88,8 @@ func (g *Graph) AddEdgeOnPort(src, port, dst string) *Graph {
 	return g
 }
 
-// Invoke compiles this graph and executes it with in as the
-// invocation input. The Runtime defaults to InProcessRuntime;
-// override with WithRuntime. It is a convenience wrapper: when the
-// caller plans to run the same graph many times, compile once with
-// g.Compile() and call Compiled.Execute repeatedly instead.
+// Invoke compiles this graph and executes it. For repeated
+// invocations, compile once and call Compiled.Execute directly.
 func (g *Graph) Invoke(ctx context.Context, in *Input, opts ...InvokeOption) (*Input, error) {
 	c, err := g.Compile()
 	if err != nil {
@@ -128,17 +98,9 @@ func (g *Graph) Invoke(ctx context.Context, in *Input, opts ...InvokeOption) (*I
 	return c.Execute(ctx, in, opts...)
 }
 
-// AddConditionalEdge registers a runtime router on src. When src
-// completes, router is called with the current RunState and must
-// return a key in targets; the walker dispatches targets[key] as the
-// next node (or ends the branch if the returned key is not in the
-// map, or is mapped to EndNode).
-//
-// A node may have either static edges (AddEdge / AddEdgeOnPort) or a
-// conditional edge — not both. When a conditional edge is present,
-// the router runs instead of the node's returned port being consulted
-// for routing. All entries in targets must be known node ids (or
-// EndNode); targets are included in cycle detection.
+// AddConditionalEdge registers a runtime router on src. A node may
+// have either static edges or a conditional edge, not both.
+// Targets must be known node ids or EndNode.
 func (g *Graph) AddConditionalEdge(src string, router Router, targets map[string]string) *Graph {
 	if src == "" {
 		g.buildErrs = append(g.buildErrs, errors.New("AddConditionalEdge: src is required"))
@@ -164,13 +126,9 @@ func (g *Graph) AddConditionalEdge(src string, router Router, targets map[string
 	return g
 }
 
-// Compile validates the graph and produces a runnable *Compiled. It
-// surfaces every accumulated build-time error plus:
-//
-//   - empty graph id,
-//   - nodes whose own Validate() fails,
-//   - edges referencing unknown nodes,
-//   - cycles.
+// Compile validates the graph and produces a runnable *Compiled.
+// Surfaces accumulated build-time errors plus empty-id, failed
+// Validate, dangling edges, and cycles.
 func (g *Graph) Compile() (*Compiled, error) {
 	var errs []error
 	errs = append(errs, g.buildErrs...)
@@ -207,10 +165,9 @@ func (g *Graph) Compile() (*Compiled, error) {
 		errs = append(errs, fmt.Errorf("workflow %s: %q is a reserved node id", g.id, EndNode))
 	}
 
-	// Conditional edge validation: src must be a known node, each
-	// target must be a known node or EndNode, and src cannot also have
-	// static outgoing edges (the two routing mechanisms are mutually
-	// exclusive).
+	// Conditional edge validation: src must be a known node, every
+	// target must be a known node or EndNode, and src cannot also
+	// have static outgoing edges.
 	staticSources := make(map[string]bool, len(g.edges))
 	for _, e := range g.edges {
 		staticSources[e.FromNode] = true
@@ -236,9 +193,8 @@ func (g *Graph) Compile() (*Compiled, error) {
 		}
 	}
 
-	// Roots = targets of StartNode edges, if any. Otherwise fall back
-	// to nodes with no incoming edges. Cycle detection and the walker
-	// both use this entry set.
+	// Roots = targets of StartNode edges, if any; otherwise nodes
+	// with no incoming edges.
 	var roots []string
 	startTargets := make(map[string]bool)
 	for _, e := range g.edges {
@@ -276,8 +232,7 @@ func (g *Graph) Compile() (*Compiled, error) {
 		}
 	}
 
-	// Skip cycle detection if edges reference unknown nodes — the
-	// earlier error is the real problem.
+	// Skip cycle detection when earlier errors already exist.
 	if len(errs) == 0 {
 		nodeIDs := make([]string, 0, len(g.nodes))
 		for id := range g.nodes {
@@ -314,10 +269,9 @@ func (g *Graph) Compile() (*Compiled, error) {
 	}, nil
 }
 
-// detectCycle runs a DFS from each root (and then any remaining
-// unvisited nodes) and returns an error if any node is reachable
-// from itself. A cycle through any port is still a cycle; conditional
-// edges contribute all declared targets to the adjacency list.
+// detectCycle runs DFS from each root, then from any remaining
+// unvisited node, and returns an error if any node is reachable
+// from itself.
 func detectCycle(graphID string, nodeIDs []string, edges []Edge, conditionals map[string]ConditionalEdge, roots []string) error {
 	adj := make(map[string][]string, len(nodeIDs))
 	for _, e := range edges {

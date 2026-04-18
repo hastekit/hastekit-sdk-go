@@ -2,9 +2,9 @@ package workflow
 
 import "strings"
 
-// resolvePathInState walks a dot-separated path against a flat
-// state map. The first segment is a top-level key; subsequent
-// segments traverse nested maps.
+// resolvePathInState walks a dotted path against state. The first
+// segment is a top-level key; subsequent segments traverse nested
+// maps.
 func resolvePathInState(path string, state map[string]any) (any, bool) {
 	if path == "" || state == nil {
 		return nil, false
@@ -40,11 +40,7 @@ func traversePath(data map[string]any, path string) (any, bool) {
 	return current, true
 }
 
-// ResolvePath walks a dotted path against in.RunContext. Exposed so
-// hosts that want to read per-node output by dotted path get a
-// consistent helper; the shape of RunContext is host-defined (e.g.
-// the workflow-builder gateway groups entries under "inputs" /
-// "outputs" sub-keys).
+// ResolvePath walks a dotted path against in.RunContext.
 func ResolvePath(in *Input, path string) (any, bool) {
 	if in == nil {
 		return nil, false

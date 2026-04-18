@@ -1,26 +1,9 @@
 package workflow
 
-// Input is the typed, single run-level object a workflow invocation
-// receives and accumulates into. It carries:
-//
-//   - Identity (RunID).
-//   - RunContext: an opaque map[string]any that the walker fills
-//     with whatever partial updates each node returns (shallow /
-//     deep merge via MergeContext). The SDK has no opinion about
-//     how hosts structure it — callers like the workflow-builder
-//     gateway group data under their own keys (e.g. "inputs" /
-//     "outputs" per nodeID, or the seeding trigger event) while
-//     raw SDK callers may keep it flat.
-//   - Status: per-node lifecycle markers (running / completed /
-//     failed / skipped). Deliberately minimal; per-node outputs
-//     live in RunContext, not here.
-//   - Metadata: free-form host bag (project_id, connector_id, …).
-//
-// All writes come from the walker's sequential merge loop (between
-// waves) and its pre-dispatch Status markers. Node executors don't
-// write directly to Input, so no mutex is needed — reads during a
-// wave see a stable RunContext because nothing mutates it
-// concurrently.
+// Input is the run-level object a workflow invocation receives
+// and accumulates into. RunContext is an opaque map the walker
+// deep-merges node updates into; Status tracks per-node lifecycle
+// markers; Metadata is a free-form host bag.
 type Input struct {
 	RunID      string                `json:"run_id"`
 	RunContext map[string]any        `json:"run_context,omitempty"`
@@ -39,10 +22,8 @@ const (
 )
 
 // MergeContext merges update into in.RunContext. Keys whose values
-// are maps on BOTH sides merge recursively (last writer wins at
-// leaves); all other values replace. This lets hosts that group
-// per-node data under shared sub-keys (e.g. "inputs" / "outputs")
-// compose partial updates across a wave without clobbering siblings.
+// are maps on both sides merge recursively (last writer wins at
+// leaves); all other values replace.
 func (in *Input) MergeContext(update map[string]any) {
 	if len(update) == 0 {
 		return
@@ -61,8 +42,8 @@ func (in *Input) SetStatus(nodeID string, s NodeStatus) {
 	in.Status[nodeID] = s
 }
 
-// deepMerge shallow-copies src's top-level keys into dst, recursing
-// when both sides hold a map for the same key.
+// deepMerge copies src's keys into dst, recursing when both sides
+// hold a map for the same key.
 func deepMerge(dst, src map[string]any) {
 	for k, v := range src {
 		if nested, ok := v.(map[string]any); ok {
@@ -75,9 +56,8 @@ func deepMerge(dst, src map[string]any) {
 	}
 }
 
-// ensureInit fills in the mutable sub-maps the walker needs and
-// promotes a nil *Input to an empty one. Called by Walker.Walk so
-// callers never have to pre-populate RunContext / Status.
+// ensureInit promotes a nil *Input to an empty one and initialises
+// RunContext / Status so callers don't have to pre-populate them.
 func ensureInit(in *Input) *Input {
 	if in == nil {
 		in = &Input{}

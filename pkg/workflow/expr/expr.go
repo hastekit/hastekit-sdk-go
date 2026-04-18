@@ -6,24 +6,16 @@ import (
 	"strings"
 )
 
-// EvalBool evaluates a simple boolean expression string used by the
-// built-in If and Switch nodes. It is deliberately minimal:
+// EvalBool evaluates a minimal boolean expression used by the
+// built-in If and Switch nodes.
 //
-//   - Supported operators: ==, !=, >, <, >=, <=
-//   - Operands are compared numerically when both parse as float64,
-//     otherwise as raw strings (no quote stripping, no variable lookup).
-//   - With no operator, non-empty / non-zero / non-"false" strings are
-//     truthy.
+//   - Operators: ==, !=, >, <, >=, <=.
+//   - Operands compare numerically when both parse as float64,
+//     otherwise as raw strings.
+//   - With no operator, non-empty / non-"0" / non-"false" strings
+//     are truthy.
 //
-// Known limitations — do NOT rely on EvalBool for anything more:
-//   - No string quoting: `"foo" == "foo"` compares the quoted strings.
-//   - No logical operators (&&, ||, !) or parentheses.
-//   - The first occurrence of an operator wins, so literals containing
-//     operator substrings will tokenise incorrectly.
-//
-// Callers needing a richer grammar should pre-interpolate the
-// expression against state and then evaluate with a real expression
-// library (e.g. expr-lang/expr).
+// No quoting, logical operators, or parentheses are supported.
 func EvalBool(expression string) (bool, error) {
 	ops := []string{"==", "!=", ">=", "<=", ">", "<"}
 

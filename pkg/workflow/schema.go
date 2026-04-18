@@ -5,10 +5,8 @@ import (
 	"fmt"
 )
 
-// DecodeInput unmarshals the resolved input map into a typed struct
-// via JSON round-tripping. The same json tags that govern the
-// definition's schema govern deserialisation, so nodes stay
-// fully-typed inside Execute.
+// DecodeInput unmarshals the resolved input map into a typed
+// struct via JSON round-tripping.
 func DecodeInput[T any](input map[string]any) (*T, error) {
 	data, err := json.Marshal(input)
 	if err != nil {
@@ -21,10 +19,8 @@ func DecodeInput[T any](input map[string]any) (*T, error) {
 	return &v, nil
 }
 
-// EncodeOutput marshals a typed output struct into the map[string]any
-// wire format every Node returns. Nodes use this to keep their
-// Execute bodies typed while complying with the Node interface's
-// untyped output contract.
+// EncodeOutput marshals a typed output struct into the
+// map[string]any wire format every Node returns.
 func EncodeOutput[T any](v *T) (map[string]any, error) {
 	data, err := json.Marshal(v)
 	if err != nil {

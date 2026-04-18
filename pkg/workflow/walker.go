@@ -8,34 +8,22 @@ import (
 	"sort"
 )
 
-// NodeExecutor is the single seam between the shared graph walker and
-// a specific runtime's execution primitives. The walker prepares each
-// wave (dedup, result bookkeeping) and hands the invocations to the
-// executor; the executor decides how to run them (goroutines
-// in-process, workflow.Future under Temporal, ...).
-//
-// A NodeExecutor is invoked at most once per wave and must return
-// one Result per Invocation in the same order. It should honour the
-// passed ctx for cancellation but is otherwise free in how it
-// parallelises the batch.
+// NodeExecutor is the seam between the walker and a specific
+// runtime. It must return one Result per Invocation in order and
+// honour ctx cancellation.
 type NodeExecutor interface {
 	ExecuteWave(ctx context.Context, invocations []Invocation) []Result
 }
 
 // Invocation is one unit of work the walker sends to the executor.
-// Everything the executor needs to run a node (or hand it off as an
-// activity) is carried here — the Node instance, its graph id, and
-// the run Input. Input.RunContext IS the shared state; nodes read
-// it directly.
 type Invocation struct {
 	Node   Node
 	NodeID string
 	Input  *Input
 }
 
-// Result is the outcome of one node execution. Output is the node's
-// partial state update; the walker shallow-merges it into
-// Input.RunContext.
+// Result is the outcome of one node execution. Output is the
+// node's partial RunContext update.
 type Result struct {
 	NodeID string
 	Output map[string]any
@@ -43,16 +31,16 @@ type Result struct {
 	Err    error
 }
 
-// Walker holds the shared graph-execution algorithm. It owns the
-// wave loop, result bookkeeping, cycle-free visitation, and step-cap
-// enforcement. The only thing it doesn't own is how to run the nodes
-// themselves — that's the NodeExecutor.
+// Walker drives wave-based graph execution: dedup, result merging,
+// cycle-free visitation, and step-cap enforcement. The NodeExecutor
+// plugs in per-runtime dispatch.
 type Walker struct {
 	Logger   *slog.Logger
 	MaxSteps int
 }
 
-// NewWalker constructs a Walker with RuntimeOptions sensibly applied.
+// NewWalker constructs a Walker using opts, filling in defaults
+// for unset fields.
 func NewWalker(opts RuntimeOptions) *Walker {
 	logger := opts.Logger
 	if logger == nil {
@@ -66,14 +54,9 @@ func NewWalker(opts RuntimeOptions) *Walker {
 }
 
 // Walk executes the compiled graph through ne. It always returns
-// the non-nil *Input (even on error) so observers can inspect the
-// partially-populated RunContext + Status. The walker merges each
-// node's Result.Output into in.RunContext via MergeContext (deep
-// merge) and records lifecycle markers in in.Status.
-//
-// Concurrency: nodes only read in.RunContext during a wave; the
-// walker is the sole writer and does so sequentially between
-// waves, so a mutex isn't needed.
+// the non-nil *Input, even on error, so observers can inspect
+// partial state. Each Result.Output is deep-merged into
+// in.RunContext; Status is recorded per node.
 func (w *Walker) Walk(ctx context.Context, c *Compiled, in *Input, ne NodeExecutor) (*Input, error) {
 	in = ensureInit(in)
 
@@ -90,9 +73,8 @@ func (w *Walker) Walk(ctx context.Context, c *Compiled, in *Input, ne NodeExecut
 			return in, fmt.Errorf("workflow: exceeded max steps (%d)", w.MaxSteps)
 		}
 
-		// Dispatch in a stable order; the same wave must always
-		// produce the same activity-call sequence when running under
-		// a deterministic runtime (Temporal).
+		// Stable dispatch order so deterministic runtimes (Temporal)
+		// replay identically.
 		sort.Strings(unique)
 		for _, id := range unique {
 			visited[id] = true
@@ -121,9 +103,8 @@ func (w *Walker) Walk(ctx context.Context, c *Compiled, in *Input, ne NodeExecut
 			in.MergeContext(r.Output)
 			in.SetStatus(r.NodeID, NodeStatusCompleted)
 
-			// Conditional edges take precedence over static port edges.
-			// The router runs against the updated Input and returns a
-			// label; the walker follows that label's target.
+			// Conditional edges take precedence over static port
+			// edges.
 			if cond, ok := c.Conditionals[r.NodeID]; ok {
 				label := cond.Router(in)
 				target, mapped := cond.Targets[label]
@@ -158,8 +139,8 @@ func (w *Walker) Walk(ctx context.Context, c *Compiled, in *Input, ne NodeExecut
 		wave = nextCandidates
 	}
 
-	// Anything in the compiled graph that didn't fire gets marked
-	// skipped so observers see a complete per-node picture.
+	// Mark unvisited nodes as skipped so observers see a complete
+	// per-node picture.
 	for id := range c.Nodes {
 		if !visited[id] {
 			in.SetStatus(id, NodeStatusSkipped)
