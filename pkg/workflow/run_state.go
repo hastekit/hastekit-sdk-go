@@ -2,22 +2,23 @@ package workflow
 
 import "sync"
 
-// RunState carries the shared state of a workflow run. It holds a
-// single flat state map (the "data plane") — just like LangGraph —
-// plus per-node execution results (the "status plane"). Host-specific
-// metadata (tenancy, auth scope, sandbox identity) belongs on the
-// context.Context passed into Node.Execute; the engine itself has no
-// opinion about it.
+// RunState carries the shared state of a workflow run. It holds:
+//
+//   - The Input the walker was invoked with — RunID, the triggering
+//     event, host-specific Metadata, AND the RunContext map that
+//     accumulates per-node output as the run progresses. RunState's
+//     State()/Get()/MergeState() methods all operate on
+//     input.RunContext so there is a single source of truth.
+//   - Per-node execution results (the "status plane").
 //
 // State model: every node returns a partial update (a map) which is
-// shallow-merged into the shared state — last writer wins. Nodes read
-// whatever they need directly from state via rs.State() or rs.Get().
-// There is no per-node output namespace; if a node wants to publish
-// under its own key it simply returns {"nodeID": value}.
+// shallow-merged into input.RunContext — last writer wins. The
+// typed Input fields (RunID, Trigger, Metadata) are immutable across
+// the run; only RunContext grows.
 type RunState struct {
 	mu sync.RWMutex
 
-	state   map[string]any
+	input   *Input
 	results map[string]*NodeResult
 }
 
@@ -30,43 +31,53 @@ type NodeResult struct {
 	Error  string         `json:"error,omitempty"`
 }
 
-// NewRunState allocates a fresh RunState seeded with initial state
-// (typically the invocation input). The initial map is cloned, so
-// later mutations by the caller do not affect the run.
-func NewRunState(initial map[string]any) *RunState {
-	s := make(map[string]any, len(initial))
-	for k, v := range initial {
-		s[k] = v
+// NewRunState allocates a fresh RunState bound to the given Input.
+// A nil Input is promoted to an empty one; Input.RunContext is
+// initialised so the walker can merge node outputs into it. Input
+// is kept by reference and is readable via rs.Input() throughout
+// the run.
+func NewRunState(in *Input) *RunState {
+	if in == nil {
+		in = &Input{}
+	}
+	if in.RunContext == nil {
+		in.RunContext = make(map[string]any)
 	}
 	return &RunState{
-		state:   s,
+		input:   in,
 		results: make(map[string]*NodeResult),
 	}
 }
 
-// State returns a shallow copy of the current state map.
+// Input returns the workflow input this run was started with. Never
+// nil — NewRunState promotes a nil argument to an empty Input.
+func (rs *RunState) Input() *Input {
+	return rs.input
+}
+
+// State returns a shallow copy of the current RunContext.
 func (rs *RunState) State() map[string]any {
 	rs.mu.RLock()
 	defer rs.mu.RUnlock()
-	out := make(map[string]any, len(rs.state))
-	for k, v := range rs.state {
+	out := make(map[string]any, len(rs.input.RunContext))
+	for k, v := range rs.input.RunContext {
 		out[k] = v
 	}
 	return out
 }
 
-// Get returns the state value for key, if present.
+// Get returns the RunContext value for key, if present.
 func (rs *RunState) Get(key string) (any, bool) {
 	rs.mu.RLock()
 	defer rs.mu.RUnlock()
-	v, ok := rs.state[key]
+	v, ok := rs.input.RunContext[key]
 	return v, ok
 }
 
-// MergeState shallow-merges update into the shared state. Keys in
-// update overwrite existing state keys. A nil or empty update is a
-// no-op. This is the single write path the walker uses after each
-// node completes.
+// MergeState shallow-merges update into input.RunContext. Keys in
+// update overwrite existing keys. A nil or empty update is a no-op.
+// This is the single write path the walker uses after each node
+// completes.
 func (rs *RunState) MergeState(update map[string]any) {
 	if len(update) == 0 {
 		return
@@ -74,7 +85,7 @@ func (rs *RunState) MergeState(update map[string]any) {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 	for k, v := range update {
-		rs.state[k] = v
+		rs.input.RunContext[k] = v
 	}
 }
 
@@ -93,9 +104,9 @@ func (rs *RunState) GetNodeResult(nodeID string) (*NodeResult, bool) {
 	return r, ok
 }
 
-// NodeResults returns a snapshot copy of every node's result keyed by
-// id. Useful for observers (HTTP responses, traces) that need the
-// full outcome after a run.
+// NodeResults returns a snapshot copy of every node's result keyed
+// by id. Useful for observers (HTTP responses, traces) that need
+// the full outcome after a run.
 func (rs *RunState) NodeResults() map[string]*NodeResult {
 	rs.mu.RLock()
 	defer rs.mu.RUnlock()
@@ -106,16 +117,17 @@ func (rs *RunState) NodeResults() map[string]*NodeResult {
 	return out
 }
 
-// snapshotState returns a shallow copy of the current state. Used by
-// the walker to hand each wave's invocations a consistent view.
+// snapshotState returns a shallow copy of the current RunContext.
+// Used by the walker to hand each wave's invocations a consistent
+// view while subsequent merges proceed.
 func (rs *RunState) snapshotState() map[string]any {
 	rs.mu.RLock()
 	defer rs.mu.RUnlock()
-	if len(rs.state) == 0 {
+	if len(rs.input.RunContext) == 0 {
 		return nil
 	}
-	out := make(map[string]any, len(rs.state))
-	for k, v := range rs.state {
+	out := make(map[string]any, len(rs.input.RunContext))
+	for k, v := range rs.input.RunContext {
 		out[k] = v
 	}
 	return out

@@ -115,17 +115,17 @@ func (g *Graph) AddEdgeOnPort(src, port, dst string) *Graph {
 	return g
 }
 
-// Invoke compiles this graph and executes it with input as the
-// initial state. The Runtime defaults to InProcessRuntime; override
-// with WithRuntime. It is a convenience wrapper: when the caller
-// plans to run the same graph many times, compile once with
+// Invoke compiles this graph and executes it with in as the
+// invocation input. The Runtime defaults to InProcessRuntime;
+// override with WithRuntime. It is a convenience wrapper: when the
+// caller plans to run the same graph many times, compile once with
 // g.Compile() and call Compiled.Execute repeatedly instead.
-func (g *Graph) Invoke(ctx context.Context, input map[string]any, opts ...InvokeOption) (*RunState, error) {
+func (g *Graph) Invoke(ctx context.Context, in *Input, opts ...InvokeOption) (*RunState, error) {
 	c, err := g.Compile()
 	if err != nil {
 		return nil, err
 	}
-	return c.Execute(ctx, input, opts...)
+	return c.Execute(ctx, in, opts...)
 }
 
 // AddConditionalEdge registers a runtime router on src. When src

@@ -39,6 +39,11 @@ type Invocation struct {
 	// Node.Execute so the in-process and durable paths see the same
 	// view. Nodes read state through rs.State() / rs.Get().
 	State map[string]any
+	// Input is the run-level input the Walker was called with.
+	// Executors forward it into the per-invocation RunState so nodes
+	// can read rs.Input().Trigger / rs.Input().Metadata uniformly
+	// across runtimes.
+	Input *Input
 }
 
 // Result is the outcome of one node execution, returned by the
@@ -78,11 +83,11 @@ func NewWalker(opts RuntimeOptions) *Walker {
 // the Runtime exposes to callers). Walk always returns a non-nil
 // RunState, even on error, so observers can inspect partial results.
 //
-// The invocation input is the initial state. Each node returns a
-// partial update which the walker shallow-merges into the shared
-// state before dispatching the next wave.
-func (w *Walker) Walk(ctx context.Context, c *Compiled, input map[string]any, ne NodeExecutor) (*RunState, error) {
-	rs := NewRunState(input)
+// The state map starts empty; each node's output is shallow-merged
+// into it after execution. Trigger data and host metadata live on
+// the Input struct — accessible to nodes via rs.Input().
+func (w *Walker) Walk(ctx context.Context, c *Compiled, in *Input, ne NodeExecutor) (*RunState, error) {
+	rs := NewRunState(in)
 	steps := 0
 	wave := append([]string(nil), c.Roots...)
 	visited := make(map[string]bool, len(c.Nodes))
@@ -114,6 +119,7 @@ func (w *Walker) Walk(ctx context.Context, c *Compiled, input map[string]any, ne
 				Node:   node,
 				NodeID: id,
 				State:  state,
+				Input:  in,
 			}
 			steps++
 			w.Logger.Info("dispatching node", "node_id", id, "type", node.Type())

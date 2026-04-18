@@ -18,7 +18,7 @@ import (
 // A Runtime MUST return the RunState even on error so callers can
 // inspect partial results.
 type Runtime interface {
-	Execute(ctx context.Context, c *Compiled, input map[string]any, opts RuntimeOptions) (*RunState, error)
+	Execute(ctx context.Context, c *Compiled, in *Input, opts RuntimeOptions) (*RunState, error)
 }
 
 // RuntimeOptions carries run-level configuration into a Runtime
@@ -87,15 +87,14 @@ type Compiled struct {
 	Roots        []string
 }
 
-// Execute executes the compiled graph with input as the initial
-// state. Any node can read the invocation input (and any updates
-// merged in by earlier nodes) through the RunState passed to
-// Node.Execute.
+// Execute executes the compiled graph with in as the invocation
+// input. Nodes read rs.Input() for RunID/Trigger/Metadata and
+// rs.State() for node outputs merged by the walker.
 //
 // The Runtime is supplied through WithRuntime; if omitted, Execute
 // defaults to InProcessRuntime. Use WithLogger / WithMaxSteps to
 // tune observability and the step cap.
-func (c *Compiled) Execute(ctx context.Context, input map[string]any, opts ...InvokeOption) (*RunState, error) {
+func (c *Compiled) Execute(ctx context.Context, in *Input, opts ...InvokeOption) (*RunState, error) {
 	cfg := invokeConfig{runtime: InProcessRuntime{}}
 	for _, opt := range opts {
 		opt(&cfg)
@@ -105,7 +104,7 @@ func (c *Compiled) Execute(ctx context.Context, input map[string]any, opts ...In
 		return nil, fmt.Errorf("workflow: Execute given a nil Runtime via WithRuntime")
 	}
 
-	return cfg.runtime.Execute(ctx, c, input, cfg.runtimeOpts)
+	return cfg.runtime.Execute(ctx, c, in, cfg.runtimeOpts)
 }
 
 // InProcessRuntime runs graphs through the shared Walker using a
@@ -119,9 +118,9 @@ const defaultMaxSteps = 500
 // The only thing InProcessRuntime contributes beyond the walker is
 // the NodeExecutor — which runs each node in a goroutine and calls
 // Node.Execute directly.
-func (InProcessRuntime) Execute(ctx context.Context, c *Compiled, input map[string]any, opts RuntimeOptions) (*RunState, error) {
+func (InProcessRuntime) Execute(ctx context.Context, c *Compiled, in *Input, opts RuntimeOptions) (*RunState, error) {
 	w := NewWalker(opts)
-	return w.Walk(ctx, c, input, inProcessExecutor{logger: w.Logger})
+	return w.Walk(ctx, c, in, inProcessExecutor{logger: w.Logger})
 }
 
 // inProcessExecutor runs each invocation in its own goroutine and
@@ -148,17 +147,19 @@ func (e inProcessExecutor) ExecuteWave(ctx context.Context, invs []Invocation) [
 	return results
 }
 
-// runInvocation builds a per-node RunState (seeded with the shared
-// state snapshot so nodes can read state via rs.State() / rs.Get()),
-// calls Node.Execute, and returns the node's partial state update.
+// runInvocation builds a per-node RunState (bound to the invocation
+// Input, seeded with the shared state snapshot) and calls
+// Node.Execute. Its partial output update flows back to the walker
+// which merges it into the shared state.
 //
 // The per-node RunState is intentional: it keeps the in-process
 // executor byte-for-byte compatible with a durable executor whose
-// activities only see a state snapshot. A node whose Execute works
-// under InProcessRuntime also works under any Runtime that follows
-// this contract.
+// activities only see an Input + state snapshot. A node whose
+// Execute works under InProcessRuntime also works under any Runtime
+// that follows this contract.
 func runInvocation(ctx context.Context, inv Invocation, onFail context.CancelFunc) Result {
-	local := NewRunState(inv.State)
+	local := NewRunState(inv.Input)
+	local.MergeState(inv.State)
 
 	output, port, err := inv.Node.Execute(ctx, local)
 	if err != nil {

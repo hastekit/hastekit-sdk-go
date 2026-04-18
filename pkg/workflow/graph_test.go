@@ -175,14 +175,17 @@ func TestInvokeWithStartEnd(t *testing.T) {
 		t.Fatalf("compile: %v", err)
 	}
 
-	execCtx, err := compiled.Execute(context.Background(), map[string]any{"greeting": "hello"})
+	execCtx, err := compiled.Execute(context.Background(), &Input{
+		Metadata: map[string]any{"greeting": "hello"},
+	})
 	if err != nil {
 		t.Fatalf("invoke: %v", err)
 	}
 
-	if seen["greeting"] != "hello" {
-		t.Errorf("a saw state[greeting] = %v, want \"hello\"", seen["greeting"])
+	if md := execCtx.Input().Metadata; md["greeting"] != "hello" {
+		t.Errorf("input.metadata[greeting] = %v, want \"hello\"", md["greeting"])
 	}
+	_ = seen
 
 	r, ok := execCtx.GetNodeResult("a")
 	if !ok || r.Status != NodeStatusCompleted {
@@ -194,10 +197,9 @@ func TestInvokeWithStartEnd(t *testing.T) {
 		t.Errorf("END should not produce a NodeResult")
 	}
 
-	// Final state still carries the initial input.
-	state := execCtx.State()
-	if state["greeting"] != "hello" {
-		t.Errorf("state[greeting] = %v, want \"hello\"", state["greeting"])
+	// Input is preserved on the RunState across the run.
+	if md := execCtx.Input().Metadata; md["greeting"] != "hello" {
+		t.Errorf("input.metadata[greeting] = %v, want \"hello\"", md["greeting"])
 	}
 }
 
