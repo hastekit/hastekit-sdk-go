@@ -13,8 +13,8 @@ type NodeType string
 //   - Validate is called at Compile time. Return an error for bad
 //     configuration; no execution has happened yet.
 //   - Execute is called at run time. The node reads whatever it
-//     needs off in (RunContext for upstream outputs, Trigger /
-//     Metadata for per-run data) and returns a partial state update
+//     needs off in (RunContext for upstream outputs, Metadata for
+//     per-run data) and returns a partial state update
 //     (the output map) plus the port name edges should follow. The
 //     walker shallow-merges the output into in.RunContext — last
 //     writer wins.

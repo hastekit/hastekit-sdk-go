@@ -97,7 +97,6 @@ func main() {
 
 	results, err := compiled.Execute(context.Background(), &workflow.Input{
 		RunID:      uuid.NewString(),
-		Trigger:    workflow.TriggerEvent{},
 		RunContext: nil,
 		Metadata:   nil,
 	})

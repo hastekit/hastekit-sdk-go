@@ -3,13 +3,14 @@ package workflow
 // Input is the typed, single run-level object a workflow invocation
 // receives and accumulates into. It carries:
 //
-//   - Identity (RunID) and the triggering event.
+//   - Identity (RunID).
 //   - RunContext: an opaque map[string]any that the walker fills
 //     with whatever partial updates each node returns (shallow /
 //     deep merge via MergeContext). The SDK has no opinion about
 //     how hosts structure it — callers like the workflow-builder
 //     gateway group data under their own keys (e.g. "inputs" /
-//     "outputs" per nodeID) while raw SDK callers may keep it flat.
+//     "outputs" per nodeID, or the seeding trigger event) while
+//     raw SDK callers may keep it flat.
 //   - Status: per-node lifecycle markers (running / completed /
 //     failed / skipped). Deliberately minimal; per-node outputs
 //     live in RunContext, not here.
@@ -22,17 +23,9 @@ package workflow
 // concurrently.
 type Input struct {
 	RunID      string                `json:"run_id"`
-	Trigger    TriggerEvent          `json:"trigger"`
 	RunContext map[string]any        `json:"run_context,omitempty"`
 	Status     map[string]NodeStatus `json:"status,omitempty"`
 	Metadata   map[string]any        `json:"metadata,omitempty"`
-}
-
-// TriggerEvent describes what caused a workflow to run.
-type TriggerEvent struct {
-	Source  string         `json:"source"`
-	Type    string         `json:"type"`
-	Payload map[string]any `json:"payload,omitempty"`
 }
 
 // NodeStatus tracks a node's lifecycle marker.

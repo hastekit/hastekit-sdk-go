@@ -86,8 +86,8 @@ type Compiled struct {
 }
 
 // Execute executes the compiled graph with in as the invocation
-// input. Nodes read in.RunContext, in.Trigger, in.Metadata, in.RunID
-// directly inside their Execute bodies.
+// input. Nodes read in.RunContext, in.Metadata, in.RunID directly
+// inside their Execute bodies.
 //
 // The Runtime is supplied through WithRuntime; if omitted, Execute
 // defaults to InProcessRuntime. Use WithLogger / WithMaxSteps to
