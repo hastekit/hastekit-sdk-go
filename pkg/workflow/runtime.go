@@ -41,7 +41,7 @@ type invokeConfig struct {
 
 // InvokeOption configures a single Invoke call. Pass the result of
 // WithRuntime / WithLogger / WithMaxSteps (or custom options) to
-// Compiled.Invoke or Graph.Invoke.
+// Compiled.Execute or Graph.Invoke.
 type InvokeOption func(*invokeConfig)
 
 // WithRuntime selects the Runtime used for the invocation. If no
@@ -87,22 +87,24 @@ type Compiled struct {
 	Roots        []string
 }
 
-// Invoke executes the compiled graph with input as the initial
+// Execute executes the compiled graph with input as the initial
 // state. Any node can read the invocation input (and any updates
 // merged in by earlier nodes) through the RunState passed to
 // Node.Execute.
 //
-// The Runtime is supplied through WithRuntime; if omitted, Invoke
+// The Runtime is supplied through WithRuntime; if omitted, Execute
 // defaults to InProcessRuntime. Use WithLogger / WithMaxSteps to
 // tune observability and the step cap.
-func (c *Compiled) Invoke(ctx context.Context, input map[string]any, opts ...InvokeOption) (*RunState, error) {
+func (c *Compiled) Execute(ctx context.Context, input map[string]any, opts ...InvokeOption) (*RunState, error) {
 	cfg := invokeConfig{runtime: InProcessRuntime{}}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
+
 	if cfg.runtime == nil {
-		return nil, fmt.Errorf("workflow: Invoke given a nil Runtime via WithRuntime")
+		return nil, fmt.Errorf("workflow: Execute given a nil Runtime via WithRuntime")
 	}
+
 	return cfg.runtime.Execute(ctx, c, input, cfg.runtimeOpts)
 }
 

@@ -45,7 +45,7 @@ func edgeKey(nodeID, port string) string { return nodeID + ":" + port }
 //	g.AddEdge("START", "greet")
 //	g.AddEdge("greet", "END")
 //
-//	rs, err := g.Invoke(ctx, input)
+//	rs, err := g.Execute(ctx, input)
 //
 // Every mutating method returns the graph for chaining. Builder-time
 // errors (empty id, nil node, duplicate id) are collected rather than
@@ -119,13 +119,13 @@ func (g *Graph) AddEdgeOnPort(src, port, dst string) *Graph {
 // initial state. The Runtime defaults to InProcessRuntime; override
 // with WithRuntime. It is a convenience wrapper: when the caller
 // plans to run the same graph many times, compile once with
-// g.Compile() and call Compiled.Invoke repeatedly instead.
+// g.Compile() and call Compiled.Execute repeatedly instead.
 func (g *Graph) Invoke(ctx context.Context, input map[string]any, opts ...InvokeOption) (*RunState, error) {
 	c, err := g.Compile()
 	if err != nil {
 		return nil, err
 	}
-	return c.Invoke(ctx, input, opts...)
+	return c.Execute(ctx, input, opts...)
 }
 
 // AddConditionalEdge registers a runtime router on src. When src

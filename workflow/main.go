@@ -93,7 +93,7 @@ func main() {
 
 	fmt.Println(compiled)
 
-	results, err := compiled.Invoke(context.Background(), map[string]any{
+	results, err := compiled.Execute(context.Background(), map[string]any{
 		"greeting": "hi",
 	})
 	if err != nil {

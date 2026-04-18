@@ -175,7 +175,7 @@ func TestInvokeWithStartEnd(t *testing.T) {
 		t.Fatalf("compile: %v", err)
 	}
 
-	execCtx, err := compiled.Invoke(context.Background(), map[string]any{"greeting": "hello"})
+	execCtx, err := compiled.Execute(context.Background(), map[string]any{"greeting": "hello"})
 	if err != nil {
 		t.Fatalf("invoke: %v", err)
 	}
@@ -227,7 +227,7 @@ func TestConditionalEdge(t *testing.T) {
 		t.Fatalf("compile: %v", err)
 	}
 
-	rs, err := compiled.Invoke(context.Background(), nil)
+	rs, err := compiled.Execute(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("invoke: %v", err)
 	}
