@@ -344,6 +344,8 @@ func (c *ConverseStreamToNativeConverter) handleContentBlockStop(block *StreamCo
 	c.blockStarted = false
 	c.currentBlockType = ""
 	c.currentOutputID = ""
+	c.accumulatedText = ""
+	c.accumulatedSig = ""
 
 	return chunks
 }
@@ -502,8 +504,8 @@ func (c *ConverseStreamToNativeConverter) buildOutputItemDoneFunctionCall() []*r
 				Item: responses.ChunkOutputItemData{
 					Type:      "function_call",
 					Id:        c.currentOutputID,
-					CallID:    &c.currentToolUseId,
-					Name:      &c.currentToolName,
+					CallID:    utils.Ptr(c.currentToolUseId),
+					Name:      utils.Ptr(c.currentToolName),
 					Status:    "completed",
 					Arguments: utils.Ptr(c.accumulatedArgs),
 				},
