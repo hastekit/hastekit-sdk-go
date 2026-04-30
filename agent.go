@@ -7,7 +7,11 @@ import (
 type AgentOptions agents.AgentOptions
 
 func (c *SDK) NewAgent(options *AgentOptions) *agents.Agent {
-	agent := agents.NewAgent((*agents.AgentOptions)(options))
+	opts := (*agents.AgentOptions)(options)
+	if opts.StreamBroker == nil {
+		opts.StreamBroker = c.redisBroker
+	}
+	agent := agents.NewAgent(opts)
 
 	c.agents[options.Name] = agent
 

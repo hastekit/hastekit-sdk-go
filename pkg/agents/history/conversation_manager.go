@@ -253,7 +253,8 @@ func (cm *ConversationRunManager) GetConversationID() string {
 	return cm.conversationId
 }
 
-func (cm *ConversationRunManager) SaveMessages(ctx context.Context, meta map[string]any) error {
+func (cm *ConversationRunManager) SaveMessages(ctx context.Context) error {
+	meta := cm.RunState.ToMeta()
 	if meta == nil {
 		meta = map[string]any{}
 	}

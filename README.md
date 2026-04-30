@@ -17,6 +17,7 @@ A powerful Golang SDK for building AI agents and making LLM calls across multipl
 - **📊 Embeddings** - Generate text embeddings for semantic search and RAG applications
 - **🎨 Image Processing & Generation** - Vision capabilities and image generation tools
 - **🌊 Streaming Support** - Real-time streaming responses for better UX
+- **🛑 Cancellation** - Stop in-flight runs cleanly at iteration boundaries via the run handle
 - **📝 Structured Output** - JSON schema validation for reliable structured responses
 
 ## Table of Contents
@@ -156,8 +157,8 @@ func main() {
         },
     })
 
-    // Execute agent
-    out, err := agent.Execute(context.Background(), &agents.AgentInput{
+    // Execute agent — returns a handle for streaming chunks + result.
+    handle, err := agent.Execute(context.Background(), &agents.AgentInput{
         Messages: []responses.InputMessageUnion{
             responses.UserMessage("Hello! Tell me a joke."),
         },
@@ -166,9 +167,28 @@ func main() {
         log.Fatal(err)
     }
 
-    // Print response
+    // Result() drains the chunk stream and returns the aggregated output.
+    // For live streaming, range over handle.Chunks then call handle.Wait().
+    out, err := handle.Result()
+    if err != nil {
+        log.Fatal(err)
+    }
+
     fmt.Println(out.Output[0].OfOutputMessage.Content[0].OfOutputText.Text)
 }
+```
+
+`agent.Execute` is non-blocking and returns an `*AgentHandle`:
+
+```go
+type AgentHandle struct {
+    StreamID string                          // Broker channel id for this run
+    Chunks   <-chan *responses.ResponseChunk // Live chunks; channel closes when run ends
+}
+
+func (h *AgentHandle) Stop(ctx context.Context) error    // graceful cancel at next iteration
+func (h *AgentHandle) Wait() (*AgentOutput, error)       // pair with manual Chunks draining
+func (h *AgentHandle) Result() (*AgentOutput, error)     // drain Chunks + return output
 ```
 
 ## Usage
@@ -272,21 +292,23 @@ func NewGetWeatherTool() *GetWeatherTool {
     }
 }
 
-func (t *GetWeatherTool) Execute(ctx context.Context, params *agents.ToolCall) (*responses.FunctionCallOutputMessage, error) {
+func (t *GetWeatherTool) Execute(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
     // Parse arguments
     args := map[string]interface{}{}
     json.Unmarshal([]byte(params.Arguments), &args)
-    
+
     location := args["location"].(string)
-    
+
     // Your logic here
     weatherData := fetchWeather(location)
-    
-    return &responses.FunctionCallOutputMessage{
-        ID:     params.ID,
-        CallID: params.CallID,
-        Output: responses.FunctionCallOutputContentUnion{
-            OfString: utils.Ptr(weatherData),
+
+    return &agents.ToolCallResponse{
+        FunctionCallOutputMessage: &responses.FunctionCallOutputMessage{
+            ID:     params.ID,
+            CallID: params.CallID,
+            Output: responses.FunctionCallOutputContentUnion{
+                OfString: utils.Ptr(weatherData),
+            },
         },
     }, nil
 }
@@ -304,6 +326,35 @@ agent := client.NewAgent(&hastekit.AgentOptions{
     },
 })
 ```
+
+#### Streaming Chunks and Cancellation
+
+`agent.Execute` returns a handle. Range over `handle.Chunks` to forward live deltas (UI, SSE, logs); call `handle.Stop(ctx)` to ask the agent to stop at the next iteration boundary — it will record a "Cancelled by user" assistant turn in history and emit `run.completed` cleanly.
+
+```go
+handle, err := agent.Execute(ctx, &agents.AgentInput{
+    Messages: []responses.InputMessageUnion{
+        responses.UserMessage("Walk me through how to set up Postgres replication."),
+    },
+})
+if err != nil { log.Fatal(err) }
+
+// Cancel after 5 seconds — the agent finishes its current step and stops gracefully.
+go func() {
+    time.Sleep(5 * time.Second)
+    _ = handle.Stop(context.Background())
+}()
+
+for chunk := range handle.Chunks {
+    if chunk.OfOutputTextDelta != nil {
+        fmt.Print(chunk.OfOutputTextDelta.Delta)
+    }
+}
+
+out, err := handle.Wait()
+```
+
+The `StreamID` on the handle (also returned in the `X-Stream-Id` HTTP header when serving over HTTP) lets you re-subscribe to the same broker channel — useful for resuming a stream after a page refresh, or for stopping the run from a different process.
 
 ### Tools
 
@@ -351,22 +402,27 @@ agent := client.NewAgent(&hastekit.AgentOptions{
     History:     history, // Enable history
 })
 
+threadID := uuid.NewString()
+
 // First interaction
-out, err := agent.Execute(context.Background(), &agents.AgentInput{
+handle, err := agent.Execute(context.Background(), &agents.AgentInput{
     Namespace: "user-123", // Bucket conversations by namespace
+    ThreadID:  threadID,
     Messages: []responses.InputMessageUnion{
         responses.UserMessage("My name is Alice."),
     },
 })
+out, err := handle.Result()
 
-// Continue conversation
-out, err = agent.Execute(context.Background(), &agents.AgentInput{
-    Namespace:         "user-123",
-    PreviousMessageID: out.RunID, // Link to previous message
+// Continue conversation — pass the same ThreadID to keep context.
+handle, err = agent.Execute(context.Background(), &agents.AgentInput{
+    Namespace: "user-123",
+    ThreadID:  threadID,
     Messages: []responses.InputMessageUnion{
         responses.UserMessage("What's my name?"),
     },
 })
+out, err = handle.Result()
 ```
 
 ### Durable Agents

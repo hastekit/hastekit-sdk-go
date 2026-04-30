@@ -1,13 +1,11 @@
 package restate_runtime
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/agentstate"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/history"
-	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	restate "github.com/restatedev/sdk-go"
 )
 
@@ -31,22 +29,26 @@ func (w *AgentWorkflow) Run(restateCtx restate.WorkflowContext, input *WorkflowI
 		return &agents.AgentOutput{Status: agentstate.RunStatusError}, fmt.Errorf("agent not found: %s", input.AgentName)
 	}
 
-	workflowId := restate.Key(restateCtx)
-	cb := func(chunk *responses.ResponseChunk) {
-		w.broker.Publish(context.Background(), workflowId, chunk)
+	// Prefer the StreamID supplied by the caller. The Restate runtime
+	// sets it equal to the workflow key, so falling back to the key
+	// keeps older callers working.
+	streamID := input.StreamID
+	if streamID == "" {
+		streamID = restate.Key(restateCtx)
 	}
-	defer w.broker.Close(context.Background(), workflowId)
 
 	agent := w.newRestateAgentProxy(restateCtx, agentOptions)
 
-	// Execute using the SAME agent instance with durability
-	return agent.Execute(restateCtx, &agents.AgentInput{
+	// The proxy agent receives the broker via AgentOptions and publishes
+	// chunks itself using StreamID. The caller's Execute owns the broker
+	// stream's lifecycle (subscribe + close), so we don't close here.
+	return agent.ExecuteWithoutTrace(restateCtx, &agents.AgentInput{
 		Namespace:         input.Namespace,
 		ThreadID:          input.ThreadID,
 		PreviousMessageID: input.PreviousMessageID,
 		Messages:          input.Messages,
 		RunContext:        input.RunContext,
-		Callback:          cb,
+		StreamID:          streamID,
 	})
 }
 
@@ -84,6 +86,7 @@ func (w *AgentWorkflow) newRestateAgentProxy(restateCtx restate.WorkflowContext,
 		Tools:        restateTools,
 		McpServers:   mcpClients,
 		ToolExecutor: NewRestateToolExecutor(restateCtx),
+		StreamBroker: w.broker,
 	}
 
 	for _, h := range agentOptions.Handoffs {

@@ -53,6 +53,23 @@ func (in *Request) ToNativeRequest() *responses2.Request {
 
 			out.Include = append(out.Include, responses2.IncludableReasoningEncryptedContent)
 		}
+
+		if in.Thinking.Type != nil && *in.Thinking.Type == "adaptive" {
+			out.Reasoning = &responses2.ReasoningParam{
+				Summary: utils.Ptr("auto"),
+			}
+
+			switch *in.OutputConfig.Effort {
+			case "low":
+				out.Reasoning.Effort = utils.Ptr("low")
+			case "medium":
+				out.Reasoning.Effort = utils.Ptr("medium")
+			case "high":
+				out.Reasoning.Effort = utils.Ptr("high")
+			case "xhigh":
+				out.Reasoning.Effort = utils.Ptr("xhigh")
+			}
+		}
 	}
 
 	if in.OutputFormat != nil {

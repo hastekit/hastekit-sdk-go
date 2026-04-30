@@ -2,7 +2,6 @@ package restate_runtime
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -22,6 +21,11 @@ type WorkflowInput struct {
 	PreviousMessageID string
 	Messages          []responses.InputMessageUnion
 	RunContext        map[string]any
+
+	// StreamID is the broker channel used for streaming chunks and for
+	// stop signaling. The runtime sets it equal to the Restate workflow
+	// key so the workflow and the caller agree on the channel.
+	StreamID string
 }
 
 // RestateRuntime executes agents via Restate workflows for durability.
@@ -44,8 +48,11 @@ func NewRestateRuntime(endpoint string, broker agents.StreamBroker) *RestateRunt
 
 // Run registers the agent in the global registry and invokes the Restate workflow.
 func (r *RestateRuntime) Run(ctx context.Context, agent *agents.Agent, in *agents.AgentInput) (*agents.AgentOutput, error) {
-	// Invoke workflow with agent name and messages
-	runID := uuid.NewString()
+	if in.StreamID == "" {
+		in.StreamID = uuid.NewString()
+	}
+	streamID := in.StreamID
+
 	input := &WorkflowInput{
 		AgentName:         agent.Name,
 		Namespace:         in.Namespace,
@@ -53,29 +60,13 @@ func (r *RestateRuntime) Run(ctx context.Context, agent *agents.Agent, in *agent
 		PreviousMessageID: in.PreviousMessageID,
 		Messages:          in.Messages,
 		RunContext:        in.RunContext,
-	}
-
-	if r.broker != nil && in.Callback != nil {
-		// Handle streaming via callback
-		go func() {
-			fmt.Println("Subscribing to stream for run ID:", runID)
-			stream, err := r.broker.Subscribe(ctx, runID)
-			if err != nil {
-				fmt.Println("Error subscribing to stream for run ID:", runID, "error:", err)
-				return
-			}
-
-			for chunk := range stream {
-				fmt.Println("Received chunk for run ID:", runID, "chunk:", chunk)
-				in.Callback(chunk)
-			}
-		}()
+		StreamID:          streamID,
 	}
 
 	return ingress.Workflow[*WorkflowInput, *agents.AgentOutput](
 		r.client,
 		"AgentWorkflow",
-		runID,
+		streamID,
 		"Run",
 	).Request(ctx, input)
 }

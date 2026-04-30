@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/agentstate"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/history"
+	"github.com/hastekit/hastekit-sdk-go/pkg/agents/streambroker"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/constants"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
@@ -54,6 +55,7 @@ type AgentOptions struct {
 	Runtime      Runtime
 	MaxLoops     *int
 	ToolExecutor ToolExecutor
+	StreamBroker StreamBroker
 }
 
 func NewAgent(opts *AgentOptions) *Agent {
@@ -83,6 +85,11 @@ func NewAgent(opts *AgentOptions) *Agent {
 		toolExecutor = &DefaultToolExecutor{}
 	}
 
+	streamBroker := opts.StreamBroker
+	if streamBroker == nil {
+		streamBroker = streambroker.NewMemoryStreamBroker()
+	}
+
 	return &Agent{
 		Name:         opts.Name,
 		output:       opts.Output,
@@ -96,6 +103,7 @@ func NewAgent(opts *AgentOptions) *Agent {
 		maxLoops:     maxLoops,
 		handoffs:     opts.Handoffs,
 		toolExecutor: toolExecutor,
+		streamBroker: streamBroker,
 	}
 }
 
@@ -163,15 +171,18 @@ func (e *Agent) GetRunID(ctx context.Context) string {
 }
 
 type AgentInput struct {
-	Namespace         string                               `json:"namespace"`
-	ThreadID          string                               `json:"thread_id"`
-	PreviousMessageID string                               `json:"previous_message_id"`
-	Messages          []responses.InputMessageUnion        `json:"messages"`
-	RunContext        map[string]any                       `json:"run_context"`
-	Callback          func(chunk *responses.ResponseChunk) `json:"-"`
-	StreamBroker      StreamBroker                         `json:"-"`
+	Namespace         string                        `json:"namespace"`
+	ThreadID          string                        `json:"thread_id"`
+	PreviousMessageID string                        `json:"previous_message_id"`
+	Messages          []responses.InputMessageUnion `json:"messages"`
+	RunContext        map[string]any                `json:"run_context"`
 
-	// Available only on sub-agents
+	// StreamID is the broker channel used for streaming chunks and for
+	// stop signaling. The runtime and the agent loop use it to publish
+	// and to poll IsStopped. Execute generates one if empty.
+	StreamID string `json:"stream_id,omitempty"`
+
+	// This is the conversation ID shared by the parent agent and the sub-agent.
 	SessionID string `json:"shared_session_id"`
 }
 
@@ -183,25 +194,72 @@ type AgentOutput struct {
 	PendingApprovals []responses.FunctionCallMessage `json:"pending_approvals"`
 }
 
-func (e *Agent) Execute(ctx context.Context, in *AgentInput) (*AgentOutput, error) {
-	ctx, span := tracer.Start(ctx, "Agent.Execute")
-	defer span.End()
+// Execute is the single public entry point for running the agent. It
+// generates a StreamID (if not supplied), subscribes to the configured
+// stream broker for that channel, and launches the run in a background
+// goroutine. The returned handle exposes a chunk channel, a Stop
+// function for clean cancellation, and a Wait function for the final
+// AgentOutput. The agent itself publishes all chunks (run lifecycle,
+// LLM streaming, tool results) through the broker — there is no
+// callback API.
+func (e *Agent) Execute(ctx context.Context, in *AgentInput) (*AgentHandle, error) {
+	if e.streamBroker == nil {
+		return nil, fmt.Errorf("Execute requires a stream broker on the agent")
+	}
 
-	return e.ExecuteWithoutTrace(ctx, in)
+	if in.StreamID == "" {
+		in.StreamID = uuid.NewString()
+	}
+
+	chunks, err := e.streamBroker.Subscribe(ctx, in.StreamID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to subscribe to stream: %w", err)
+	}
+
+	handle := &AgentHandle{
+		StreamID: in.StreamID,
+		Chunks:   chunks,
+		broker:   e.streamBroker,
+		done:     make(chan struct{}),
+	}
+
+	go func() {
+		defer close(handle.done)
+
+		runCtx, span := tracer.Start(ctx, "Agent.Execute")
+		defer span.End()
+
+		// Stream lifecycle (Subscribe/Close) is owned by ExecuteLocal,
+		// which is the loop runner. We just observe it here.
+		handle.result, handle.err = e.ExecuteWithoutTrace(runCtx, in)
+	}()
+
+	return handle, nil
 }
 
+// ExecuteWithoutTrace dispatches to the configured runtime, falling back
+// to the in-process loop when none is set. Runtime workflow handlers
+// (Temporal, Restate) call this directly after constructing their proxy
+// agent so it skips tracing setup.
 func (e *Agent) ExecuteWithoutTrace(ctx context.Context, in *AgentInput) (*AgentOutput, error) {
-	if in.Callback == nil {
-		in.Callback = NilCallback
+	if e.runtime != nil {
+		return e.runtime.Run(ctx, e, in)
+	}
+	return e.ExecuteLocal(ctx, in)
+}
+
+// ExecuteLocal runs the agent's state machine in the calling goroutine.
+// LocalRuntime calls this inside its goroutine; ExecuteWithoutTrace calls
+// it when no runtime is set.
+//
+// ExecuteLocal owns the broker stream's lifecycle: it closes the stream
+// channel on return so subscribers terminate cleanly. Callers (Agent.Execute,
+// the gateway's runtime workflows, etc.) don't need to call Close themselves.
+func (e *Agent) ExecuteLocal(ctx context.Context, in *AgentInput) (*AgentOutput, error) {
+	if e.streamBroker != nil && in.StreamID != "" {
+		defer e.streamBroker.Close(context.Background(), in.StreamID)
 	}
 
-	// Delegate to runtime, or use default LocalRuntime if none is set
-	runtime := e.runtime
-	if runtime != nil {
-		return runtime.Run(ctx, e, in)
-	}
-
-	// Generate a run ID
 	run, err := history.NewRun(ctx, e.history, in.Namespace, in.ThreadID, in.PreviousMessageID, in.Messages)
 	if err != nil {
 		return &AgentOutput{Status: agentstate.RunStatusError, RunID: ""}, err
@@ -214,15 +272,18 @@ func (e *Agent) ExecuteWithoutTrace(ctx context.Context, in *AgentInput) (*Agent
 	if sc := trace.SpanFromContext(ctx).SpanContext(); sc.IsValid() {
 		traceid = sc.TraceID().String()
 	}
+	run.RunState.TraceID = traceid
 
 	// Emit run.created
 	// TODO: make this a durable step to avoid resending on replays
-	e.runCreated(ctx, runId, traceid, in.Callback)
+	e.runCreated(ctx, in.StreamID, runId, traceid)
 
-	return e.ExecuteWithRun(ctx, in, in.Callback, run)
+	return e.ExecuteWithRun(ctx, in, run)
 }
 
-func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chunk *responses.ResponseChunk), run *history.ConversationRunManager) (*AgentOutput, error) {
+func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, run *history.ConversationRunManager) (*AgentOutput, error) {
+	publish := e.publisher(in.StreamID)
+
 	if in.SessionID == "" {
 		in.SessionID = run.GetConversationID()
 	}
@@ -272,12 +333,6 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chun
 	// Load run state from meta (in-memory, no DB call)
 	runId := run.GetMessageID()
 
-	// TODO: what's the implication of obtaining traceid from context in case of durable execution?
-	var traceid string
-	if sc := trace.SpanFromContext(ctx).SpanContext(); sc.IsValid() {
-		traceid = sc.TraceID().String()
-	}
-
 	// Collect tool rejections
 	var rejectedToolCallIds []string
 	if run.RunState.IsPaused() {
@@ -317,12 +372,38 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chun
 
 	// Main loop - driven by state machine
 	for run.RunState.LoopIteration < e.maxLoops {
+		// Honor an external stop signal at iteration boundaries.
+		// The caller (typically via ExecuteAsync's handle.Stop) sets a
+		// flag on the broker for in.StreamID; we transition cleanly to
+		// completed so the StepComplete branch persists state and emits
+		// the run.completed event.
+		if in.StreamID != "" && e.streamBroker != nil && !run.RunState.IsComplete() {
+			stopped, _ := e.streamBroker.IsStopped(context.Background(), in.StreamID)
+			if stopped {
+				cancelMsg := responses.InputMessageUnion{
+					OfInputMessage: &responses.InputMessage{
+						Role: constants.RoleAssistant,
+						Content: responses.InputContent{
+							{OfInputText: &responses.InputTextContent{Text: "Cancelled by user"}},
+						},
+					},
+				}
+				run.AddMessages(ctx, []responses.InputMessageUnion{cancelMsg}, nil)
+				finalOutput = append(finalOutput, cancelMsg)
+				run.RunState.TransitionToComplete()
+			}
+		}
+
 		switch run.RunState.NextStep() {
 
 		case agentstate.StepCallLLM:
 			convMessages, err := run.GetMessages(ctx)
 			if err != nil {
 				return &AgentOutput{Status: agentstate.RunStatusError, RunID: runId}, err
+			}
+
+			if reminder := budgetReminder(e.maxLoops - run.RunState.LoopIteration); reminder != nil {
+				convMessages = append(convMessages, *reminder)
 			}
 
 			var activatedDeferredToolsDef []responses.ToolUnion
@@ -342,7 +423,7 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chun
 				},
 				Tools:      append(toolDefs, activatedDeferredToolsDef...),
 				Parameters: parameters,
-			}, cb)
+			}, publish)
 			if err != nil {
 				return &AgentOutput{Status: agentstate.RunStatusError, RunID: runId}, err
 			}
@@ -428,7 +509,7 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chun
 							}
 
 							handoffFn = func() (*AgentOutput, error) {
-								return handoff.Agent.ExecuteWithRun(ctx, in, cb, run)
+								return handoff.Agent.ExecuteWithRun(ctx, in, run)
 							}
 							break
 						}
@@ -512,7 +593,7 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chun
 				}
 
 				// TODO: Make this a durable step to avoid resending
-				cb(&responses.ResponseChunk{
+				publish(&responses.ResponseChunk{
 					OfFunctionCallOutput: toolResult,
 				})
 
@@ -539,13 +620,13 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chun
 			}
 
 		case agentstate.StepAwaitApproval:
-			err = run.SaveMessages(ctx, run.RunState.ToMeta(traceid))
+			err = run.SaveMessages(ctx)
 			if err != nil {
 				return &AgentOutput{Status: agentstate.RunStatusError, RunID: runId}, err
 			}
 
 			// TODO: make this a durable step to avoid resending on replays
-			e.runPaused(ctx, runId, traceid, run.RunState, cb)
+			e.runPaused(ctx, in.StreamID, runId, run.RunState)
 
 			return &AgentOutput{
 				RunID:            runId,
@@ -554,13 +635,13 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chun
 			}, nil
 
 		case agentstate.StepComplete:
-			err = run.SaveMessages(ctx, run.RunState.ToMeta(traceid))
+			err = run.SaveMessages(ctx)
 			if err != nil {
 				return &AgentOutput{Status: agentstate.RunStatusError, RunID: runId}, err
 			}
 
 			// TODO: make this a durable step to avoid resending on replays
-			e.runCompleted(ctx, runId, traceid, run.RunState, cb)
+			e.runCompleted(ctx, in.StreamID, runId, run.RunState)
 
 			return &AgentOutput{
 				RunID:  runId,
@@ -574,8 +655,48 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chun
 	return &AgentOutput{Status: agentstate.RunStatusError, RunID: runId}, fmt.Errorf("exceeded maximum loops (%d)", e.maxLoops)
 }
 
-func (e *Agent) runCreated(ctx context.Context, runId string, traceId string, cb func(chunk *responses.ResponseChunk)) error {
-	cb(&responses.ResponseChunk{
+// publisher returns a function that publishes a chunk to the broker on
+// the given stream channel. When the agent has no broker configured or
+// no stream id, the returned function is a no-op so internal callers can
+// invoke it unconditionally.
+// budgetReminder returns an ephemeral developer-role message warning
+// the agent that it is running out of iteration budget, or nil if the
+// remaining budget is comfortable. The two-turn variant gives the
+// agent room to wind down its work; the one-turn variant tells it to
+// stop calling tools and produce a final answer immediately.
+func budgetReminder(remaining int) *responses.InputMessageUnion {
+	var text string
+	switch remaining {
+	case 2:
+		text = "You have 2 turns remaining in this run. Start wrapping up: finish any in-flight work and prepare a final answer to the user."
+	case 1:
+		text = "This is your last allowed turn. Do not call any more tools. Provide a final answer to the user now using whatever information you have gathered."
+	default:
+		return nil
+	}
+	return &responses.InputMessageUnion{
+		OfInputMessage: &responses.InputMessage{
+			Role: constants.RoleUser,
+			Content: responses.InputContent{
+				{OfInputText: &responses.InputTextContent{Text: text}},
+			},
+		},
+	}
+}
+
+func (e *Agent) publisher(streamID string) func(chunk *responses.ResponseChunk) {
+	if e.streamBroker == nil || streamID == "" {
+		return func(*responses.ResponseChunk) {}
+	}
+	broker := e.streamBroker
+	return func(chunk *responses.ResponseChunk) {
+		_ = broker.Publish(context.Background(), streamID, chunk)
+	}
+}
+
+func (e *Agent) runCreated(ctx context.Context, streamID, runId, traceId string) {
+	publish := e.publisher(streamID)
+	publish(&responses.ResponseChunk{
 		OfRunCreated: &responses.ChunkRun[constants.ChunkTypeRunCreated]{
 			RunState: responses.ChunkRunData{
 				Id:      runId,
@@ -586,7 +707,7 @@ func (e *Agent) runCreated(ctx context.Context, runId string, traceId string, cb
 		},
 	})
 
-	cb(&responses.ResponseChunk{
+	publish(&responses.ResponseChunk{
 		OfRunInProgress: &responses.ChunkRun[constants.ChunkTypeRunInProgress]{
 			RunState: responses.ChunkRunData{
 				Id:      runId,
@@ -596,12 +717,10 @@ func (e *Agent) runCreated(ctx context.Context, runId string, traceId string, cb
 			},
 		},
 	})
-
-	return nil
 }
 
-func (e *Agent) runPaused(ctx context.Context, runId string, traceId string, runState *agentstate.RunState, cb func(chunk *responses.ResponseChunk)) error {
-	cb(&responses.ResponseChunk{
+func (e *Agent) runPaused(ctx context.Context, streamID, runId string, runState *agentstate.RunState) {
+	e.publisher(streamID)(&responses.ResponseChunk{
 		OfRunPaused: &responses.ChunkRun[constants.ChunkTypeRunPaused]{
 			RunState: responses.ChunkRunData{
 				Id:               runId,
@@ -609,25 +728,65 @@ func (e *Agent) runPaused(ctx context.Context, runId string, traceId string, run
 				Status:           "paused",
 				PendingToolCalls: runState.PendingToolCalls,
 				Usage:            runState.Usage,
-				TraceID:          traceId,
+				TraceID:          runState.TraceID,
 			},
 		},
 	})
-
-	return nil
 }
 
-func (e *Agent) runCompleted(ctx context.Context, runId string, traceId string, runState *agentstate.RunState, cb func(chunk *responses.ResponseChunk)) error {
-	cb(&responses.ResponseChunk{
+func (e *Agent) runCompleted(ctx context.Context, streamID, runId string, runState *agentstate.RunState) {
+	e.publisher(streamID)(&responses.ResponseChunk{
 		OfRunCompleted: &responses.ChunkRun[constants.ChunkTypeRunCompleted]{
 			RunState: responses.ChunkRunData{
 				Id:      runId,
 				Object:  "run",
 				Status:  "completed",
 				Usage:   runState.Usage,
-				TraceID: traceId,
+				TraceID: runState.TraceID,
 			},
 		},
 	})
-	return nil
+}
+
+// AgentHandle is returned by Execute. The caller has two valid usage
+// patterns: drain Chunks yourself (and optionally call Wait for the
+// aggregated AgentOutput), or call Result to drain + aggregate in one
+// step. Mixing the two — calling Wait without draining Chunks — risks
+// deadlock because the broker's Publish back-pressures when no
+// subscriber is reading.
+type AgentHandle struct {
+	StreamID string
+	Chunks   <-chan *responses.ResponseChunk
+
+	broker StreamBroker
+	done   chan struct{}
+	result *AgentOutput
+	err    error
+}
+
+// Stop signals the agent to stop. The agent transitions to completed
+// state at the next iteration boundary (after any in-flight LLM call or
+// tool execution finishes). Use Wait or Result to block until the run
+// finishes.
+func (h *AgentHandle) Stop(ctx context.Context) error {
+	return h.broker.Stop(ctx, h.StreamID)
+}
+
+// Wait blocks until the run finishes and returns the aggregated output.
+// It is the lower-level counterpart to Result and is safe to call only
+// after the chunk channel has been drained — calling Wait while the
+// broker still has buffered chunks pending will deadlock.
+func (h *AgentHandle) Wait() (*AgentOutput, error) {
+	<-h.done
+	return h.result, h.err
+}
+
+// Result drains the chunk channel (discarding chunks) and then returns
+// the aggregated AgentOutput. Use this when you only care about the
+// final output and don't need to observe streaming chunks. To consume
+// chunks yourself, range over Chunks and then call Wait instead.
+func (h *AgentHandle) Result() (*AgentOutput, error) {
+	for range h.Chunks {
+	}
+	return h.Wait()
 }

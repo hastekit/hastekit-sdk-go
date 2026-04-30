@@ -97,16 +97,17 @@ func (agent *A2A) Execute(ctx context.Context, reqCtx *a2asrv.RequestContext, q 
 	}
 	q.Write(ctx, workingStatusUpdate)
 
-	// Prepare message to invoke to agent
-	_, err := agent.agent.Execute(ctx, &AgentInput{
+	// Prepare message to invoke to agent. A2A doesn't surface chunks
+	// today, so use Result to drain + aggregate in one step.
+	handle, err := agent.agent.Execute(ctx, &AgentInput{
 		Namespace:         "",
 		PreviousMessageID: "",
 		Messages:          []responses.InputMessageUnion{},
-		Callback:          NilCallback,
 	})
 	if err != nil {
-
+		return nil
 	}
+	_, _ = handle.Result()
 
 	return nil
 }

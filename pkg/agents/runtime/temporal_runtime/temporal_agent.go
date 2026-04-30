@@ -6,7 +6,6 @@ import (
 
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/history"
-	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -62,12 +61,12 @@ func (a *TemporalAgentV2) Execute(ctx workflow.Context, in *agents.AgentInput) (
 		StartToCloseTimeout: 10 * time.Second,
 	})
 
-	workflowId := workflow.GetInfo(ctx).WorkflowExecution.ID
-	cb := func(chunk *responses.ResponseChunk) {
-		a.broker.Publish(context.Background(), workflowId, chunk)
+	// Fall back to the workflow execution ID when the caller didn't set
+	// a StreamID. The proxy agent receives the broker via AgentOptions
+	// and publishes through it using in.StreamID.
+	if in.StreamID == "" {
+		in.StreamID = workflow.GetInfo(ctx).WorkflowExecution.ID
 	}
-	defer a.broker.Close(context.Background(), workflowId)
-	in.Callback = cb
 
 	agent := a.newTemporalProxyAgent(ctx)
 
@@ -110,6 +109,7 @@ func (a *TemporalAgentV2) newTemporalProxyAgent(ctx workflow.Context) *agents.Ag
 		Tools:        toolProxies,
 		McpServers:   mcpProxies,
 		ToolExecutor: NewTemporalToolExecutor(ctx),
+		StreamBroker: a.broker,
 	}
 
 	for _, h := range a.options.Handoffs {

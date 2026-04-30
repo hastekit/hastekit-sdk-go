@@ -40,17 +40,18 @@ func (c *SDK) setTemporalClient() {
 
 func (c *SDK) NewTemporalAgent(options *AgentOptions) *agents.Agent {
 	agent := agents.NewAgent(&agents.AgentOptions{
-		Name:        options.Name,
-		LLM:         options.LLM,
-		History:     options.History,
-		Parameters:  options.Parameters,
-		Output:      options.Output,
-		Tools:       options.Tools,
-		Instruction: options.Instruction,
-		McpServers:  options.McpServers,
-		Runtime:     temporal_runtime.NewTemporalRuntime(c.temporalClient, c.redisBroker),
-		MaxLoops:    options.MaxLoops,
-		Handoffs:    options.Handoffs,
+		Name:         options.Name,
+		LLM:          options.LLM,
+		History:      options.History,
+		Parameters:   options.Parameters,
+		Output:       options.Output,
+		Tools:        options.Tools,
+		Instruction:  options.Instruction,
+		McpServers:   options.McpServers,
+		Runtime:      temporal_runtime.NewTemporalRuntime(c.temporalClient, c.redisBroker),
+		MaxLoops:     options.MaxLoops,
+		Handoffs:     options.Handoffs,
+		StreamBroker: c.redisBroker,
 	})
 
 	c.agents[options.Name] = agent

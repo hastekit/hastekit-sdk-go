@@ -8,7 +8,7 @@ import (
 )
 
 type HandoffTarget interface {
-	ExecuteWithRun(ctx context.Context, in *AgentInput, cb func(chunk *responses.ResponseChunk), run *history.ConversationRunManager) (*AgentOutput, error)
+	ExecuteWithRun(ctx context.Context, in *AgentInput, run *history.ConversationRunManager) (*AgentOutput, error)
 }
 
 type Handoff struct {

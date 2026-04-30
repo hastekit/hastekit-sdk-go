@@ -32,6 +32,7 @@ type RunState struct {
 	Usage                 responses.Usage                 `json:"usage"`
 	PendingToolCalls      []responses.FunctionCallMessage `json:"pending_tool_calls,omitempty"`
 	ToolsAwaitingApproval []responses.FunctionCallMessage `json:"tools_awaiting_approval,omitempty"`
+	TraceID               string                          `json:"traceid"`
 }
 
 // NextStep returns what the agent should do next
@@ -100,13 +101,13 @@ func NewRunState() *RunState {
 }
 
 // ToMeta converts RunState to a map for storage in messages.meta
-func (s *RunState) ToMeta(traceid string) map[string]any {
+func (s *RunState) ToMeta() map[string]any {
 	runStateMap := map[string]any{
 		"status":         s.getStatus(),
 		"current_step":   string(s.CurrentStep),
 		"loop_iteration": s.LoopIteration,
 		"usage":          s.Usage,
-		"traceid":        traceid,
+		"traceid":        s.TraceID,
 	}
 
 	if len(s.PendingToolCalls) > 0 {
