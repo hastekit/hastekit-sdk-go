@@ -139,7 +139,7 @@ func (c *Client) NewStreamingResponses(ctx context.Context, inp *responses2.Requ
 			}
 
 			line = strings.TrimRight(line, "\r\n")
-			fmt.Println(line)
+			//fmt.Println(line)
 			if strings.HasPrefix(line, "data:") {
 				openAiResponseChunk := &openai_responses2.ResponseChunk{}
 				err = sonic.Unmarshal([]byte(strings.TrimPrefix(line, "data:")), openAiResponseChunk)

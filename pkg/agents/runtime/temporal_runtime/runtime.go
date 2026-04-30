@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents"
 	"go.temporal.io/sdk/client"
 )
@@ -25,33 +26,18 @@ func (r *TemporalRuntime) Run(ctx context.Context, agent *agents.Agent, in *agen
 		return nil, fmt.Errorf("no temporal client available")
 	}
 
+	if in.StreamID == "" {
+		in.StreamID = uuid.NewString()
+	}
+
 	run, err := r.client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue: "AgentWorkflowTaskQueue",
+		ID:        in.StreamID,
 	}, agent.Name+"_AgentWorkflow", in)
 	if err != nil {
 		return nil, err
 	}
 
-	runID := run.GetID()
-
-	if r.broker != nil && in.Callback != nil {
-		// Handle streaming via callback
-		go func() {
-			fmt.Println("Subscribing to stream for run ID:", runID)
-			stream, err := r.broker.Subscribe(ctx, runID)
-			if err != nil {
-				fmt.Println("Error subscribing to stream for run ID:", runID, "error:", err)
-				return
-			}
-
-			for chunk := range stream {
-				fmt.Println("Received chunk for run ID:", runID, "chunk:", chunk)
-				in.Callback(chunk)
-			}
-		}()
-	}
-
-	// Wait for result
 	var result agents.AgentOutput
 	if err := run.Get(ctx, &result); err != nil {
 		return nil, err

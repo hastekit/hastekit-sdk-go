@@ -45,7 +45,7 @@ func (t *AgentTool) Execute(ctx context.Context, params *agents.ToolCall) (*agen
 		}
 	}
 
-	result, err := t.agent.Execute(ctx, &agents.AgentInput{
+	handle, err := t.agent.Execute(ctx, &agents.AgentInput{
 		Namespace: namespace,
 		ThreadID:  threadId,
 		Messages: []responses.InputMessageUnion{
@@ -58,6 +58,13 @@ func (t *AgentTool) Execute(ctx context.Context, params *agents.ToolCall) (*agen
 		},
 		SessionID: params.SessionID, // Using conversation id as the shared session id
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	// The parent agent reports tool output, not chunks. Result drains
+	// the sub-agent's chunk stream and returns the aggregated output.
+	result, err := handle.Result()
 	if err != nil {
 		return nil, err
 	}

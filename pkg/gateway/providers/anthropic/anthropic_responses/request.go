@@ -20,11 +20,16 @@ type Request struct {
 	Tools        []ToolUnion       `json:"tools,omitempty"`
 	Stream       *bool             `json:"stream,omitempty"`
 	OutputFormat map[string]any    `json:"output_format,omitempty"`
+	OutputConfig *OutputConfig     `json:"output_config,omitempty"`
+}
+
+type OutputConfig struct {
+	Effort *string `json:"effort,omitempty"` // "max", "xhigh", "high", "medium", "low". Only supported from opus 4.6 onwards.
 }
 
 type ThinkingParam struct {
-	Type         *string `json:"type"` // "enabled" or "disabled"
-	BudgetTokens *int    `json:"budget_tokens"`
+	Type         *string `json:"type"` // "enabled" or "disabled" or "adaptive"
+	BudgetTokens *int    `json:"budget_tokens,omitempty"`
 }
 
 type MessageUnion struct {

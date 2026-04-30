@@ -58,7 +58,7 @@ const (
 
 type ReasoningParam struct {
 	Summary      *string `json:"summary"` // "auto", "concise", "detailed"
-	Effort       *string `json:"effort"`  // "none", "minimal", "low", "medium", "high", "xhigh"
+	Effort       *string `json:"effort"`  // "none", "low", "medium", "high", "xhigh"
 	BudgetTokens *int    `json:",omitempty"`
 }
 

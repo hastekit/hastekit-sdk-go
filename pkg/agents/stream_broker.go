@@ -21,4 +21,12 @@ type StreamBroker interface {
 	// Close signals that no more chunks will be published to the channel.
 	// This should close all subscriber channels for the given channel.
 	Close(ctx context.Context, channel string) error
+
+	// Stop records a stop request for the given channel. The agent loop
+	// reads this via IsStopped at iteration boundaries and transitions
+	// to completed when set. Idempotent.
+	Stop(ctx context.Context, channel string) error
+
+	// IsStopped reports whether Stop has been called for the channel.
+	IsStopped(ctx context.Context, channel string) (bool, error)
 }

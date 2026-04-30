@@ -99,14 +99,19 @@ func New(opts *ClientOptions) (*SDK, error) {
 	}
 
 	var broker agents.StreamBroker
-	var err error
 	if opts.RedisConfig.Endpoint != "" {
+		var err error
 		broker, err = streambroker.NewRedisStreamBroker(streambroker.RedisStreamBrokerOptions{
 			Addr: opts.RedisConfig.Endpoint,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("error creating redis stream broker: %w", err)
 		}
+	} else {
+		// Execute requires a broker. Fall back to an in-memory broker so
+		// agents work out-of-the-box; production deployments should
+		// configure Redis for cross-process streaming.
+		broker = streambroker.NewMemoryStreamBroker()
 	}
 
 	httpClient := http.DefaultClient

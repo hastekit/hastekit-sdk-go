@@ -35,7 +35,6 @@ func (l *TemporalLLM) NewStreamingResponsesActivity(ctx context.Context, in *res
 			slog.ErrorContext(ctx, "Failed to publish chunk to stream broker", "error", err)
 		}
 	})
-	l.broker.Close(ctx, activity.GetInfo(ctx).WorkflowExecution.ID)
 	if err != nil {
 		return nil, err
 	}

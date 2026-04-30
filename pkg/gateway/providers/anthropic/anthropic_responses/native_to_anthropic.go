@@ -44,22 +44,48 @@ func NativeRequestToRequest(in *responses2.Request) *Request {
 	}
 
 	if in.Reasoning != nil {
-		out.Thinking = &ThinkingParam{
-			Type: utils.Ptr("enabled"),
-		}
+		if IsAdaptiveThinkingModel(in.Model) {
+			out.Thinking = &ThinkingParam{
+				Type: utils.Ptr("adaptive"),
+			}
 
-		// Budget tokens (derived from effort)
-		switch *in.Reasoning.Effort {
-		case "none":
-			out.Thinking.Type = utils.Ptr("disabled")
-		case "low":
-			out.Thinking.BudgetTokens = utils.Ptr(1024)
-		case "medium":
-			out.Thinking.BudgetTokens = utils.Ptr(3000)
-		case "high":
-			out.Thinking.BudgetTokens = utils.Ptr(6000)
-		case "xhigh":
-			out.Thinking.BudgetTokens = utils.Ptr(10000)
+			if out.OutputConfig == nil {
+				out.OutputConfig = &OutputConfig{}
+			}
+
+			switch *in.Reasoning.Effort {
+			case "none":
+				out.Thinking.Type = utils.Ptr("disabled")
+			case "low":
+				out.OutputConfig.Effort = utils.Ptr("low")
+			case "medium":
+				out.OutputConfig.Effort = utils.Ptr("medium")
+			case "high":
+				out.OutputConfig.Effort = utils.Ptr("high")
+			case "xhigh":
+				out.OutputConfig.Effort = utils.Ptr("xhigh")
+			default:
+				out.OutputConfig.Effort = utils.Ptr("high")
+			}
+
+		} else {
+			out.Thinking = &ThinkingParam{
+				Type: utils.Ptr("enabled"),
+			}
+
+			// Budget tokens (derived from effort)
+			switch *in.Reasoning.Effort {
+			case "none":
+				out.Thinking.Type = utils.Ptr("disabled")
+			case "low":
+				out.Thinking.BudgetTokens = utils.Ptr(1024)
+			case "medium":
+				out.Thinking.BudgetTokens = utils.Ptr(3000)
+			case "high":
+				out.Thinking.BudgetTokens = utils.Ptr(6000)
+			case "xhigh":
+				out.Thinking.BudgetTokens = utils.Ptr(10000)
+			}
 		}
 	}
 
@@ -1126,4 +1152,8 @@ func (c *NativeResponseChunkToResponseChunkConverter) buildMessageStop() Respons
 			Type: ChunkTypeMessageStop("message_stop"),
 		},
 	}
+}
+
+func IsAdaptiveThinkingModel(model string) bool {
+	return strings.Contains(model, "4-6") || strings.Contains(model, "4-7")
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/hastekit/hastekit-sdk-go/pkg/agents"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 )
 
@@ -18,6 +17,7 @@ type MemoryStreamBroker struct {
 	mu          sync.RWMutex
 	subscribers map[string][]chan *responses.ResponseChunk
 	closed      map[string]bool
+	stopped     map[string]bool
 }
 
 // NewMemoryStreamBroker creates a new in-memory stream broker.
@@ -25,6 +25,7 @@ func NewMemoryStreamBroker() *MemoryStreamBroker {
 	return &MemoryStreamBroker{
 		subscribers: make(map[string][]chan *responses.ResponseChunk),
 		closed:      make(map[string]bool),
+		stopped:     make(map[string]bool),
 	}
 }
 
@@ -113,6 +114,21 @@ func (b *MemoryStreamBroker) Close(ctx context.Context, channel string) error {
 	return nil
 }
 
+// Stop records a stop request for the given channel.
+func (b *MemoryStreamBroker) Stop(ctx context.Context, channel string) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.stopped[channel] = true
+	return nil
+}
+
+// IsStopped reports whether Stop has been called for the channel.
+func (b *MemoryStreamBroker) IsStopped(ctx context.Context, channel string) (bool, error) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.stopped[channel], nil
+}
+
 // Reset clears all subscribers and closed state.
 // Useful for testing.
 func (b *MemoryStreamBroker) Reset() {
@@ -128,7 +144,5 @@ func (b *MemoryStreamBroker) Reset() {
 
 	b.subscribers = make(map[string][]chan *responses.ResponseChunk)
 	b.closed = make(map[string]bool)
+	b.stopped = make(map[string]bool)
 }
-
-// Ensure MemoryStreamBroker implements StreamBroker
-var _ agents.StreamBroker = (*MemoryStreamBroker)(nil)

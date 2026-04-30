@@ -13,17 +13,18 @@ import (
 
 func (c *SDK) NewRestateAgent(options *AgentOptions) *agents.Agent {
 	agent := agents.NewAgent(&agents.AgentOptions{
-		Name:        options.Name,
-		LLM:         options.LLM,
-		History:     options.History,
-		Parameters:  options.Parameters,
-		Output:      options.Output,
-		Tools:       options.Tools,
-		Instruction: options.Instruction,
-		McpServers:  options.McpServers,
-		Runtime:     restate_runtime.NewRestateRuntime(c.restateConfig.Endpoint, c.redisBroker),
-		MaxLoops:    options.MaxLoops,
-		Handoffs:    options.Handoffs,
+		Name:         options.Name,
+		LLM:          options.LLM,
+		History:      options.History,
+		Parameters:   options.Parameters,
+		Output:       options.Output,
+		Tools:        options.Tools,
+		Instruction:  options.Instruction,
+		McpServers:   options.McpServers,
+		Runtime:      restate_runtime.NewRestateRuntime(c.restateConfig.Endpoint, c.redisBroker),
+		MaxLoops:     options.MaxLoops,
+		Handoffs:     options.Handoffs,
+		StreamBroker: c.redisBroker,
 	})
 
 	c.agents[options.Name] = agent

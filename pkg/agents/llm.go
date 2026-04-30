@@ -129,7 +129,3 @@ func (a *Accumulator) ReadStream(stream chan *responses.ResponseChunk, cb func(c
 		Usage:  usage,
 	}, nil
 }
-
-func NilCallback(msg *responses.ResponseChunk) {
-	// No-op
-}

@@ -6,7 +6,6 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents"
-	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
 )
 
@@ -38,20 +37,25 @@ func (c *SDK) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 
-	payload.Callback = func(chunk *responses.ResponseChunk) {
+	handle, err := agent.Execute(r.Context(), &payload)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	for chunk := range handle.Chunks {
 		buf, err := sonic.Marshal(chunk)
 		if err != nil {
-			return
+			continue
 		}
-
 		_, _ = fmt.Fprintf(w, "event: %s\n", chunk.ChunkType())
 		_, _ = fmt.Fprintf(w, "data: %s\n\n", buf)
 		flusher.Flush()
 	}
 
-	_, err := agent.Execute(r.Context(), &payload)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+	if _, err := handle.Wait(); err != nil {
+		// Agent already streamed any error chunks before exit; nothing
+		// useful to do at this point because headers are flushed.
 		return
 	}
 }
