@@ -104,16 +104,14 @@ func NativeRequestToRequest(in *responses2.Request) *Request {
 			return nil
 		}
 
-		var extraFields *ExtraFields
-		err = sonic.Unmarshal(buf, extraFields)
+		var extraFields ExtraFields
+		err = sonic.Unmarshal(buf, &extraFields)
 		if err != nil {
-			slog.Error("error in unmarshaling extra fields")
+			slog.Error("error in unmarshaling extra fields", slog.Any("err", err.Error()))
 			return nil
 		}
 
-		if extraFields != nil {
-			out.ExtraFields = *extraFields
-		}
+		out.ExtraFields = extraFields
 	}
 
 	return out

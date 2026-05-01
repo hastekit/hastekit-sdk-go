@@ -10,34 +10,39 @@ import (
 	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
 )
 
+// ExternalPromptPersistence resolves a (prompt name, alias) pair
+// against the gateway and returns the underlying template. The
+// gateway's /by-alias/{alias_name} endpoint runs alias resolution
+// (including weighted traffic split for two-version aliases) and
+// returns the chosen version's template — keeping the SDK to a
+// single round trip per LoadPrompt call.
 type ExternalPromptPersistence struct {
 	Endpoint   string
 	projectID  uuid.UUID
 	name       string
-	label      string
+	alias      string
 	httpClient *http.Client
 }
 
-func NewExternalPromptPersistence(endpoint string, projectID uuid.UUID, name string, label string, httpClient *http.Client) *ExternalPromptPersistence {
+func NewExternalPromptPersistence(endpoint string, projectID uuid.UUID, name string, alias string, httpClient *http.Client) *ExternalPromptPersistence {
 	return &ExternalPromptPersistence{
 		Endpoint:   endpoint,
 		projectID:  projectID,
 		name:       name,
-		label:      label,
+		alias:      alias,
 		httpClient: httpClient,
 	}
 }
 
 // PromptVersion represents a version of a prompt template
 type PromptVersion struct {
-	ID            uuid.UUID `json:"id" db:"id"`
-	PromptID      uuid.UUID `json:"prompt_id" db:"prompt_id"`
-	Version       int       `json:"version" db:"version"`
-	Template      string    `json:"template" db:"template"`
-	CommitMessage string    `json:"commit_message" db:"commit_message"`
-	Label         *string   `json:"label,omitempty" db:"label"`
-	CreatedAt     time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at" db:"updated_at"`
+	ID        uuid.UUID `json:"id" db:"id"`
+	PromptID  uuid.UUID `json:"prompt_id" db:"prompt_id"`
+	Version   int       `json:"version" db:"version"`
+	Template  string    `json:"template" db:"template"`
+	Immutable bool      `json:"immutable" db:"immutable"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 }
 
 // PromptVersionWithPrompt combines a prompt version with its prompt information
@@ -47,8 +52,7 @@ type PromptVersionWithPrompt struct {
 }
 
 func (p *ExternalPromptPersistence) LoadPrompt(ctx context.Context) (string, error) {
-	// Read the prompt from file
-	url := fmt.Sprintf("%s/api/agent-server/prompts/%s/label/%s?project_id=%s", p.Endpoint, p.name, p.label, p.projectID)
+	url := fmt.Sprintf("%s/api/agent-server/prompts/%s/by-alias/%s?project_id=%s", p.Endpoint, p.name, p.alias, p.projectID)
 
 	resp, err := p.httpClient.Get(url)
 	if err != nil {
