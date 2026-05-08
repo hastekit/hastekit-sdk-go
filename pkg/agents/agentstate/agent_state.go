@@ -36,6 +36,12 @@ type RunState struct {
 	QueuedRejections      []string                        `json:"queued_rejections,omitempty"`
 	QueuedMessages        []responses.InputMessageUnion   `json:"queued_messages,omitempty"`
 	TraceID               string                          `json:"traceid"`
+
+	// PendingNestedToolCalls maps the parent tool call ID to the nested tool call ID
+	PendingNestedToolCalls map[string]string `json:"pending_nested_tool_calls,omitempty"`
+
+	// PausedToolCalls maps the parent tool call ID to the paused tool call
+	PausedToolCalls map[string]responses.FunctionCallMessage `json:"paused_tool_calls,omitempty"`
 }
 
 // NextStep returns what the agent should do next
@@ -133,6 +139,14 @@ func (s *RunState) ToMeta() map[string]any {
 		runStateMap["queued_messages"] = s.QueuedMessages
 	}
 
+	if len(s.PendingNestedToolCalls) > 0 {
+		runStateMap["pending_nested_tool_calls"] = s.PendingNestedToolCalls
+	}
+
+	if len(s.PausedToolCalls) > 0 {
+		runStateMap["paused_tool_calls"] = s.PausedToolCalls
+	}
+
 	return map[string]any{
 		"run_state": runStateMap,
 	}
@@ -219,5 +233,56 @@ func LoadRunStateFromMeta(meta map[string]any) *RunState {
 		}
 	}
 
+	if pendingNestedToolCalls, ok := runStateData["pending_nested_tool_calls"]; ok {
+		pendingNestedToolCallsBytes, err := sonic.Marshal(pendingNestedToolCalls)
+		if err == nil {
+			sonic.Unmarshal(pendingNestedToolCallsBytes, &state.PendingNestedToolCalls)
+		}
+	}
+
+	if pausedToolCalls, ok := runStateData["paused_tool_calls"]; ok {
+		pausedToolCallsBytes, err := sonic.Marshal(pausedToolCalls)
+		if err == nil {
+			sonic.Unmarshal(pausedToolCallsBytes, &state.PausedToolCalls)
+		}
+	}
+
 	return state
+}
+
+// CollectNestedApprovalsForParent walks PendingNestedToolCalls for
+// every inner CallID whose parent is parentCallID, then partitions
+// those inner CallIDs by membership in QueuedApprovals /
+// QueuedRejections.
+//
+// An inner CallID present in neither queue means the user hasn't
+// decided that one yet — it's left out of both partitions. The
+// inner agent will see only what's been decided and will pause again
+// on the rest if any remain undecided after its own
+// ProcessIncomingMessages run.
+func (s *RunState) CollectNestedApprovalsForParent(parentCallID string) (approved, rejected []string) {
+	for innerID, parentID := range s.PendingNestedToolCalls {
+		if parentID != parentCallID {
+			continue
+		}
+		switch {
+		case contains(s.QueuedRejections, innerID):
+			rejected = append(rejected, innerID)
+		case contains(s.QueuedApprovals, innerID):
+			approved = append(approved, innerID)
+		}
+	}
+	return approved, rejected
+}
+
+// contains is a small helper kept package-local to avoid pulling in
+// slices for a single check (and to keep this file Go-version
+// agnostic).
+func contains(haystack []string, needle string) bool {
+	for _, s := range haystack {
+		if s == needle {
+			return true
+		}
+	}
+	return false
 }

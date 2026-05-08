@@ -477,12 +477,25 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, run *history
 		case agentstate.StepExecuteTools:
 			// Execute pending tool calls
 			var handoffFn func() (*AgentOutput, error)
-
 			var executableToolCalls []ExecutableToolCall
 
-			toolResults := make([]*ToolCallResponse, len(run.RunState.PendingToolCalls))
+			// Flatten nested tool calls
+			pendingToolCalls := []responses.FunctionCallMessage{}
+			seenPausedToolCalls := map[string]bool{}
+			for _, toolCall := range run.RunState.PendingToolCalls {
+				parentToolCallID, isNestedTool := run.RunState.PendingNestedToolCalls[toolCall.CallID]
+				if isNestedTool {
+					if _, ok := seenPausedToolCalls[parentToolCallID]; !ok {
+						pendingToolCalls = append(pendingToolCalls, run.RunState.PausedToolCalls[parentToolCallID])
+					}
+					seenPausedToolCalls[parentToolCallID] = true
+				} else {
+					pendingToolCalls = append(pendingToolCalls, toolCall)
+				}
+			}
 
-			for i, toolCall := range run.RunState.PendingToolCalls {
+			toolResults := make([]*ToolCallResponse, len(pendingToolCalls))
+			for i, toolCall := range pendingToolCalls {
 				if rejected := slices.Contains(run.RunState.QueuedRejections, toolCall.CallID); rejected {
 					toolResults[i] = toolResponse(toolCall, "User has declined the request to call this tool")
 					continue
@@ -521,6 +534,24 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, run *history
 						toolResults[i] = toolResponse(toolCall, "Tool not found: "+toolCall.Name)
 						continue
 					}
+
+					_, resuming := run.RunState.PausedToolCalls[toolCall.CallID]
+
+					var resumeMessages []responses.InputMessageUnion
+					if resuming {
+						approvedInner, rejectedInner := run.RunState.CollectNestedApprovalsForParent(toolCall.CallID)
+						if len(approvedInner) > 0 || len(rejectedInner) > 0 {
+							resumeMessages = []responses.InputMessageUnion{
+								{
+									OfFunctionCallApprovalResponse: &responses.FunctionCallApprovalResponseMessage{
+										ApprovedCallIds: approvedInner,
+										RejectedCallIds: rejectedInner,
+									},
+								},
+							}
+						}
+					}
+
 					executableToolCalls = append(executableToolCalls, ExecutableToolCall{
 						Index:    i,
 						ToolName: toolCall.Name,
@@ -532,6 +563,8 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, run *history
 							SessionID:           in.SessionID,
 							RunContext:          in.RunContext,
 							State:               run.State,
+							ShouldResume:        resuming,
+							ResumeMessages:      resumeMessages,
 						},
 					})
 				}
@@ -553,6 +586,9 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, run *history
 						toolResults[pe.Index] = toolResponse(*pe.ToolCall.FunctionCallMessage, fmt.Sprintf("Tool execution failed: %v", result.Err))
 					} else {
 						toolResults[pe.Index] = result.Response
+						if len(result.Response.PendingApprovals) > 0 {
+							run.ProcessPendingNestedToolCalls(*pe.ToolCall.FunctionCallMessage, result.Response.PendingApprovals)
+						}
 					}
 				}
 			}
@@ -566,6 +602,10 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, run *history
 				// Merge sub-agent context if present
 				if toolResult.StateUpdates != nil {
 					maps.Copy(run.State, toolResult.StateUpdates)
+				}
+
+				if len(toolResult.PendingApprovals) > 0 {
+					continue
 				}
 
 				// TODO: Make this a durable step to avoid resending
@@ -746,6 +786,20 @@ type AgentHandle struct {
 // finishes.
 func (h *AgentHandle) Stop(ctx context.Context) error {
 	return h.broker.Stop(ctx, h.StreamID)
+}
+
+// EnqueueMessage pushes msg onto the run's broker queue. The agent
+// drains the queue at iteration boundaries (alongside the IsStopped
+// check) and folds queued messages into the current run via
+// ProcessIncomingMessages — approval responses become approve/reject
+// queues; other input messages slot into the next LLM call.
+//
+// Use this to deliver follow-ups (user messages, approval/rejection
+// decisions) to a run that's still in flight. For runs that have
+// already paused and exited, the next agent.Execute on the same
+// thread is the right entry instead.
+func (h *AgentHandle) EnqueueMessage(ctx context.Context, msg responses.InputMessageUnion) error {
+	return h.broker.EnqueueMessage(ctx, h.StreamID, msg)
 }
 
 // Wait blocks until the run finishes and returns the aggregated output.

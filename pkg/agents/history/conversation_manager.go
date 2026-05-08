@@ -351,3 +351,23 @@ func (cm *ConversationRunManager) ProcessIncomingMessages(messages []responses.I
 		}
 	}
 }
+
+func (cm *ConversationRunManager) ProcessPendingNestedToolCalls(parentToolCall responses.FunctionCallMessage, toolCalls []responses.FunctionCallMessage) {
+	if cm.RunState.PendingNestedToolCalls == nil {
+		cm.RunState.PendingNestedToolCalls = map[string]string{}
+	}
+
+	if cm.RunState.PausedToolCalls == nil {
+		cm.RunState.PausedToolCalls = map[string]responses.FunctionCallMessage{}
+	}
+
+	cm.RunState.ToolsAwaitingApproval = append(cm.RunState.ToolsAwaitingApproval, toolCalls...)
+
+	// Track the parent tool call ID and the nested tool call IDs
+	for _, pendingApproval := range toolCalls {
+		cm.RunState.PendingNestedToolCalls[pendingApproval.CallID] = parentToolCall.CallID
+	}
+
+	// Add the parent tool call to the paused tool calls
+	cm.RunState.PausedToolCalls[parentToolCall.CallID] = parentToolCall
+}

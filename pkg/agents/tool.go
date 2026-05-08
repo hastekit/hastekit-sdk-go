@@ -14,11 +14,27 @@ type ToolCall struct {
 	SessionID    string            `json:"session_id"`
 	RunContext   map[string]any    `json:"run_context"`
 	State        map[string]string `json:"state,omitempty"`
+
+	// ShouldResume tells Execute to continue an in-flight call
+	// instead of starting a fresh one. The tool implementation reads
+	// this flag and switches to its resume code path — typically
+	// recovering saved per-call state from State (e.g., a sub-agent's
+	// thread id and prior run id) and feeding ResumeMessages into
+	// the underlying run as a continuation.
+	ShouldResume bool `json:"should_resume,omitempty"`
+
+	// ResumeMessages carries the continuation messages the tool
+	// should forward into its inner run on resume — typically a
+	// single FunctionCallApprovalResponseMessage built by the agent
+	// loop from QueuedApprovals / QueuedRejections. Nil when
+	// ShouldResume is false.
+	ResumeMessages []responses.InputMessageUnion `json:"resume_messages,omitempty"`
 }
 
 type ToolCallResponse struct {
 	*responses.FunctionCallOutputMessage
-	StateUpdates map[string]string `json:"state_updates,omitempty"`
+	StateUpdates     map[string]string               `json:"state_updates,omitempty"`
+	PendingApprovals []responses.FunctionCallMessage `json:"pending_approvals,omitempty"`
 }
 
 type Tool interface {

@@ -7,6 +7,7 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/google/uuid"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents"
+	"github.com/hastekit/hastekit-sdk-go/pkg/agents/agentstate"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/constants"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
@@ -78,42 +79,92 @@ func NewAgentTool(name string, description string, agent *agents.Agent, contextM
 	}
 }
 
+// Execute runs the inner agent. When params.ShouldResume is set,
+// continues a previously paused call instead of starting a fresh
+// one — recovers the inner thread id and prior AgentOutput from
+// params.State (written on the earlier pause), then re-enters the
+// inner agent with params.ResumeMessages (typically a single
+// FunctionCallApprovalResponseMessage). Otherwise, parses the LLM's
+// arguments, picks/derives a thread id per contextMode, and starts
+// the inner agent fresh.
+//
+// In both branches, the inner result is shaped by responseFromResult:
+// a paused inner re-emits PendingApprovals (and refreshes the saved
+// state entries on params.State for the next resume); a completed
+// inner produces the outer call's FunctionCallOutputMessage so the
+// outer history regains its function_call ↔ function_call_output
+// pair.
 func (t *AgentTool) Execute(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
 	namespace := params.Namespace + "/" + params.Name
 
-	var agentArgs agentToolArgument
-	if err := sonic.Unmarshal([]byte(params.Arguments), &agentArgs); err != nil {
-		return nil, err
-	}
+	var (
+		threadId          string
+		previousMessageID string
+		messages          []responses.InputMessageUnion
+	)
 
-	var threadId string
-	if t.contextMode == SubAgentContextModeIsolated {
-		subAgentThreadId, exists := params.State[t.getSubAgentThreadIdStateKey()]
-		if exists {
-			threadId = subAgentThreadId
-		} else {
-			threadId = uuid.NewString()
+	if params.ShouldResume {
+		if params.State == nil {
+			return nil, fmt.Errorf("agent_tool: cannot resume — params.State missing")
 		}
+
+		runStateRaw, ok := params.State[t.getRunStateKey(params.ID)]
+		if !ok || runStateRaw == "" {
+			return nil, fmt.Errorf("agent_tool: cannot resume — saved run state missing for tool call %s", params.ID)
+		}
+		var savedResult agents.AgentOutput
+		if err := sonic.Unmarshal([]byte(runStateRaw), &savedResult); err != nil {
+			return nil, fmt.Errorf("agent_tool: malformed saved run state: %w", err)
+		}
+		if savedResult.RunID == "" {
+			return nil, fmt.Errorf("agent_tool: saved run state has empty RunID for tool call %s", params.ID)
+		}
+
+		savedThreadId, ok := params.State[t.getResumeThreadIdStateKey(params.ID)]
+		if !ok || savedThreadId == "" {
+			return nil, fmt.Errorf("agent_tool: cannot resume — thread id missing for tool call %s", params.ID)
+		}
+
+		threadId = savedThreadId
+		previousMessageID = savedResult.RunID
+		messages = params.ResumeMessages
 	} else {
-		if agentArgs.ThreadID != "" {
-			threadId = agentArgs.ThreadID
-		} else {
-			threadId = uuid.NewString()
+		var agentArgs agentToolArgument
+		if err := sonic.Unmarshal([]byte(params.Arguments), &agentArgs); err != nil {
+			return nil, err
 		}
-	}
 
-	handle, err := t.agent.Execute(ctx, &agents.AgentInput{
-		Namespace: namespace,
-		ThreadID:  threadId,
-		Messages: []responses.InputMessageUnion{
+		if t.contextMode == SubAgentContextModeIsolated {
+			subAgentThreadId, exists := params.State[t.getSubAgentThreadIdStateKey()]
+			if exists {
+				threadId = subAgentThreadId
+			} else {
+				threadId = uuid.NewString()
+			}
+		} else {
+			if agentArgs.ThreadID != "" {
+				threadId = agentArgs.ThreadID
+			} else {
+				threadId = uuid.NewString()
+			}
+		}
+
+		messages = []responses.InputMessageUnion{
 			{
 				OfEasyInput: &responses.EasyMessage{
 					Role:    constants.RoleUser,
 					Content: responses.EasyInputContentUnion{OfString: &agentArgs.Message},
 				},
 			},
-		},
-		SessionID: params.SessionID, // Using conversation id as the shared session id
+		}
+	}
+
+	handle, err := t.agent.Execute(ctx, &agents.AgentInput{
+		Namespace:         namespace,
+		ThreadID:          threadId,
+		PreviousMessageID: previousMessageID,
+		Messages:          messages,
+		SessionID:         params.SessionID, // Using conversation id as the shared session id
 	})
 	if err != nil {
 		return nil, err
@@ -126,25 +177,49 @@ func (t *AgentTool) Execute(ctx context.Context, params *agents.ToolCall) (*agen
 		return nil, err
 	}
 
+	return t.responseFromResult(params, result, threadId)
+}
+
+// responseFromResult shapes an inner AgentOutput into the outer
+// ToolCallResponse. Shared between Execute and Resume so the two
+// paths stay in lockstep on shape, state-key naming, and the
+// pause-vs-completion branch.
+func (t *AgentTool) responseFromResult(params *agents.ToolCall, result *agents.AgentOutput, threadId string) (*agents.ToolCallResponse, error) {
+	if result != nil && result.Status == agentstate.RunStatusPaused {
+		resultBuf, err := sonic.Marshal(result)
+		if err != nil {
+			return nil, err
+		}
+		return &agents.ToolCallResponse{
+			StateUpdates: map[string]string{
+				t.getResumeThreadIdStateKey(params.ID): threadId,
+				t.getRunStateKey(params.ID):            string(resultBuf),
+			},
+			PendingApprovals: result.PendingApprovals,
+		}, nil
+	}
+
 	data := ""
-	for _, out := range result.Output {
-		if out.OfOutputMessage != nil {
-			for _, content := range *out.OfOutputMessage.Content {
-				if content.OfOutputText != nil {
-					data += content.OfOutputText.Text
+	if result != nil {
+		for _, out := range result.Output {
+			if out.OfOutputMessage != nil {
+				for _, content := range *out.OfOutputMessage.Content {
+					if content.OfOutputText != nil {
+						data += content.OfOutputText.Text
+					}
 				}
 			}
-		}
 
-		if out.OfEasyInput != nil {
-			if out.OfEasyInput.Content.OfString != nil {
-				data += *out.OfEasyInput.Content.OfString
-			}
+			if out.OfEasyInput != nil {
+				if out.OfEasyInput.Content.OfString != nil {
+					data += *out.OfEasyInput.Content.OfString
+				}
 
-			if out.OfEasyInput.Content.OfInputMessageList != nil {
-				for _, message := range out.OfEasyInput.Content.OfInputMessageList {
-					if message.OfOutputText != nil {
-						data += message.OfOutputText.Text
+				if out.OfEasyInput.Content.OfInputMessageList != nil {
+					for _, message := range out.OfEasyInput.Content.OfInputMessageList {
+						if message.OfOutputText != nil {
+							data += message.OfOutputText.Text
+						}
 					}
 				}
 			}
@@ -171,4 +246,12 @@ func (t *AgentTool) Execute(ctx context.Context, params *agents.ToolCall) (*agen
 
 func (t *AgentTool) getSubAgentThreadIdStateKey() string {
 	return fmt.Sprintf("sub_agent_thread_id/%s", t.agent.Name)
+}
+
+func (t *AgentTool) getResumeThreadIdStateKey(toolCallId string) string {
+	return fmt.Sprintf("resume_thread_id/%s/%s", t.agent.Name, toolCallId)
+}
+
+func (t *AgentTool) getRunStateKey(toolCallId string) string {
+	return fmt.Sprintf("run_state/%s/%s", t.agent.Name, toolCallId)
 }
