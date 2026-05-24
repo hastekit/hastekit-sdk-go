@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm"
@@ -31,7 +32,7 @@ func NewInMemoryConfigStore(configs []ProviderConfig) *InMemoryConfigStore {
 	return store
 }
 
-func (s *InMemoryConfigStore) GetProviderConfig(providerName llm.ProviderName) (*ProviderConfig, error) {
+func (s *InMemoryConfigStore) GetProviderConfig(_ context.Context, providerName llm.ProviderName) (*ProviderConfig, error) {
 	config := s.providerConfigs[providerName]
 
 	if len(config.ApiKeys) == 0 {

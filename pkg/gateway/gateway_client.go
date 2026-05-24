@@ -100,7 +100,7 @@ func (c *LLMClient) NewResponses(ctx context.Context, in *responses.Request) (*r
 
 	in.Stream = utils2.Ptr(false)
 	in.Store = utils2.Ptr(false)
-	return c.LLMGatewayAdapter.NewResponses(ctx, providerName, c.getKey(providerName), in)
+	return c.LLMGatewayAdapter.NewResponses(ctx, providerName, c.getKey(ctx, providerName), in)
 }
 
 // NewStreamingResponses invokes the LLM and streams responses via callback
@@ -113,7 +113,7 @@ func (c *LLMClient) NewStreamingResponses(ctx context.Context, in *responses.Req
 
 	in.Stream = utils2.Ptr(true)
 	in.Store = utils2.Ptr(false)
-	return c.LLMGatewayAdapter.NewStreamingResponses(ctx, providerName, c.getKey(providerName), in)
+	return c.LLMGatewayAdapter.NewStreamingResponses(ctx, providerName, c.getKey(ctx, providerName), in)
 }
 
 func (c *LLMClient) NewEmbedding(ctx context.Context, in *embeddings.Request) (*embeddings.Response, error) {
@@ -123,7 +123,7 @@ func (c *LLMClient) NewEmbedding(ctx context.Context, in *embeddings.Request) (*
 	}
 	in.Model = model
 
-	return c.LLMGatewayAdapter.NewEmbedding(ctx, providerName, c.getKey(providerName), in)
+	return c.LLMGatewayAdapter.NewEmbedding(ctx, providerName, c.getKey(ctx, providerName), in)
 }
 
 func (c *LLMClient) NewChatCompletion(ctx context.Context, in *chat_completion.Request) (*chat_completion.Response, error) {
@@ -133,7 +133,7 @@ func (c *LLMClient) NewChatCompletion(ctx context.Context, in *chat_completion.R
 	}
 	in.Model = model
 
-	return c.LLMGatewayAdapter.NewChatCompletion(ctx, providerName, c.getKey(providerName), in)
+	return c.LLMGatewayAdapter.NewChatCompletion(ctx, providerName, c.getKey(ctx, providerName), in)
 }
 
 func (c *LLMClient) NewStreamingChatCompletion(ctx context.Context, in *chat_completion.Request) (chan *chat_completion.ResponseChunk, error) {
@@ -143,7 +143,7 @@ func (c *LLMClient) NewStreamingChatCompletion(ctx context.Context, in *chat_com
 	}
 	in.Model = model
 
-	return c.LLMGatewayAdapter.NewStreamingChatCompletion(ctx, providerName, c.getKey(providerName), in)
+	return c.LLMGatewayAdapter.NewStreamingChatCompletion(ctx, providerName, c.getKey(ctx, providerName), in)
 }
 
 func (c *LLMClient) NewSpeech(ctx context.Context, in *speech.Request) (*speech.Response, error) {
@@ -153,7 +153,7 @@ func (c *LLMClient) NewSpeech(ctx context.Context, in *speech.Request) (*speech.
 	}
 	in.Model = model
 
-	return c.LLMGatewayAdapter.NewSpeech(ctx, providerName, c.getKey(providerName), in)
+	return c.LLMGatewayAdapter.NewSpeech(ctx, providerName, c.getKey(ctx, providerName), in)
 }
 
 func (c *LLMClient) NewStreamingSpeech(ctx context.Context, in *speech.Request) (chan *speech.ResponseChunk, error) {
@@ -163,7 +163,7 @@ func (c *LLMClient) NewStreamingSpeech(ctx context.Context, in *speech.Request) 
 	}
 	in.Model = model
 
-	return c.LLMGatewayAdapter.NewStreamingSpeech(ctx, providerName, c.getKey(providerName), in)
+	return c.LLMGatewayAdapter.NewStreamingSpeech(ctx, providerName, c.getKey(ctx, providerName), in)
 }
 
 func (c *LLMClient) NewTranscription(ctx context.Context, in *transcription.Request) (*transcription.Response, error) {
@@ -173,7 +173,7 @@ func (c *LLMClient) NewTranscription(ctx context.Context, in *transcription.Requ
 	}
 	in.Model = model
 
-	return c.LLMGatewayAdapter.NewTranscription(ctx, providerName, c.getKey(providerName), in)
+	return c.LLMGatewayAdapter.NewTranscription(ctx, providerName, c.getKey(ctx, providerName), in)
 }
 
 func (c *LLMClient) NewImageGeneration(ctx context.Context, in *image_generation.Request) (*image_generation.Response, error) {
@@ -183,7 +183,7 @@ func (c *LLMClient) NewImageGeneration(ctx context.Context, in *image_generation
 	}
 	in.Model = model
 
-	return c.LLMGatewayAdapter.NewImageGeneration(ctx, providerName, c.getKey(providerName), in)
+	return c.LLMGatewayAdapter.NewImageGeneration(ctx, providerName, c.getKey(ctx, providerName), in)
 }
 
 func (c *LLMClient) NewImageEdit(ctx context.Context, in *image_edit.Request) (*image_edit.Response, error) {
@@ -193,10 +193,10 @@ func (c *LLMClient) NewImageEdit(ctx context.Context, in *image_edit.Request) (*
 	}
 	in.Model = model
 
-	return c.LLMGatewayAdapter.NewImageEdit(ctx, providerName, c.getKey(providerName), in)
+	return c.LLMGatewayAdapter.NewImageEdit(ctx, providerName, c.getKey(ctx, providerName), in)
 }
 
-func (c *LLMClient) getKey(providerName llm.ProviderName) string {
+func (c *LLMClient) getKey(ctx context.Context, providerName llm.ProviderName) string {
 	if c.key != "" {
 		return c.key
 	}
@@ -205,7 +205,7 @@ func (c *LLMClient) getKey(providerName llm.ProviderName) string {
 		return ""
 	}
 
-	providerConfig, err := c.configStore.GetProviderConfig(providerName)
+	providerConfig, err := c.configStore.GetProviderConfig(ctx, providerName)
 	if err != nil {
 		return ""
 	}

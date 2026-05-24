@@ -13,7 +13,7 @@ var tracer = otel.Tracer("LLMGateway")
 // ConfigStore is the interface required by LLMGateway to get provider and virtual key configurations.
 type ConfigStore interface {
 	// GetProviderConfig returns provider configuration and associated API keys.
-	GetProviderConfig(providerName llm.ProviderName) (*ProviderConfig, error)
+	GetProviderConfig(ctx context.Context, providerName llm.ProviderName) (*ProviderConfig, error)
 
 	// GetVirtualKey returns virtual key configuration for access control.
 	GetVirtualKey(secretKey string) (*VirtualKeyConfig, error)
