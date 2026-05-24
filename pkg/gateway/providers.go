@@ -18,7 +18,7 @@ func (g *LLMGateway) getProvider(ctx context.Context, providerName llm.ProviderN
 	var baseUrl string
 	var customHeaders map[string]string
 
-	providerConfig, err := g.ConfigStore.GetProviderConfig(ctx, providerName)
+	providerConfig, err := g.ConfigStore.GetProviderConfig(ctx, providerName, key)
 	if err != nil {
 		err = errors.New("failed to get provider config")
 		return nil, err

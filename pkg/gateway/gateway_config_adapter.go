@@ -42,7 +42,7 @@ func (s *InMemoryConfigStore) GetProviderConfig(_ context.Context, providerName 
 	return config, nil
 }
 
-func (s *InMemoryConfigStore) GetVirtualKey(secretKey string) (*VirtualKeyConfig, error) {
+func (s *InMemoryConfigStore) GetVirtualKey(_ context.Context, secretKey string) (*VirtualKeyConfig, error) {
 	// In-memory store doesn't support virtual keys - they're managed by agent-server
 	return nil, fmt.Errorf("virtual keys are not supported in direct mode")
 }

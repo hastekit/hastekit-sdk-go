@@ -205,7 +205,7 @@ func (c *LLMClient) getKey(ctx context.Context, providerName llm.ProviderName) s
 		return ""
 	}
 
-	providerConfig, err := c.configStore.GetProviderConfig(ctx, providerName)
+	providerConfig, err := c.configStore.GetProviderConfig(ctx, providerName, "")
 	if err != nil {
 		return ""
 	}
