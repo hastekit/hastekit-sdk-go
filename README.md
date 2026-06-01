@@ -66,10 +66,10 @@ import (
 )
 
 func main() {
-    // Initialize the SDK
-    client, err := hastekit.New(&hastekit.ClientOptions{
-        ProviderConfigs: []gateway.ProviderConfig{
-            {
+    // Initialize the SDK with functional options (recommended)
+    client, err := hastekit.NewWithOptions(
+        hastekit.WithProviderConfigs(
+            gateway.ProviderConfig{
                 ProviderName: llm.ProviderNameOpenAI,
                 ApiKeys: []*gateway.APIKeyConfig{
                     {
@@ -78,8 +78,8 @@ func main() {
                     },
                 },
             },
-        },
-    })
+        ),
+    )
     if err != nil {
         log.Fatal(err)
     }
@@ -129,17 +129,17 @@ import (
 )
 
 func main() {
-    // Initialize SDK
-    client, err := hastekit.New(&hastekit.ClientOptions{
-        ProviderConfigs: []gateway.ProviderConfig{
-            {
+    // Initialize SDK with functional options
+    client, err := hastekit.NewWithOptions(
+        hastekit.WithProviderConfigs(
+            gateway.ProviderConfig{
                 ProviderName: llm.ProviderNameOpenAI,
                 ApiKeys: []*gateway.APIKeyConfig{
                     {Name: "default", APIKey: os.Getenv("OPENAI_API_KEY")},
                 },
             },
-        },
-    })
+        ),
+    )
     if err != nil {
         log.Fatal(err)
     }
@@ -192,6 +192,82 @@ func (h *AgentHandle) Result() (*AgentOutput, error)     // drain Chunks + retur
 ```
 
 ## Usage
+
+### SDK Initialization
+
+#### Functional Options (Recommended)
+
+HasteKit SDK supports flexible configuration using Go's functional options pattern:
+
+```go
+// Minimal setup with defaults
+client, err := hastekit.NewWithOptions()
+
+// Configure OpenAI provider
+client, err := hastekit.NewWithOptions(
+    hastekit.WithProviderConfigs(
+        gateway.ProviderConfig{
+            ProviderName: llm.ProviderNameOpenAI,
+            ApiKeys: []*gateway.APIKeyConfig{
+                {Name: "default", APIKey: os.Getenv("OPENAI_API_KEY")},
+            },
+        },
+    ),
+    hastekit.WithTimeout(30*time.Second),
+)
+
+// Production setup with multiple providers
+client, err := hastekit.NewWithOptions(
+    hastekit.WithProviderConfigs(
+        gateway.ProviderConfig{
+            ProviderName: llm.ProviderNameOpenAI,
+            ApiKeys: []*gateway.APIKeyConfig{
+                {Name: "default", APIKey: os.Getenv("OPENAI_API_KEY")},
+            },
+        },
+        gateway.ProviderConfig{
+            ProviderName: llm.ProviderNameAnthropic,
+            ApiKeys: []*gateway.APIKeyConfig{
+                {Name: "default", APIKey: os.Getenv("ANTHROPIC_API_KEY")},
+            },
+        },
+    ),
+    hastekit.WithRedisConfig("redis://localhost:6379"),
+    hastekit.WithRestateConfig("http://localhost:8081"),
+)
+```
+
+#### Environment-Specific Configuration
+
+```go
+func createSDK(env string) (*hastekit.SDK, error) {
+    baseOptions := []hastekit.ClientOption{
+        hastekit.WithProviderConfigs(openaiConfig),
+        hastekit.WithTimeout(30*time.Second),
+    }
+    
+    switch env {
+    case "development":
+        return hastekit.NewWithOptions(baseOptions...)
+    case "production":
+        return hastekit.NewWithOptions(append(baseOptions,
+            hastekit.WithRedisConfig("redis://prod:6379"),
+            hastekit.WithRestateConfig("http://restate:8081"),
+        )...)
+    }
+}
+```
+
+The functional options pattern provides zero-value defaults, self-documenting configuration, and future extensibility without breaking changes.
+
+#### Legacy Configuration
+
+```go
+// Deprecated: Use NewWithOptions instead
+client, err := hastekit.New(&hastekit.LegacyClientOptions{
+    ProviderConfigs: []gateway.ProviderConfig{...},
+})
+```
 
 ### LLM Calls
 
@@ -433,19 +509,17 @@ Create fault-tolerant agents that survive crashes and failures:
 
 ```go
 // Initialize SDK with Restate
-client, err := hastekit.New(&hastekit.ClientOptions{
-    ProviderConfigs: []gateway.ProviderConfig{
-        {
+client, err := hastekit.NewWithOptions(
+    hastekit.WithProviderConfigs(
+        gateway.ProviderConfig{
             ProviderName: llm.ProviderNameOpenAI,
             ApiKeys: []*gateway.APIKeyConfig{
                 {Name: "default", APIKey: os.Getenv("OPENAI_API_KEY")},
             },
         },
-    },
-    RestateConfig: hastekit.RestateConfig{
-        Endpoint: "http://localhost:8081", // Restate server
-    },
-})
+    ),
+    hastekit.WithRestateConfig("http://localhost:8081"),
+)
 
 // Create durable agent
 agent := client.NewRestateAgent(&hastekit.AgentOptions{
@@ -468,19 +542,17 @@ client.StartRestateService("0.0.0.0", "9081")
 #### Using Temporal
 
 ```go
-client, err := hastekit.New(&hastekit.ClientOptions{
-    ProviderConfigs: []gateway.ProviderConfig{
-        {
+client, err := hastekit.NewWithOptions(
+    hastekit.WithProviderConfigs(
+        gateway.ProviderConfig{
             ProviderName: llm.ProviderNameOpenAI,
             ApiKeys: []*gateway.APIKeyConfig{
                 {Name: "default", APIKey: os.Getenv("OPENAI_API_KEY")},
             },
         },
-    },
-    TemporalConfig: hastekit.TemporalConfig{
-        Endpoint: "localhost:7233", // Temporal server
-    },
-})
+    ),
+    hastekit.WithTemporalConfig("localhost:7233"),
+)
 
 // Create Temporal agent
 agent := client.NewTemporalAgent(&hastekit.AgentOptions{
