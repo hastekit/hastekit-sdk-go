@@ -50,7 +50,7 @@ func (t *TemporalConversationPersistenceProxy) NewConversationID(ctx context.Con
 	})
 
 	var id string
-	if err := idAny.Get(&idAny); err != nil {
+	if err := idAny.Get(&id); err != nil {
 		return uuid.NewString() // ideally, we won't get here as uuid.NewString() is not supposed to throw errors
 	}
 
@@ -63,7 +63,7 @@ func (t *TemporalConversationPersistenceProxy) NewRunID(ctx context.Context) str
 	})
 
 	var id string
-	if err := idAny.Get(&idAny); err != nil {
+	if err := idAny.Get(&id); err != nil {
 		return uuid.NewString() // ideally, we won't get here as uuid.NewString() is not supposed to throw errors
 	}
 

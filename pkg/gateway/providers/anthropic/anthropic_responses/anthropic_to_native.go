@@ -41,15 +41,17 @@ func (in *Request) ToNativeRequest() *responses2.Request {
 				Summary: utils.Ptr("auto"),
 			}
 
-			switch *in.Thinking.BudgetTokens {
-			case 10000:
-				out.Reasoning.Effort = utils.Ptr("xhigh")
-			case 6000:
-				out.Reasoning.Effort = utils.Ptr("high")
-			case 3000:
-				out.Reasoning.Effort = utils.Ptr("medium")
-			case 1024:
-				out.Reasoning.Effort = utils.Ptr("low")
+			if in.Thinking.BudgetTokens != nil {
+				switch *in.Thinking.BudgetTokens {
+				case 10000:
+					out.Reasoning.Effort = utils.Ptr("xhigh")
+				case 6000:
+					out.Reasoning.Effort = utils.Ptr("high")
+				case 3000:
+					out.Reasoning.Effort = utils.Ptr("medium")
+				case 1024:
+					out.Reasoning.Effort = utils.Ptr("low")
+				}
 			}
 
 			out.Include = append(out.Include, responses2.IncludableReasoningEncryptedContent)
@@ -60,15 +62,17 @@ func (in *Request) ToNativeRequest() *responses2.Request {
 				Summary: utils.Ptr("auto"),
 			}
 
-			switch *in.OutputConfig.Effort {
-			case "low":
-				out.Reasoning.Effort = utils.Ptr("low")
-			case "medium":
-				out.Reasoning.Effort = utils.Ptr("medium")
-			case "high":
-				out.Reasoning.Effort = utils.Ptr("high")
-			case "xhigh":
-				out.Reasoning.Effort = utils.Ptr("xhigh")
+			if in.OutputConfig != nil && in.OutputConfig.Effort != nil {
+				switch *in.OutputConfig.Effort {
+				case "low":
+					out.Reasoning.Effort = utils.Ptr("low")
+				case "medium":
+					out.Reasoning.Effort = utils.Ptr("medium")
+				case "high":
+					out.Reasoning.Effort = utils.Ptr("high")
+				case "xhigh":
+					out.Reasoning.Effort = utils.Ptr("xhigh")
+				}
 			}
 		}
 	}
@@ -434,7 +438,7 @@ func (in *Response) ToNativeResponse() *responses2.Response {
 		if content.OfRedactedThinking != nil {
 			output = append(output, responses2.OutputMessageUnion{
 				OfReasoning: &responses2.ReasoningMessage{
-					EncryptedContent: utils.Ptr(content.OfThinking.Signature),
+					EncryptedContent: utils.Ptr(content.OfRedactedThinking.Data),
 				},
 			})
 		}

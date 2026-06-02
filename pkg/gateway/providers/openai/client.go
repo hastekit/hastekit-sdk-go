@@ -122,9 +122,8 @@ func (c *Client) NewStreamingResponses(ctx context.Context, inp *responses2.Requ
 	}
 
 	if res.StatusCode != http.StatusOK {
-		var errResp map[string]any
-		err = utils.DecodeJSON(res.Body, &errResp)
-		return nil, errors.New(errResp["error"].(map[string]any)["message"].(string))
+		defer res.Body.Close()
+		return nil, base.ParseErrorResponse(res)
 	}
 
 	out := make(chan *responses2.ResponseChunk)
@@ -180,9 +179,7 @@ func (c *Client) NewEmbedding(ctx context.Context, inp *embeddings2.Request) (*e
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		var errResp map[string]any
-		err = utils.DecodeJSON(res.Body, &errResp)
-		return nil, errors.New(errResp["error"].(map[string]any)["message"].(string))
+		return nil, base.ParseErrorResponse(res)
 	}
 
 	var openAiResponse *openai_embeddings.Response
@@ -288,7 +285,6 @@ func (c *Client) NewStreamingChatCompletion(ctx context.Context, inp *chat_compl
 			}
 
 			line = strings.TrimRight(line, "\r\n")
-			fmt.Println(line)
 
 			if line == "data: [DONE]" {
 				return

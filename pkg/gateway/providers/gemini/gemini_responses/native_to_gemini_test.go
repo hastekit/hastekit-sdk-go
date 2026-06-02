@@ -221,7 +221,7 @@ func TestNativeToGemini_NoOutputEvents(t *testing.T) {
 			Type:           constants.ChunkTypeContentPartAdded("response.content_part.added"),
 			SequenceNumber: 3,
 			ItemId:         "item_1",
-			Part: responses2.OutputContentUnion{
+			Part: responses2.ChunkOutputItemContentUnion{
 				OfOutputText: &responses2.OutputTextContent{Text: ""},
 			},
 		},

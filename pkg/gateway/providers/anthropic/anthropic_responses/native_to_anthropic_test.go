@@ -63,7 +63,7 @@ func createNativeOutputItemAddedMessage(itemId string, outputIndex int) *respons
 				Id:      itemId,
 				Status:  "in_progress",
 				Role:    constants.RoleAssistant,
-				Content: responses2.OutputContent{},
+				Content: &responses2.ChunkOutputItemContent{},
 			},
 		},
 	}
@@ -97,7 +97,7 @@ func createNativeContentPartAddedText(itemId string, outputIndex, contentIndex i
 			ItemId:         itemId,
 			OutputIndex:    outputIndex,
 			ContentIndex:   contentIndex,
-			Part: responses2.OutputContentUnion{
+			Part: responses2.ChunkOutputItemContentUnion{
 				OfOutputText: &responses2.OutputTextContent{
 					Text: "",
 				},
@@ -143,7 +143,7 @@ func createNativeContentPartDone(itemId string, outputIndex, contentIndex int, t
 			ItemId:         itemId,
 			OutputIndex:    outputIndex,
 			ContentIndex:   contentIndex,
-			Part: responses2.OutputContentUnion{
+			Part: responses2.ChunkOutputItemContentUnion{
 				OfOutputText: &responses2.OutputTextContent{
 					Text: text,
 				},
@@ -164,7 +164,7 @@ func createNativeOutputItemDoneMessage(itemId string, outputIndex int, text stri
 				Id:     itemId,
 				Status: "completed",
 				Role:   constants.RoleAssistant,
-				Content: responses2.OutputContent{
+				Content: &responses2.ChunkOutputItemContent{
 					{OfOutputText: &responses2.OutputTextContent{Text: text}},
 				},
 			},
@@ -445,7 +445,7 @@ func TestNativeToAnthropic_ResponseCompleted(t *testing.T) {
 			OfOutputMessage: &responses2.OutputMessage{
 				ID:   "item_1",
 				Role: constants.RoleAssistant,
-				Content: responses2.OutputContent{
+				Content: &responses2.OutputContent{
 					{OfOutputText: &responses2.OutputTextContent{Text: "Hello"}},
 				},
 			},
@@ -590,7 +590,7 @@ func TestNativeToAnthropic_EndToEnd_TextStreaming(t *testing.T) {
 			OfOutputMessage: &responses2.OutputMessage{
 				ID:      "item_1",
 				Role:    constants.RoleAssistant,
-				Content: responses2.OutputContent{{OfOutputText: &responses2.OutputTextContent{Text: "Hello World"}}},
+				Content: &responses2.OutputContent{{OfOutputText: &responses2.OutputTextContent{Text: "Hello World"}}},
 			},
 		},
 	}

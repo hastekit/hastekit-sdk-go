@@ -1,13 +1,13 @@
 package transcription
 
 type Response struct {
-	Text     string          `json:"text"`
-	Language *string         `json:"language,omitempty"`
-	Duration *float64        `json:"duration,omitempty"`
-	Words    []Word          `json:"words,omitempty"`
-	Segments []Segment       `json:"segments,omitempty"`
-	Usage    *Usage          `json:"usage,omitempty"`
-	Raw      map[string]any  `json:"raw,omitempty"`
+	Text     string         `json:"text"`
+	Language *string        `json:"language,omitempty"`
+	Duration *float64       `json:"duration,omitempty"`
+	Words    []Word         `json:"words,omitempty"`
+	Segments []Segment      `json:"segments,omitempty"`
+	Usage    *Usage         `json:"usage,omitempty"`
+	Raw      map[string]any `json:"raw,omitempty"`
 }
 
 type Word struct {

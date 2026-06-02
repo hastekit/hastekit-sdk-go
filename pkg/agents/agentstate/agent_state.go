@@ -1,6 +1,8 @@
 package agentstate
 
 import (
+	"sort"
+
 	"github.com/bytedance/sonic"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 )
@@ -261,8 +263,18 @@ func LoadRunStateFromMeta(meta map[string]any) *RunState {
 // on the rest if any remain undecided after its own
 // ProcessIncomingMessages run.
 func (s *RunState) CollectNestedApprovalsForParent(parentCallID string) (approved, rejected []string) {
-	for innerID, parentID := range s.PendingNestedToolCalls {
-		if parentID != parentCallID {
+	// Iterate in a stable order. Map iteration order is randomized in Go,
+	// which would make the resulting approved/rejected lists (and the
+	// messages built from them) non-deterministic across Temporal/Restate
+	// replays.
+	innerIDs := make([]string, 0, len(s.PendingNestedToolCalls))
+	for innerID := range s.PendingNestedToolCalls {
+		innerIDs = append(innerIDs, innerID)
+	}
+	sort.Strings(innerIDs)
+
+	for _, innerID := range innerIDs {
+		if s.PendingNestedToolCalls[innerID] != parentCallID {
 			continue
 		}
 		switch {

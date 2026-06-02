@@ -177,7 +177,7 @@ func (s *LLMHistorySummarizer) Summarize(ctx context.Context, msgIdToRunId map[s
 				}
 
 				if content.OfOutputText != nil {
-					historyBuilder.WriteString(fmt.Sprintf("%s: %s\n", msg.OfOutputMessage.Role, content.OfOutputText.Text))
+					historyBuilder.WriteString(fmt.Sprintf("%s: %s\n", msg.OfInputMessage.Role, content.OfOutputText.Text))
 				}
 			}
 
@@ -192,7 +192,9 @@ func (s *LLMHistorySummarizer) Summarize(ctx context.Context, msgIdToRunId map[s
 			historyBuilder.WriteString(fmt.Sprintf("[Tool Call: %s]\n", msg.OfFunctionCall.Name))
 
 		case msg.OfFunctionCallOutput != nil:
-			historyBuilder.WriteString(fmt.Sprintf("[Tool Result: %s]\n", msg.OfFunctionCallOutput.Output.OfString))
+			if msg.OfFunctionCallOutput.Output.OfString != nil {
+				historyBuilder.WriteString(fmt.Sprintf("[Tool Result: %s]\n", *msg.OfFunctionCallOutput.Output.OfString))
+			}
 		}
 
 	}

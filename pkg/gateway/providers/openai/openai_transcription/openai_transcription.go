@@ -18,12 +18,12 @@ func NativeRequestToRequest(in *transcription2.Request) *Request {
 
 // Response represents the OpenAI transcription API response (verbose_json format)
 type Response struct {
-	Task     string          `json:"task"`
-	Language string          `json:"language"`
-	Duration float64         `json:"duration"`
-	Text     string          `json:"text"`
-	Words    []Word          `json:"words,omitempty"`
-	Segments []Segment       `json:"segments,omitempty"`
+	Task     string    `json:"task"`
+	Language string    `json:"language"`
+	Duration float64   `json:"duration"`
+	Text     string    `json:"text"`
+	Words    []Word    `json:"words,omitempty"`
+	Segments []Segment `json:"segments,omitempty"`
 }
 
 type Word struct {

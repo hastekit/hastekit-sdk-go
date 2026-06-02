@@ -632,5 +632,5 @@ func TestResponseChunkToNative_OutputIndexTracking(t *testing.T) {
 	converter.ResponseChunkToNativeResponseChunk(createTextBlockStartChunk(1))
 	converter.ResponseChunkToNativeResponseChunk(createTextDeltaChunk(1, "Second"))
 	result = converter.ResponseChunkToNativeResponseChunk(createBlockStopChunk(1))
-	assert.Equal(t, 0, result[2].OfOutputItemDone.OutputIndex) // Note: OutputIndex in native is always 0 based on implementation
+	assert.Equal(t, 1, result[2].OfOutputItemDone.OutputIndex) // Second output block increments the output index.
 }
