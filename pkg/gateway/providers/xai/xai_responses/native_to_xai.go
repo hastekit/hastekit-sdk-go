@@ -8,7 +8,7 @@ import (
 func NativeRequestToRequest(in *responses2.Request) *Request {
 	r := &Request{
 		Request: &openai_responses.Request{
-			*in,
+			Request: *in,
 		},
 	}
 
@@ -33,6 +33,6 @@ func NativeRequestToRequest(in *responses2.Request) *Request {
 
 func NativeResponseToResponse(in *responses2.Response) *Response {
 	return &Response{
-		*in,
+		Response: *in,
 	}
 }

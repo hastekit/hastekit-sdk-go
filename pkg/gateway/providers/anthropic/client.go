@@ -136,9 +136,8 @@ func (c *Client) NewStreamingResponses(ctx context.Context, inp *responses2.Requ
 	}
 
 	if res.StatusCode != http.StatusOK {
-		var errResp map[string]any
-		err = utils.DecodeJSON(res.Body, &errResp)
-		return nil, errors.New(errResp["error"].(map[string]any)["message"].(string))
+		defer res.Body.Close()
+		return nil, base.ParseErrorResponse(res)
 	}
 
 	out := make(chan *responses2.ResponseChunk)

@@ -211,6 +211,25 @@ func (content *Content) ToNativeMessage() responses2.InputMessageUnion {
 func (in *Response) ToNativeResponse() *responses2.Response {
 	output := []responses2.OutputMessageUnion{}
 
+	// Gemini can return an empty candidate list (e.g. the prompt was
+	// blocked by a safety filter, or the response only carries
+	// promptFeedback). Guard every Candidates[0] access so a missing
+	// candidate yields an empty response rather than a panic.
+	var stopReason any
+	if len(in.Candidates) == 0 {
+		return &responses2.Response{
+			ID:     in.ResponseID,
+			Model:  in.ModelVersion,
+			Output: output,
+			Usage: &responses2.Usage{
+				InputTokens:  in.UsageMetadata.PromptTokenCount,
+				OutputTokens: in.UsageMetadata.CandidatesTokenCount,
+				TotalTokens:  in.UsageMetadata.TotalTokenCount,
+			},
+			Metadata: map[string]any{"stop_reason": stopReason},
+		}
+	}
+
 	var previousExecutableCodePart *ExecutableCodePart
 	for _, part := range in.Candidates[0].Content.Parts {
 		if part.Text != nil {
@@ -364,7 +383,9 @@ func (c *ResponseChunkToNativeResponseChunkConverter) ResponseChunkToNativeRespo
 	}
 
 	// Update usage and model from each chunk (Gemini sends these with every chunk)
-	c.usage = *in.UsageMetadata
+	if in.UsageMetadata != nil {
+		c.usage = *in.UsageMetadata
+	}
 	c.model = in.ResponseID
 
 	var out []*responses2.ResponseChunk
@@ -374,10 +395,13 @@ func (c *ResponseChunkToNativeResponseChunkConverter) ResponseChunkToNativeRespo
 		out = append(out, c.emitStreamStart(in)...)
 	}
 
-	// Process all parts in this chunk
-	for i := range in.Candidates[0].Content.Parts {
-		part := &in.Candidates[0].Content.Parts[i]
-		out = append(out, c.handlePart(part)...)
+	// Process all parts in this chunk. A chunk may carry no candidate
+	// (e.g. it only updates usage or prompt feedback), so guard the access.
+	if len(in.Candidates) > 0 {
+		for i := range in.Candidates[0].Content.Parts {
+			part := &in.Candidates[0].Content.Parts[i]
+			out = append(out, c.handlePart(part)...)
+		}
 	}
 
 	return out
