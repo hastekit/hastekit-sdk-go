@@ -67,7 +67,76 @@ type RedisConfig struct {
 	Endpoint string
 }
 
+// ClientOptions holds the configuration for the SDK client
 type ClientOptions struct {
+	serverConfig    ServerConfig
+	providerConfigs []gateway.ProviderConfig
+	restateConfig   RestateConfig
+	temporalConfig  TemporalConfig
+	redisConfig     RedisConfig
+	httpClient      *http.Client
+	timeout         time.Duration
+}
+
+// ClientOption is a function that configures the SDK client
+type ClientOption func(*ClientOptions)
+
+// WithServerConfig configures the SDK to use a HasteKit Gateway server
+func WithServerConfig(endpoint, virtualKey, orgID, projectName string) ClientOption {
+	return func(opts *ClientOptions) {
+		opts.serverConfig = ServerConfig{
+			Endpoint:    endpoint,
+			VirtualKey:  virtualKey,
+			OrgID:       orgID,
+			ProjectName: projectName,
+		}
+	}
+}
+
+// WithProviderConfigs configures the SDK to use direct provider connections
+func WithProviderConfigs(configs ...gateway.ProviderConfig) ClientOption {
+	return func(opts *ClientOptions) {
+		opts.providerConfigs = configs
+	}
+}
+
+// WithRestateConfig configures Restate for durable execution
+func WithRestateConfig(endpoint string) ClientOption {
+	return func(opts *ClientOptions) {
+		opts.restateConfig = RestateConfig{Endpoint: endpoint}
+	}
+}
+
+// WithTemporalConfig configures Temporal for durable execution
+func WithTemporalConfig(endpoint string) ClientOption {
+	return func(opts *ClientOptions) {
+		opts.temporalConfig = TemporalConfig{Endpoint: endpoint}
+	}
+}
+
+// WithRedisConfig configures Redis for stream brokering
+func WithRedisConfig(endpoint string) ClientOption {
+	return func(opts *ClientOptions) {
+		opts.redisConfig = RedisConfig{Endpoint: endpoint}
+	}
+}
+
+// WithHTTPClient configures a custom HTTP client
+func WithHTTPClient(client *http.Client) ClientOption {
+	return func(opts *ClientOptions) {
+		opts.httpClient = client
+	}
+}
+
+// WithTimeout configures a default timeout for HTTP requests
+func WithTimeout(timeout time.Duration) ClientOption {
+	return func(opts *ClientOptions) {
+		opts.timeout = timeout
+	}
+}
+
+// Deprecated: Use functional options instead
+type LegacyClientOptions struct {
 	ServerConfig ServerConfig
 
 	// Set this if you are using the SDK without the LLM Gateway server.
@@ -88,21 +157,63 @@ func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return t.underlying.RoundTrip(req)
 }
 
-func New(opts *ClientOptions) (*SDK, error) {
-	if opts.ProviderConfigs == nil && opts.ServerConfig.Endpoint == "" {
-		return nil, fmt.Errorf("must provide either ServerConfig.Endpoint or LLMConfigs")
+// New creates a new SDK instance with the struct-based options (legacy)
+// Deprecated: Use NewWithOptions with functional options instead for better flexibility
+func New(legacyOpts *LegacyClientOptions) (*SDK, error) {
+	opts := &ClientOptions{
+		serverConfig:    legacyOpts.ServerConfig,
+		providerConfigs: legacyOpts.ProviderConfigs,
+		restateConfig:   legacyOpts.RestateConfig,
+		temporalConfig:  legacyOpts.TemporalConfig,
+		redisConfig:     legacyOpts.RedisConfig,
+		timeout:         30 * time.Second,
+	}
+	return newSDK(opts)
+}
+
+// NewWithOptions creates a new SDK instance with functional options (recommended)
+func NewWithOptions(options ...ClientOption) (*SDK, error) {
+	opts := &ClientOptions{
+		timeout: 30 * time.Second, // Default timeout
+	}
+
+	// Apply all options
+	for _, option := range options {
+		option(opts)
+	}
+
+	return newSDK(opts)
+}
+
+// NewWithLegacyOptions creates a new SDK instance with the old struct-based options
+// Deprecated: Use NewWithOptions with functional options instead
+func NewWithLegacyOptions(legacyOpts *LegacyClientOptions) (*SDK, error) {
+	opts := &ClientOptions{
+		serverConfig:    legacyOpts.ServerConfig,
+		providerConfigs: legacyOpts.ProviderConfigs,
+		restateConfig:   legacyOpts.RestateConfig,
+		temporalConfig:  legacyOpts.TemporalConfig,
+		redisConfig:     legacyOpts.RedisConfig,
+		timeout:         30 * time.Second,
+	}
+	return newSDK(opts)
+}
+
+func newSDK(opts *ClientOptions) (*SDK, error) {
+	if opts.providerConfigs == nil && opts.serverConfig.Endpoint == "" {
+		return nil, fmt.Errorf("must provide either ServerConfig.Endpoint or ProviderConfigs")
 	}
 
 	var configStore gateway.ConfigStore
-	if opts.ProviderConfigs != nil {
-		configStore = gateway.NewInMemoryConfigStore(opts.ProviderConfigs)
+	if opts.providerConfigs != nil {
+		configStore = gateway.NewInMemoryConfigStore(opts.providerConfigs)
 	}
 
 	var broker agents.StreamBroker
-	if opts.RedisConfig.Endpoint != "" {
+	if opts.redisConfig.Endpoint != "" {
 		var err error
 		broker, err = streambroker.NewRedisStreamBroker(streambroker.RedisStreamBrokerOptions{
-			Addr: opts.RedisConfig.Endpoint,
+			Addr: opts.redisConfig.Endpoint,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("error creating redis stream broker: %w", err)
@@ -114,12 +225,19 @@ func New(opts *ClientOptions) (*SDK, error) {
 		broker = streambroker.NewMemoryStreamBroker()
 	}
 
-	httpClient := http.DefaultClient
-	if opts.ServerConfig.Endpoint != "" {
+	httpClient := opts.httpClient
+	if httpClient == nil {
 		httpClient = &http.Client{
+			Timeout: opts.timeout,
+		}
+	}
+
+	if opts.serverConfig.Endpoint != "" {
+		httpClient = &http.Client{
+			Timeout: opts.timeout,
 			Transport: &authTransport{
 				underlying: http.DefaultTransport,
-				token:      opts.ServerConfig.OrgID,
+				token:      opts.serverConfig.OrgID,
 			},
 		}
 	}
@@ -127,11 +245,11 @@ func New(opts *ClientOptions) (*SDK, error) {
 	sdk := &SDK{
 		llmConfigs:     configStore,
 		directMode:     configStore != nil,
-		endpoint:       opts.ServerConfig.Endpoint,
-		virtualKey:     opts.ServerConfig.VirtualKey,
-		restateConfig:  opts.RestateConfig,
-		temporalConfig: opts.TemporalConfig,
-		redisConfig:    opts.RedisConfig,
+		endpoint:       opts.serverConfig.Endpoint,
+		virtualKey:     opts.serverConfig.VirtualKey,
+		restateConfig:  opts.restateConfig,
+		temporalConfig: opts.temporalConfig,
+		redisConfig:    opts.redisConfig,
 		httpClient:     httpClient,
 
 		agents:               map[string]*agents.Agent{},
@@ -143,30 +261,32 @@ func New(opts *ClientOptions) (*SDK, error) {
 	sdk.setTemporalClient()
 	sdk.setLLMClient()
 
-	if opts.ServerConfig.ProjectName == "" {
-		return sdk, nil
-	}
-
-	// Convert project name to ID
-	resp, err := sdk.httpClient.Get(fmt.Sprintf("%s/api/agent-server/projects", opts.ServerConfig.Endpoint))
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	projectsRes := hastekitgateway.Response[[]Project]{}
-	if err := utils.DecodeJSON(resp.Body, &projectsRes); err != nil {
-		return nil, err
-	}
-
-	for _, proj := range projectsRes.Data {
-		if proj.Name == opts.ServerConfig.ProjectName {
-			sdk.projectId = proj.ID
-			return sdk, nil
+	// Project name to ID resolution (only if using server config with project name)
+	if opts.serverConfig.Endpoint != "" && opts.serverConfig.ProjectName != "" {
+		// Convert project name to ID via API call
+		resp, err := sdk.httpClient.Get(fmt.Sprintf("%s/api/agent-server/projects", opts.serverConfig.Endpoint))
+		if err != nil {
+			return nil, fmt.Errorf("failed to lookup project: %w", err)
 		}
+		defer resp.Body.Close()
+
+		projectsRes := hastekitgateway.Response[[]Project]{}
+		if err := utils.DecodeJSON(resp.Body, &projectsRes); err != nil {
+			return nil, fmt.Errorf("failed to parse projects response: %w", err)
+		}
+
+		// Find matching project by name
+		for _, proj := range projectsRes.Data {
+			if proj.Name == opts.serverConfig.ProjectName {
+				sdk.projectId = proj.ID
+				return sdk, nil
+			}
+		}
+
+		return nil, fmt.Errorf("project %q not found", opts.serverConfig.ProjectName)
 	}
 
-	return nil, fmt.Errorf("project %s not found", opts.ServerConfig.ProjectName)
+	return sdk, nil
 }
 
 // Project represents a workspace or collection an agent can belong to
