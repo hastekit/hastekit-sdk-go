@@ -19,6 +19,7 @@ type MemoryStreamBroker struct {
 	closed      map[string]bool
 	stopped     map[string]bool
 	queues      map[string][]responses.InputMessageUnion
+	live        map[string]bool
 }
 
 // NewMemoryStreamBroker creates a new in-memory stream broker.
@@ -28,6 +29,7 @@ func NewMemoryStreamBroker() *MemoryStreamBroker {
 		closed:      make(map[string]bool),
 		stopped:     make(map[string]bool),
 		queues:      make(map[string][]responses.InputMessageUnion),
+		live:        make(map[string]bool),
 	}
 }
 
@@ -102,8 +104,10 @@ func (b *MemoryStreamBroker) Close(ctx context.Context, channel string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	// Mark channel as closed
+	// Mark channel as closed and release the run claim so the next turn
+	// for this channel starts a fresh run.
 	b.closed[channel] = true
+	delete(b.live, channel)
 
 	// Close all subscriber channels
 	for _, ch := range b.subscribers[channel] {
@@ -114,6 +118,26 @@ func (b *MemoryStreamBroker) Close(ctx context.Context, channel string) error {
 	delete(b.subscribers, channel)
 
 	return nil
+}
+
+// EnqueueOrStart implements RunClaimBroker: atomically join an in-flight
+// run on channel, or claim + reset the channel for a fresh run.
+func (b *MemoryStreamBroker) EnqueueOrStart(ctx context.Context, channel string, msgs []responses.InputMessageUnion) (bool, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if b.live[channel] {
+		b.queues[channel] = append(b.queues[channel], msgs...)
+		return false, nil
+	}
+
+	// Win the claim and clear stale state so the fresh run's Subscribe /
+	// Publish aren't short-circuited by a prior run on the same channel.
+	b.live[channel] = true
+	delete(b.queues, channel)
+	delete(b.closed, channel)
+	delete(b.stopped, channel)
+	return true, nil
 }
 
 // Stop records a stop request for the given channel.
@@ -179,4 +203,5 @@ func (b *MemoryStreamBroker) Reset() {
 	b.closed = make(map[string]bool)
 	b.stopped = make(map[string]bool)
 	b.queues = make(map[string][]responses.InputMessageUnion)
+	b.live = make(map[string]bool)
 }

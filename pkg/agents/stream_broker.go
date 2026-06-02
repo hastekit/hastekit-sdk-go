@@ -3,7 +3,15 @@ package agents
 import (
 	"context"
 
+	"github.com/hastekit/hastekit-sdk-go/pkg/agents/streambroker"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
+)
+
+// The built-in brokers implement the optional run-claim capability used
+// for deterministic per-thread stream ids.
+var (
+	_ RunClaimBroker = (*streambroker.MemoryStreamBroker)(nil)
+	_ RunClaimBroker = (*streambroker.RedisStreamBroker)(nil)
 )
 
 // StreamBroker provides an abstraction for streaming response chunks
@@ -46,4 +54,21 @@ type StreamBroker interface {
 	// stream and starting a fresh one. A channel is active once
 	// Subscribe has been called and stays active until Close.
 	IsActive(ctx context.Context, channel string) (bool, error)
+}
+
+// RunClaimBroker is an optional StreamBroker capability that enables
+// deterministic, per-thread stream IDs. With a deterministic streamID the
+// same broker channel is reused across a thread's turns, so EnqueueOrStart
+// must atomically decide, in one shot, whether a turn joins an in-flight
+// run or starts a fresh one — and reset the channel when it starts, so a
+// reused channel never replays a previous turn's transcript.
+type RunClaimBroker interface {
+	// EnqueueOrStart atomically routes a turn for streamID:
+	//   - if a run is already live on the channel, it appends msgs to the
+	//     run's queue and returns started=false;
+	//   - otherwise it claims the channel, resets any stale transcript /
+	//     queue / stop state, and returns started=true — the caller then
+	//     Subscribes and runs with msgs as the run's input.
+	// The claim is released by Close.
+	EnqueueOrStart(ctx context.Context, streamID string, msgs []responses.InputMessageUnion) (started bool, err error)
 }

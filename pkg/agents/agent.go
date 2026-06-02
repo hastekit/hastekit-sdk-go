@@ -260,7 +260,7 @@ func (e *Agent) ExecuteLocal(ctx context.Context, in *AgentInput) (*AgentOutput,
 		defer e.streamBroker.Close(context.Background(), in.StreamID)
 	}
 
-	run, err := history.NewRun(ctx, e.history, in.Namespace, in.ThreadID, in.PreviousMessageID, in.Messages)
+	run, err := history.NewRun(ctx, e.history, in.Namespace, in.ThreadID, in.PreviousMessageID, in.Messages, history.WithRunContext(in.RunContext))
 	if err != nil {
 		return &AgentOutput{Status: agentstate.RunStatusError, RunID: ""}, err
 	}

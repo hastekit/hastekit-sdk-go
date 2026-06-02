@@ -140,6 +140,13 @@ func (b *RedisStreamBroker) queueKey(channel string) string {
 	return b.prefix + "queue:" + channel
 }
 
+// liveKey holds the run-claim flag for a channel — set while a run is in
+// flight on a (deterministic) stream id and released by Close. Its TTL is
+// a crash backstop and is refreshed on every Publish.
+func (b *RedisStreamBroker) liveKey(channel string) string {
+	return b.prefix + "live:" + channel
+}
+
 // Publish appends a chunk to the channel's Redis Stream. The stream
 // key has its active TTL refreshed on first write so a long-lived
 // stream doesn't silently expire.
@@ -165,8 +172,11 @@ func (b *RedisStreamBroker) Publish(ctx context.Context, channel string, chunk *
 
 	// Refresh TTL on first write (id ends in "-0" for the very first
 	// entry of a millisecond — cheap best-effort; re-EXPIRE is idempotent).
+	// The run-claim flag rides the same liveness so it survives long runs
+	// and only expires after the run goes silent (crash backstop).
 	if id != "" {
 		_ = b.client.Expire(ctx, key, b.activeTTL).Err()
+		_ = b.client.Expire(ctx, b.liveKey(channel), b.activeTTL).Err()
 	}
 
 	return nil
@@ -280,6 +290,8 @@ func (b *RedisStreamBroker) Close(ctx context.Context, channel string) error {
 	}
 
 	_ = b.client.Expire(ctx, key, b.replayTTL).Err()
+	// Release the run claim so the next turn for this channel starts fresh.
+	_ = b.client.Del(ctx, b.liveKey(channel)).Err()
 	return nil
 }
 
@@ -299,6 +311,38 @@ func (b *RedisStreamBroker) IsStopped(ctx context.Context, channel string) (bool
 		return false, fmt.Errorf("failed to read stop flag: %w", err)
 	}
 	return n > 0, nil
+}
+
+// EnqueueOrStart implements RunClaimBroker. The claim is an atomic SETNX
+// on liveKey: the winner resets the reused channel and starts a fresh run;
+// everyone else appends to the run's queue.
+func (b *RedisStreamBroker) EnqueueOrStart(ctx context.Context, channel string, msgs []responses.InputMessageUnion) (bool, error) {
+	claimed, err := b.client.SetNX(ctx, b.liveKey(channel), "1", b.activeTTL).Result()
+	if err != nil {
+		return false, fmt.Errorf("failed to claim run: %w", err)
+	}
+
+	if !claimed {
+		key := b.queueKey(channel)
+		pipe := b.client.TxPipeline()
+		for _, m := range msgs {
+			data, err := sonic.Marshal(m)
+			if err != nil {
+				return false, fmt.Errorf("failed to serialize message: %w", err)
+			}
+			pipe.RPush(ctx, key, data)
+		}
+		pipe.Expire(ctx, key, b.activeTTL)
+		if _, err := pipe.Exec(ctx); err != nil {
+			return false, fmt.Errorf("failed to enqueue message: %w", err)
+		}
+		return false, nil
+	}
+
+	// Won the claim — clear any stale transcript / queue / stop so a reused
+	// channel never replays a previous turn into the fresh run.
+	b.client.Del(ctx, b.streamKey(channel), b.queueKey(channel), b.stopKey(channel))
+	return true, nil
 }
 
 // EnqueueMessage appends a JSON-encoded message to the channel's queue

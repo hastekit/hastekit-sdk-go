@@ -25,6 +25,15 @@ type ConversationMessage struct {
 	Meta           map[string]any                `json:"meta" db:"meta"`
 }
 
+// AuthorContext returns the RunContext the row was authored under,
+// recovered from its persisted Meta (see RunContextMetaKey). Returns nil
+// for rows written before this was persisted, so callers treat them as
+// unattributed. Keeps the Meta-key coupling in one place.
+func (m ConversationMessage) AuthorContext() map[string]any {
+	rc, _ := m.Meta[RunContextMetaKey].(map[string]any)
+	return rc
+}
+
 // Summary represents a conversation summary stored in the summaries table
 type Summary struct {
 	ID                      string                      `json:"id" db:"id"`
@@ -41,6 +50,16 @@ type ConversationPersistenceAdapter interface {
 	LoadMessages(ctx context.Context, namespace string, threadID string, previousMessageID string) ([]ConversationMessage, error)
 	SaveMessages(ctx context.Context, namespace, msgId, previousMsgId, threadID string, conversationId string, messages []responses.InputMessageUnion, meta map[string]any) error
 	SaveSummary(ctx context.Context, namespace string, summary Summary) error
+}
+
+// AuthoredMessages is a group of messages paired with the RunContext
+// they were authored under. Loaded history (one group per stored row,
+// AuthorContext from the row's Meta) and newly-queued input (one group
+// per message, AuthorContext from its submitter) reduce to the same
+// shape so a single MessageProcessor pass handles both.
+type AuthoredMessages struct {
+	Messages      []responses.InputMessageUnion
+	AuthorContext map[string]any // nil for legacy rows → passed through untouched
 }
 
 type CommonConversationManager struct {
@@ -86,6 +105,9 @@ type ConversationRunManager struct {
 	usage           *responses.Usage
 	lastMessageMeta map[string]any
 
+	// runContext
+	runContext map[string]any
+
 	// State is used to store any key-value pairs that need to be persisted along with the run
 	State map[string]string
 
@@ -116,12 +138,11 @@ func NewRun(ctx context.Context, cm *CommonConversationManager, namespace string
 		// Create a new run id
 		runID = cr.ConversationPersistenceAdapter.NewRunID(ctx)
 		cr.RunState = agentstate.NewRunState()
-		cr.ProcessIncomingMessages(messages)
 	} else {
 		// Continuing the previous run
 		runID = cr.previousMsgId
-		cr.ProcessIncomingMessages(messages)
 	}
+	cr.ProcessIncomingMessages(messages)
 
 	// Store the run id
 	cr.msgId = runID
@@ -143,6 +164,20 @@ type RunOption func(manager *ConversationRunManager)
 func WithConversationID(cid string) RunOption {
 	return func(cm *ConversationRunManager) {
 		cm.conversationId = cid
+	}
+}
+
+// RunContextMetaKey is the saved row meta entry under which
+// SaveMessages records the run's RunContext (see WithRunContext).
+const RunContextMetaKey = "run_context"
+
+// WithRunContext records the run's RunContext, which SaveMessages
+// stores in the saved row's meta under RunContextMetaKey. It is
+// persistence-only — never sent to the provider — so later reads can
+// recover the context a turn ran under (e.g. the inbound sender).
+func WithRunContext(rc map[string]any) RunOption {
+	return func(cm *ConversationRunManager) {
+		cm.runContext = rc
 	}
 }
 
@@ -254,6 +289,12 @@ func (cm *ConversationRunManager) SaveMessages(ctx context.Context) error {
 	}
 
 	meta["state"] = cm.State
+
+	// Record the run's RunContext (persistence-only; never sent to the
+	// provider) so later reads recover the turn's context.
+	if len(cm.runContext) > 0 {
+		meta[RunContextMetaKey] = cm.runContext
+	}
 
 	if cm.summaries != nil {
 		sum := Summary{
