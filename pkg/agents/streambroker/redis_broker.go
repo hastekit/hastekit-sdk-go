@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
+	"github.com/hastekit/hastekit-sdk-go/pkg/agents/messages"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	"github.com/redis/go-redis/v9"
 )
@@ -316,7 +317,7 @@ func (b *RedisStreamBroker) IsStopped(ctx context.Context, channel string) (bool
 // EnqueueOrStart implements RunClaimBroker. The claim is an atomic SETNX
 // on liveKey: the winner resets the reused channel and starts a fresh run;
 // everyone else appends to the run's queue.
-func (b *RedisStreamBroker) EnqueueOrStart(ctx context.Context, channel string, msgs []responses.InputMessageUnion) (bool, error) {
+func (b *RedisStreamBroker) EnqueueOrStart(ctx context.Context, channel string, msgs []messages.Message) (bool, error) {
 	claimed, err := b.client.SetNX(ctx, b.liveKey(channel), "1", b.activeTTL).Result()
 	if err != nil {
 		return false, fmt.Errorf("failed to claim run: %w", err)
@@ -347,7 +348,7 @@ func (b *RedisStreamBroker) EnqueueOrStart(ctx context.Context, channel string, 
 
 // EnqueueMessage appends a JSON-encoded message to the channel's queue
 // list. The list TTL is refreshed on each push.
-func (b *RedisStreamBroker) EnqueueMessage(ctx context.Context, channel string, msg responses.InputMessageUnion) error {
+func (b *RedisStreamBroker) EnqueueMessage(ctx context.Context, channel string, msg messages.Message) error {
 	data, err := sonic.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("failed to serialize message: %w", err)
@@ -365,7 +366,7 @@ func (b *RedisStreamBroker) EnqueueMessage(ctx context.Context, channel string, 
 // DrainMessages atomically returns and clears all queued messages.
 // LRANGE+DEL inside MULTI/EXEC ensures concurrent drains never see
 // partial state.
-func (b *RedisStreamBroker) DrainMessages(ctx context.Context, channel string) ([]responses.InputMessageUnion, error) {
+func (b *RedisStreamBroker) DrainMessages(ctx context.Context, channel string) ([]messages.Message, error) {
 	key := b.queueKey(channel)
 	pipe := b.client.TxPipeline()
 	rangeCmd := pipe.LRange(ctx, key, 0, -1)
@@ -379,9 +380,9 @@ func (b *RedisStreamBroker) DrainMessages(ctx context.Context, channel string) (
 		return nil, fmt.Errorf("failed to read drained messages: %w", err)
 	}
 
-	out := make([]responses.InputMessageUnion, 0, len(raw))
+	out := make([]messages.Message, 0, len(raw))
 	for _, s := range raw {
-		var msg responses.InputMessageUnion
+		var msg messages.Message
 		if err := sonic.Unmarshal([]byte(s), &msg); err != nil {
 			// Skip malformed entries rather than failing the whole drain.
 			continue

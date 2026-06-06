@@ -8,6 +8,7 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/google/uuid"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/agentstate"
+	"github.com/hastekit/hastekit-sdk-go/pkg/agents/messages"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	"go.opentelemetry.io/otel"
 )
@@ -16,55 +17,40 @@ var (
 	tracer = otel.Tracer("History")
 )
 
-// ConversationMessage represents a message within a thread
+// ConversationMessage represents a turn within a thread.
 type ConversationMessage struct {
-	MessageID      string                        `json:"message_id" db:"message_id"`
-	ThreadID       string                        `json:"thread_id" db:"thread_id"`
-	ConversationID string                        `json:"conversation_id" db:"conversation_id"`
-	Messages       []responses.InputMessageUnion `json:"messages" db:"messages"`
-	Meta           map[string]any                `json:"meta" db:"meta"`
+	MessageID      string         `json:"message_id" db:"message_id"`
+	ThreadID       string         `json:"thread_id" db:"thread_id"`
+	ConversationID string         `json:"conversation_id" db:"conversation_id"`
+	Messages       []Message      `json:"messages" db:"messages"`
+	Meta           map[string]any `json:"meta" db:"meta"`
 }
 
-// AuthorContext returns the RunContext the row was authored under,
-// recovered from its persisted Meta (see RunContextMetaKey). Returns nil
-// for rows written before this was persisted, so callers treat them as
-// unattributed. Keeps the Meta-key coupling in one place.
-func (m ConversationMessage) AuthorContext() map[string]any {
-	rc, _ := m.Meta[RunContextMetaKey].(map[string]any)
-	return rc
-}
+// Message re-exported from the messages package so callers can keep referring to history.Message
+type Message = messages.Message
 
 // Summary represents a conversation summary stored in the summaries table
 type Summary struct {
-	ID                      string                      `json:"id" db:"id"`
-	ThreadID                string                      `json:"thread_id" db:"thread_id"`
-	SummaryMessage          responses.InputMessageUnion `json:"summary_message" db:"summary_message"`
-	LastSummarizedMessageID string                      `json:"last_summarized_message_id" db:"last_summarized_message_id"`
-	CreatedAt               time.Time                   `json:"created_at" db:"created_at"`
-	Meta                    map[string]any              `json:"meta" db:"meta"`
+	ID                      string         `json:"id" db:"id"`
+	ThreadID                string         `json:"thread_id" db:"thread_id"`
+	SummaryMessage          Message        `json:"summary_message" db:"summary_message"`
+	LastSummarizedMessageID string         `json:"last_summarized_message_id" db:"last_summarized_message_id"`
+	CreatedAt               time.Time      `json:"created_at" db:"created_at"`
+	Meta                    map[string]any `json:"meta" db:"meta"`
 }
 
 type ConversationPersistenceAdapter interface {
 	NewConversationID(ctx context.Context) string
 	NewRunID(ctx context.Context) string
 	LoadMessages(ctx context.Context, namespace string, threadID string, previousMessageID string) ([]ConversationMessage, error)
-	SaveMessages(ctx context.Context, namespace, msgId, previousMsgId, threadID string, conversationId string, messages []responses.InputMessageUnion, meta map[string]any) error
+	SaveMessages(ctx context.Context, namespace, msgId, previousMsgId, threadID string, conversationId string, messages []Message, meta map[string]any) error
 	SaveSummary(ctx context.Context, namespace string, summary Summary) error
-}
-
-// AuthoredMessages is a group of messages paired with the RunContext
-// they were authored under. Loaded history (one group per stored row,
-// AuthorContext from the row's Meta) and newly-queued input (one group
-// per message, AuthorContext from its submitter) reduce to the same
-// shape so a single MessageProcessor pass handles both.
-type AuthoredMessages struct {
-	Messages      []responses.InputMessageUnion
-	AuthorContext map[string]any // nil for legacy rows → passed through untouched
 }
 
 type CommonConversationManager struct {
 	ConversationPersistenceAdapter ConversationPersistenceAdapter
 	Summarizer                     HistorySummarizer
+	MessageFilter                  MessageFilter
 
 	Options []ConversationManagerOptions
 }
@@ -89,6 +75,12 @@ func WithSummarizer(summarizer HistorySummarizer) ConversationManagerOptions {
 	}
 }
 
+func WithMessageFilter(filter MessageFilter) ConversationManagerOptions {
+	return func(cm *CommonConversationManager) {
+		cm.MessageFilter = filter
+	}
+}
+
 type ConversationRunManager struct {
 	ConversationPersistenceAdapter
 
@@ -100,8 +92,8 @@ type ConversationRunManager struct {
 	threadId       string
 
 	convMessages    []ConversationMessage
-	oldMessages     []responses.InputMessageUnion
-	newMessages     []responses.InputMessageUnion
+	oldMessages     []Message
+	newMessages     []Message
 	usage           *responses.Usage
 	lastMessageMeta map[string]any
 
@@ -114,20 +106,22 @@ type ConversationRunManager struct {
 	// RunState is used to store the state of the run, such as the current step and the usage of the run
 	RunState *agentstate.RunState
 
-	summarizer HistorySummarizer
-	summaries  *SummaryResult
+	summarizer    HistorySummarizer
+	summaries     *SummaryResult
+	messageFilter MessageFilter
 }
 
-func NewRun(ctx context.Context, cm *CommonConversationManager, namespace string, threadID string, previousMessageID string, messages []responses.InputMessageUnion, options ...RunOption) (*ConversationRunManager, error) {
+func NewRun(ctx context.Context, cm *CommonConversationManager, namespace string, threadID string, previousMessageID string, options ...RunOption) (*ConversationRunManager, error) {
 	cr := &ConversationRunManager{
 		ConversationPersistenceAdapter: cm.ConversationPersistenceAdapter,
 		summarizer:                     cm.Summarizer,
+		messageFilter:                  cm.MessageFilter,
 		msgIdToRunId:                   make(map[string]string),
 		State:                          make(map[string]string),
 	}
 
 	// Load messages
-	_, err := cr.LoadMessages(ctx, namespace, threadID, previousMessageID)
+	err := cr.LoadMessages(ctx, namespace, threadID, previousMessageID)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +136,6 @@ func NewRun(ctx context.Context, cm *CommonConversationManager, namespace string
 		// Continuing the previous run
 		runID = cr.previousMsgId
 	}
-	cr.ProcessIncomingMessages(messages)
 
 	// Store the run id
 	cr.msgId = runID
@@ -181,15 +174,21 @@ func WithRunContext(rc map[string]any) RunOption {
 	}
 }
 
-func (cm *ConversationRunManager) AddMessages(ctx context.Context, messages []responses.InputMessageUnion, usage *responses.Usage) {
-	cm.newMessages = append(cm.newMessages, messages...)
+func (cm *ConversationRunManager) AddMessages(ctx context.Context, message Message, usage *responses.Usage) {
+	cm.ProcessIncomingMessages(message, false)
 
 	if usage != nil {
 		cm.usage = usage
 	}
 }
 
-func (cm *ConversationRunManager) GetMessages(ctx context.Context) ([]responses.InputMessageUnion, error) {
+func (cm *ConversationRunManager) AddMessagesToQueue(ctx context.Context, msgs []Message) {
+	for _, m := range msgs {
+		cm.ProcessIncomingMessages(m, true)
+	}
+}
+
+func (cm *ConversationRunManager) GetMessages(ctx context.Context, agentID string) ([]responses.InputMessageUnion, error) {
 	// Process messages with summarizer if available
 	if cm.summarizer != nil {
 		summaryResult, err := cm.summarizer.Summarize(ctx, cm.msgIdToRunId, cm.oldMessages, cm.usage)
@@ -203,45 +202,51 @@ func (cm *ConversationRunManager) GetMessages(ctx context.Context) ([]responses.
 			if summaryResult.Summary == nil {
 				cm.oldMessages = summaryResult.MessagesToKeep
 			} else {
-				cm.oldMessages = append([]responses.InputMessageUnion{*summaryResult.Summary}, summaryResult.MessagesToKeep...)
+				cm.oldMessages = append([]Message{*summaryResult.Summary}, summaryResult.MessagesToKeep...)
 			}
 		}
 	}
 
 	// Add queued messages to the new messages
-	cm.newMessages = append(cm.newMessages, cm.RunState.QueuedMessages...)
-	cm.RunState.QueuedMessages = []responses.InputMessageUnion{}
+	if len(cm.RunState.QueuedMessages) > 0 {
+		cm.newMessages = append(cm.newMessages, cm.RunState.QueuedMessages...)
+		cm.RunState.QueuedMessages = nil
+	}
 
-	return append(cm.oldMessages, cm.newMessages...), nil
+	msgList := append(cm.oldMessages, cm.newMessages...)
+	if cm.messageFilter != nil {
+		msgList = cm.messageFilter.Filter(ctx, msgList, agentID)
+	}
+	return cm.attributeMessages(msgList, agentID), nil
 }
 
-func (cm *ConversationRunManager) LoadMessages(ctx context.Context, namespace string, threadID string, previousMessageID string) ([]responses.InputMessageUnion, error) {
+func (cm *ConversationRunManager) LoadMessages(ctx context.Context, namespace string, threadID string, previousMessageID string) error {
 	cm.threadId = threadID
 
 	if cm.ConversationPersistenceAdapter == nil {
-		return []responses.InputMessageUnion{}, nil
+		return nil
 	}
 
 	// Don't have to reload
 	if len(cm.oldMessages) > 0 {
-		return cm.oldMessages, nil
+		return nil
 	}
 
 	convMessages, err := cm.ConversationPersistenceAdapter.LoadMessages(ctx, namespace, threadID, previousMessageID)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	messages := []responses.InputMessageUnion{}
+	oldMessages := []Message{}
 	for _, msg := range convMessages {
-		for _, m := range msg.Messages {
-			cm.msgIdToRunId[m.ID()] = msg.MessageID
+		for _, bundle := range msg.Messages {
+			cm.msgIdToRunId[bundle.ID] = msg.MessageID
 		}
 		cm.threadId = msg.ThreadID
 		cm.conversationId = msg.ConversationID
 		cm.previousMsgId = msg.MessageID
 
-		messages = append(messages, msg.Messages...)
+		oldMessages = append(oldMessages, msg.Messages...)
 
 		// Store the most recent message's meta for run state loading
 		// The last message in the chain contains the current run state
@@ -257,14 +262,14 @@ func (cm *ConversationRunManager) LoadMessages(ctx context.Context, namespace st
 
 	cm.namespace = namespace
 	cm.convMessages = convMessages
-	cm.oldMessages = messages
+	cm.oldMessages = oldMessages
 	cm.RunState = agentstate.LoadRunStateFromMeta(cm.lastMessageMeta)
 	cm.loadSubAgentContext(ctx)
 	if cm.RunState != nil {
 		cm.usage = &cm.RunState.Usage
 	}
 
-	return messages, nil
+	return nil
 }
 
 // GetMeta returns the meta from the most recent message
@@ -336,7 +341,7 @@ func (cm *ConversationRunManager) SaveMessages(ctx context.Context) error {
 
 	cm.lastMessageMeta = meta
 	cm.oldMessages = append(cm.oldMessages, cm.newMessages...)
-	cm.newMessages = []responses.InputMessageUnion{}
+	cm.newMessages = nil
 
 	return nil
 }
@@ -370,17 +375,26 @@ func (cm *ConversationRunManager) loadSubAgentContext(ctx context.Context) {
 	}
 }
 
-func (cm *ConversationRunManager) ProcessIncomingMessages(messages []responses.InputMessageUnion) {
+func (cm *ConversationRunManager) ProcessIncomingMessages(message Message, queue bool) {
 	// Process incoming message, and extract tool approvals and user messages
 	hasNewApproval := false
-	for _, msg := range messages {
+	var stored []responses.InputMessageUnion
+	for _, msg := range message.Messages {
 		if msg.OfFunctionCallApprovalResponse != nil {
 			hasNewApproval = true
 			r := msg.OfFunctionCallApprovalResponse
 			cm.RunState.QueuedApprovals = append(cm.RunState.QueuedApprovals, r.ApprovedCallIds...)
 			cm.RunState.QueuedRejections = append(cm.RunState.QueuedRejections, r.RejectedCallIds...)
 		} else {
-			cm.RunState.QueuedMessages = append(cm.RunState.QueuedMessages, msg)
+			stored = append(stored, msg)
+		}
+	}
+
+	if len(stored) > 0 {
+		if queue {
+			cm.RunState.QueuedMessages = append(cm.RunState.QueuedMessages, message)
+		} else {
+			cm.newMessages = append(cm.newMessages, message)
 		}
 	}
 

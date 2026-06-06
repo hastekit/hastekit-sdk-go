@@ -3,6 +3,7 @@ package agents
 import (
 	"context"
 
+	"github.com/hastekit/hastekit-sdk-go/pkg/agents/history"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/streambroker"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 )
@@ -43,11 +44,11 @@ type StreamBroker interface {
 	// cadence as IsStopped — and folds queued messages into the current
 	// run. Generic so future callers can deliver user messages, tool
 	// outputs, etc., without a new transport.
-	EnqueueMessage(ctx context.Context, channel string, msg responses.InputMessageUnion) error
+	EnqueueMessage(ctx context.Context, channel string, msg history.Message) error
 
 	// DrainMessages atomically returns and clears all queued messages
 	// for the channel. Empty slice if nothing queued.
-	DrainMessages(ctx context.Context, channel string) ([]responses.InputMessageUnion, error)
+	DrainMessages(ctx context.Context, channel string) ([]history.Message, error)
 
 	// IsActive reports whether the channel has an in-flight run — used
 	// by the gateway to decide between enqueueing onto an existing
@@ -70,5 +71,5 @@ type RunClaimBroker interface {
 	//     queue / stop state, and returns started=true — the caller then
 	//     Subscribes and runs with msgs as the run's input.
 	// The claim is released by Close.
-	EnqueueOrStart(ctx context.Context, streamID string, msgs []responses.InputMessageUnion) (started bool, err error)
+	EnqueueOrStart(ctx context.Context, streamID string, msgs []history.Message) (started bool, err error)
 }

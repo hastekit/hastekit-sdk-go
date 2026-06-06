@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents"
+	"github.com/hastekit/hastekit-sdk-go/pkg/agents/messages"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	"go.temporal.io/sdk/workflow"
 )
@@ -33,7 +34,7 @@ func (s *TemporalStreamBroker) IsStopped(ctx context.Context, channel string) (b
 	return s.wrappedBroker.IsStopped(ctx, channel)
 }
 
-func (s *TemporalStreamBroker) DrainMessages(ctx context.Context, channel string) ([]responses.InputMessageUnion, error) {
+func (s *TemporalStreamBroker) DrainMessages(ctx context.Context, channel string) ([]messages.Message, error) {
 	return s.wrappedBroker.DrainMessages(ctx, channel)
 }
 
@@ -72,7 +73,7 @@ func (p *TemporalStreamBrokerProxy) Stop(ctx context.Context, channel string) er
 	return p.wrappedBroker.Stop(ctx, channel)
 }
 
-func (p *TemporalStreamBrokerProxy) EnqueueMessage(ctx context.Context, channel string, msg responses.InputMessageUnion) error {
+func (p *TemporalStreamBrokerProxy) EnqueueMessage(ctx context.Context, channel string, msg messages.Message) error {
 	return p.wrappedBroker.EnqueueMessage(ctx, channel, msg)
 }
 
@@ -89,8 +90,8 @@ func (p *TemporalStreamBrokerProxy) IsStopped(ctx context.Context, channel strin
 	return stopped, nil
 }
 
-func (p *TemporalStreamBrokerProxy) DrainMessages(ctx context.Context, channel string) ([]responses.InputMessageUnion, error) {
-	var msgs []responses.InputMessageUnion
+func (p *TemporalStreamBrokerProxy) DrainMessages(ctx context.Context, channel string) ([]messages.Message, error) {
+	var msgs []messages.Message
 	err := workflow.ExecuteActivity(p.workflowCtx, p.prefix+"_DrainMessagesActivity", channel).Get(p.workflowCtx, &msgs)
 	if err != nil {
 		return nil, err

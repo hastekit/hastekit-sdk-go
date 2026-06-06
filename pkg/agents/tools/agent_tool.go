@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/agentstate"
+	"github.com/hastekit/hastekit-sdk-go/pkg/agents/history"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/constants"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
@@ -163,7 +164,7 @@ func (t *AgentTool) Execute(ctx context.Context, params *agents.ToolCall) (*agen
 		Namespace:         namespace,
 		ThreadID:          threadId,
 		PreviousMessageID: previousMessageID,
-		Messages:          messages,
+		Message:           history.Message{SenderID: params.AgentName, Messages: messages},
 		SessionID:         params.SessionID, // Using conversation id as the shared session id
 	})
 	if err != nil {

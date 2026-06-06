@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents"
+	"github.com/hastekit/hastekit-sdk-go/pkg/agents/messages"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	restate "github.com/restatedev/sdk-go"
 )
@@ -43,7 +44,7 @@ func (b *RestateStreamBroker) Stop(ctx context.Context, channel string) error {
 	return b.wrappedBroker.Stop(ctx, channel)
 }
 
-func (b *RestateStreamBroker) EnqueueMessage(ctx context.Context, channel string, msg responses.InputMessageUnion) error {
+func (b *RestateStreamBroker) EnqueueMessage(ctx context.Context, channel string, msg messages.Message) error {
 	return b.wrappedBroker.EnqueueMessage(ctx, channel, msg)
 }
 
@@ -57,8 +58,8 @@ func (b *RestateStreamBroker) IsStopped(ctx context.Context, channel string) (bo
 	}, restate.WithName("IsStopped"))
 }
 
-func (b *RestateStreamBroker) DrainMessages(ctx context.Context, channel string) ([]responses.InputMessageUnion, error) {
-	return restate.Run(b.restateCtx, func(ctx restate.RunContext) ([]responses.InputMessageUnion, error) {
+func (b *RestateStreamBroker) DrainMessages(ctx context.Context, channel string) ([]messages.Message, error) {
+	return restate.Run(b.restateCtx, func(ctx restate.RunContext) ([]messages.Message, error) {
 		return b.wrappedBroker.DrainMessages(ctx, channel)
 	}, restate.WithName("DrainMessages"))
 }

@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"github.com/bytedance/sonic"
+	"github.com/hastekit/hastekit-sdk-go/pkg/agents/messages"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 )
 
@@ -36,7 +37,7 @@ type RunState struct {
 	ToolsAwaitingApproval []responses.FunctionCallMessage `json:"tools_awaiting_approval,omitempty"`
 	QueuedApprovals       []string                        `json:"queued_approvals,omitempty"`
 	QueuedRejections      []string                        `json:"queued_rejections,omitempty"`
-	QueuedMessages        []responses.InputMessageUnion   `json:"queued_messages,omitempty"`
+	QueuedMessages        []messages.Message              `json:"queued_messages,omitempty"`
 	TraceID               string                          `json:"traceid"`
 
 	// PendingNestedToolCalls maps the parent tool call ID to the nested tool call ID

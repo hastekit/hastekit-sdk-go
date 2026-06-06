@@ -9,7 +9,6 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/google/uuid"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/history"
-	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -86,18 +85,18 @@ func (p *ExternalConversationPersistence) LoadMessages(ctx context.Context, name
 }
 
 type AddMessageRequest struct {
-	ProjectID         uuid.UUID                     `json:"project_id"`
-	Namespace         string                        `json:"namespace"`
-	MessageID         string                        `json:"message_id"`
-	ThreadID          string                        `json:"thread_id"`
-	PreviousMessageID string                        `json:"previous_message_id"`
-	Messages          []responses.InputMessageUnion `json:"messages"`
-	Meta              map[string]any                `json:"meta"`
-	ConversationID    string                        `json:"conversation_id"`
+	ProjectID         uuid.UUID         `json:"project_id"`
+	Namespace         string            `json:"namespace"`
+	MessageID         string            `json:"message_id"`
+	ThreadID          string            `json:"thread_id"`
+	PreviousMessageID string            `json:"previous_message_id"`
+	Messages          []history.Message `json:"messages"`
+	Meta              map[string]any    `json:"meta"`
+	ConversationID    string            `json:"conversation_id"`
 }
 
 // SaveMessages implements core.ChatHistory
-func (p *ExternalConversationPersistence) SaveMessages(ctx context.Context, namespace, msgId, previousMsgId, threadId string, conversationId string, messages []responses.InputMessageUnion, meta map[string]any) error {
+func (p *ExternalConversationPersistence) SaveMessages(ctx context.Context, namespace, msgId, previousMsgId, threadId string, conversationId string, messages []history.Message, meta map[string]any) error {
 	ctx, span := tracer.Start(ctx, "ExternalConversationPersistence.SaveMessages")
 	defer span.End()
 

@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/history"
+	"github.com/hastekit/hastekit-sdk-go/pkg/agents/messages"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/constants"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
@@ -51,7 +52,7 @@ func NewLLMHistorySummarizer(opts *LLMHistorySummarizerOptions) *LLMHistorySumma
 // Returns (shouldSummarize, keepFromIndex)
 // If shouldSummarize is false, keepFromIndex is -1
 // If shouldSummarize is true, keepFromIndex is the index from which to keep messages (messages[keepFromIndex:] are kept)
-func (s *LLMHistorySummarizer) shouldSummarize(ctx context.Context, messages []Run, usage *responses.Usage) (bool, int) {
+func (s *LLMHistorySummarizer) shouldSummarize(ctx context.Context, runs []Run, usage *responses.Usage) (bool, int) {
 	if usage == nil {
 		return false, -1
 	}
@@ -62,13 +63,13 @@ func (s *LLMHistorySummarizer) shouldSummarize(ctx context.Context, messages []R
 	}
 
 	// Need at least keepRecentCount + 1 messages to summarize (keep some, summarize the rest)
-	if len(messages) <= s.keepRecentCount {
+	if len(runs) <= s.keepRecentCount {
 		return false, -1
 	}
 
 	// Strategy: Keep the most recent messages and summarize everything before them
 	// We'll keep the last keepRecentCount messages (or fewer if that's all we have)
-	keepFromIndex := len(messages) - s.keepRecentCount
+	keepFromIndex := len(runs) - s.keepRecentCount
 	if keepFromIndex < 0 {
 		keepFromIndex = 0
 	}
@@ -83,20 +84,20 @@ func (s *LLMHistorySummarizer) shouldSummarize(ctx context.Context, messages []R
 
 type Run struct {
 	RunID    string
-	Messages []responses.InputMessageUnion
+	Messages []messages.Message
 }
 
-func (s *LLMHistorySummarizer) Summarize(ctx context.Context, msgIdToRunId map[string]string, messages []responses.InputMessageUnion, usage *responses.Usage) (*history.SummaryResult, error) {
+func (s *LLMHistorySummarizer) Summarize(ctx context.Context, msgIdToRunId map[string]string, msgs []messages.Message, usage *responses.Usage) (*history.SummaryResult, error) {
 	// Group messages using their run id
 	runs := []Run{}
 	runIdsSeen := []string{}
-	for _, msg := range messages {
-		runId := msgIdToRunId[msg.ID()]
+	for _, msg := range msgs {
+		runId := msgIdToRunId[msg.ID]
 
 		if !slices.Contains(runIdsSeen, runId) {
 			runs = append(runs, Run{
 				RunID:    runId,
-				Messages: []responses.InputMessageUnion{msg},
+				Messages: []messages.Message{msg},
 			})
 			runIdsSeen = append(runIdsSeen, runId)
 			continue
@@ -132,10 +133,12 @@ func (s *LLMHistorySummarizer) Summarize(ctx context.Context, msgIdToRunId map[s
 
 	messagesToSummarize := []responses.InputMessageUnion{}
 	for _, run := range runsToSummarize {
-		messagesToSummarize = append(messagesToSummarize, run.Messages...)
+		for _, msg := range run.Messages {
+			messagesToSummarize = append(messagesToSummarize, msg.Messages...)
+		}
 	}
 
-	messagesToKeep := []responses.InputMessageUnion{}
+	messagesToKeep := []messages.Message{}
 	for _, run := range runsToKeep {
 		messagesToKeep = append(messagesToKeep, run.Messages...)
 	}
@@ -254,7 +257,7 @@ func (s *LLMHistorySummarizer) Summarize(ctx context.Context, msgIdToRunId map[s
 	summaryID := uuid.NewString()
 
 	return &history.SummaryResult{
-		Summary:                 &summaryMessage,
+		Summary:                 &messages.Message{Messages: []responses.InputMessageUnion{summaryMessage}},
 		LastSummarizedMessageID: lastSummarizedMessageID,
 		SummaryID:               summaryID,
 		MessagesToKeep:          messagesToKeep,

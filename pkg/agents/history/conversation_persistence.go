@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
+	"github.com/hastekit/hastekit-sdk-go/pkg/agents/messages"
 	"go.opentelemetry.io/otel/attribute"
 )
 
@@ -17,7 +17,7 @@ type inMemoryMessage struct {
 	ThreadID          string
 	ConversationID    string
 	Namespace         string
-	Messages          []responses.InputMessageUnion
+	Messages          []Message
 	Meta              map[string]any
 	CreatedAt         time.Time
 }
@@ -37,7 +37,7 @@ type inMemorySummary struct {
 	ID                      string
 	ThreadID                string
 	Namespace               string
-	SummaryMessage          responses.InputMessageUnion
+	SummaryMessage          messages.Message
 	LastSummarizedMessageID string
 	CreatedAt               time.Time
 	Meta                    map[string]any
@@ -133,7 +133,7 @@ func (p *InMemoryConversationPersistence) LoadMessages(ctx context.Context, name
 				MessageID:      summary.ID,
 				ThreadID:       summary.ThreadID,
 				ConversationID: thread.ConversationID,
-				Messages:       []responses.InputMessageUnion{summary.SummaryMessage},
+				Messages:       []Message{summary.SummaryMessage},
 				Meta:           summary.Meta,
 			}
 			result = append(result, summaryMsg)
@@ -176,7 +176,7 @@ func (p *InMemoryConversationPersistence) LoadMessages(ctx context.Context, name
 }
 
 // SaveMessages saves messages with support for conversations and threads
-func (p *InMemoryConversationPersistence) SaveMessages(ctx context.Context, namespace, msgId, previousMsgId, threadId, conversationId string, messages []responses.InputMessageUnion, meta map[string]any) error {
+func (p *InMemoryConversationPersistence) SaveMessages(ctx context.Context, namespace, msgId, previousMsgId, threadId, conversationId string, messages []Message, meta map[string]any) error {
 	ctx, span := tracer.Start(ctx, "InMemoryConversationPersistence.SaveMessages")
 	defer span.End()
 
