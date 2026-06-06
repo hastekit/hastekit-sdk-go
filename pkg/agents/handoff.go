@@ -12,7 +12,6 @@ type HandoffTarget interface {
 }
 
 type Handoff struct {
-	ID          string
 	Name        string
 	Description string
 	Agent       HandoffTarget `json:"-"`
