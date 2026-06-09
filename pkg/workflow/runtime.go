@@ -120,6 +120,11 @@ func (e inProcessExecutor) ExecuteWave(ctx context.Context, invs []Invocation) [
 func runInvocation(ctx context.Context, inv Invocation, onFail context.CancelFunc) Result {
 	output, port, err := inv.Node.Execute(ctx, inv.Input)
 	if err != nil {
+		// A pause is a suspension, not a failure: surface it as a
+		// Result.Pause and do not cancel sibling nodes in the wave.
+		if pe, ok := IsPauseErr(err); ok {
+			return Result{NodeID: inv.NodeID, Pause: &PauseState{NodeID: inv.NodeID, Payload: pe.Payload}}
+		}
 		onFail()
 		return Result{NodeID: inv.NodeID, Err: fmt.Errorf("node %q failed: %w", inv.NodeID, err)}
 	}

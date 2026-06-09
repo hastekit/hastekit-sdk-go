@@ -29,6 +29,12 @@ type Result struct {
 	Output map[string]any
 	Port   string
 	Err    error
+
+	// Pause, when non-nil, means the node suspended the run instead of
+	// completing. The walker records the node as paused, stamps
+	// Input.Pause, and stops the walk. Executors translate a node's
+	// PauseError into this field.
+	Pause *PauseState
 }
 
 // Walker drives wave-based graph execution: dedup, result merging,
@@ -59,6 +65,10 @@ func NewWalker(opts RuntimeOptions) *Walker {
 // in.RunContext; Status is recorded per node.
 func (w *Walker) Walk(ctx context.Context, c *Compiled, in *Input, ne NodeExecutor) (*Input, error) {
 	in = ensureInit(in)
+	// A fresh walk is not suspended; any prior Pause is either being
+	// resumed (cleared by SetResume) or is stale from a serialised
+	// Input. Either way, start clean and let this walk re-derive it.
+	in.Pause = nil
 
 	steps := 0
 	wave := append([]string(nil), c.Roots...)
@@ -69,9 +79,6 @@ func (w *Walker) Walk(ctx context.Context, c *Compiled, in *Input, ne NodeExecut
 		if len(unique) == 0 {
 			break
 		}
-		if steps+len(unique) > w.MaxSteps {
-			return in, fmt.Errorf("workflow: exceeded max steps (%d)", w.MaxSteps)
-		}
 
 		// Stable dispatch order so deterministic runtimes (Temporal)
 		// replay identically.
@@ -80,20 +87,54 @@ func (w *Walker) Walk(ctx context.Context, c *Compiled, in *Input, ne NodeExecut
 			visited[id] = true
 		}
 
-		invs := make([]Invocation, len(unique))
-		for i, id := range unique {
+		// On a resume walk, nodes already completed in a prior run are
+		// short-circuited: we replay their cached port to follow edges
+		// instead of re-executing them (idempotent, side-effect-free).
+		// Only nodes that still need to run are dispatched to the
+		// executor.
+		var invs []Invocation
+		var dispatchIDs []string
+		results := make([]Result, 0, len(unique))
+		for _, id := range unique {
+			if in.Status[id] == NodeStatusCompleted {
+				port, ok := in.Ports[id]
+				if !ok {
+					port = DefaultPort
+				}
+				w.Logger.Info("short-circuiting completed node", "node_id", id, "port", port)
+				results = append(results, Result{NodeID: id, Port: port})
+				continue
+			}
 			node := c.Nodes[id]
 			in.SetStatus(id, NodeStatusRunning)
-			invs[i] = Invocation{Node: node, NodeID: id, Input: in}
+			invs = append(invs, Invocation{Node: node, NodeID: id, Input: in})
+			dispatchIDs = append(dispatchIDs, id)
 			steps++
 			w.Logger.Info("dispatching node", "node_id", id, "type", node.Type())
 		}
 
-		results := ne.ExecuteWave(ctx, invs)
+		if steps > w.MaxSteps {
+			return in, fmt.Errorf("workflow: exceeded max steps (%d)", w.MaxSteps)
+		}
+
+		if len(invs) > 0 {
+			results = append(results, ne.ExecuteWave(ctx, invs)...)
+		}
 
 		var waveErrs []error
 		var nextCandidates []string
+		var paused bool
 		for _, r := range results {
+			if r.Pause != nil {
+				in.SetStatus(r.NodeID, NodeStatusPaused)
+				in.Pause = r.Pause
+				if in.Pause.NodeID == "" {
+					in.Pause.NodeID = r.NodeID
+				}
+				w.Logger.Info("node paused awaiting external input", "node_id", r.NodeID)
+				paused = true
+				continue
+			}
 			if r.Err != nil {
 				in.SetStatus(r.NodeID, NodeStatusFailed)
 				w.Logger.Error("node execution failed", "node_id", r.NodeID, "error", r.Err)
@@ -102,6 +143,7 @@ func (w *Walker) Walk(ctx context.Context, c *Compiled, in *Input, ne NodeExecut
 			}
 			in.MergeContext(r.Output)
 			in.SetStatus(r.NodeID, NodeStatusCompleted)
+			in.SetPort(r.NodeID, r.Port)
 
 			// Conditional edges take precedence over static port
 			// edges.
@@ -136,13 +178,21 @@ func (w *Walker) Walk(ctx context.Context, c *Compiled, in *Input, ne NodeExecut
 			return in, errors.Join(waveErrs...)
 		}
 
+		// A node in this wave suspended the run. Completed siblings have
+		// already been recorded above, so a later resume walk replays
+		// them and re-derives the frontier. Stop here, leaving Input.Pause
+		// set for the caller to surface and resume from.
+		if paused {
+			return in, nil
+		}
+
 		wave = nextCandidates
 	}
 
 	// Mark unvisited nodes as skipped so observers see a complete
-	// per-node picture.
+	// per-node picture. A node left paused stays paused.
 	for id := range c.Nodes {
-		if !visited[id] {
+		if !visited[id] && in.Status[id] != NodeStatusPaused {
 			in.SetStatus(id, NodeStatusSkipped)
 		}
 	}

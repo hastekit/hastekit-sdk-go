@@ -1,9 +1,43 @@
 package workflow
 
-import "context"
+import (
+	"context"
+	"errors"
+)
 
 // NodeType identifies the kind of node in a workflow.
 type NodeType string
+
+// PauseError is the sentinel a node's Execute returns to suspend the
+// run instead of completing or failing. The walker catches it,
+// records the node as paused, and returns the run as suspended (not
+// failed) so an external decision can resume it later. Payload is an
+// opaque, host-defined bag describing what the run is waiting on
+// (e.g. an approval request's title and description); it is surfaced
+// on Input.Pause for the caller to act on.
+type PauseError struct {
+	Payload map[string]any
+}
+
+func (e *PauseError) Error() string {
+	return "workflow: node paused awaiting external input"
+}
+
+// Pause builds a *PauseError carrying payload. Nodes call this from
+// Execute to suspend the run.
+func Pause(payload map[string]any) error {
+	return &PauseError{Payload: payload}
+}
+
+// IsPauseErr reports whether err is (or wraps) a *PauseError, returning
+// it when so.
+func IsPauseErr(err error) (*PauseError, bool) {
+	var pe *PauseError
+	if errors.As(err, &pe) {
+		return pe, true
+	}
+	return nil, false
+}
 
 // Node is the interface every workflow node implements. Validate
 // runs at Compile time; Execute runs at run time and returns a
