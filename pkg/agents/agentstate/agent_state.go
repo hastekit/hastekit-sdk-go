@@ -45,6 +45,9 @@ type RunState struct {
 
 	// PausedToolCalls maps the parent tool call ID to the paused tool call
 	PausedToolCalls map[string]responses.FunctionCallMessage `json:"paused_tool_calls,omitempty"`
+
+	// LastAgentName is the name of the agent that was responding to the user last.
+	LastAgentName string `json:"last_agent_name,omitempty"`
 }
 
 // NextStep returns what the agent should do next
@@ -150,6 +153,10 @@ func (s *RunState) ToMeta() map[string]any {
 		runStateMap["paused_tool_calls"] = s.PausedToolCalls
 	}
 
+	if s.LastAgentName != "" {
+		runStateMap["last_agent_name"] = s.LastAgentName
+	}
+
 	return map[string]any{
 		"run_state": runStateMap,
 	}
@@ -248,6 +255,10 @@ func LoadRunStateFromMeta(meta map[string]any) *RunState {
 		if err == nil {
 			sonic.Unmarshal(pausedToolCallsBytes, &state.PausedToolCalls)
 		}
+	}
+
+	if lastAgentName, ok := runStateData["last_agent_name"].(string); ok {
+		state.LastAgentName = lastAgentName
 	}
 
 	return state

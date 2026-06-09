@@ -188,7 +188,9 @@ func (cm *ConversationRunManager) AddMessagesToQueue(ctx context.Context, msgs [
 	}
 }
 
-func (cm *ConversationRunManager) GetMessages(ctx context.Context, agentID string) ([]responses.InputMessageUnion, error) {
+func (cm *ConversationRunManager) GetMessages(ctx context.Context, agentName string) ([]responses.InputMessageUnion, error) {
+	cm.RunState.LastAgentName = agentName
+
 	// Process messages with summarizer if available
 	if cm.summarizer != nil {
 		summaryResult, err := cm.summarizer.Summarize(ctx, cm.msgIdToRunId, cm.oldMessages, cm.usage)
@@ -215,9 +217,9 @@ func (cm *ConversationRunManager) GetMessages(ctx context.Context, agentID strin
 
 	msgList := append(cm.oldMessages, cm.newMessages...)
 	if cm.messageFilter != nil {
-		msgList = cm.messageFilter.Filter(ctx, msgList, agentID)
+		msgList = cm.messageFilter.Filter(ctx, msgList, agentName)
 	}
-	return cm.attributeMessages(msgList, agentID), nil
+	return cm.attributeMessages(msgList, agentName), nil
 }
 
 func (cm *ConversationRunManager) LoadMessages(ctx context.Context, namespace string, threadID string, previousMessageID string) error {
