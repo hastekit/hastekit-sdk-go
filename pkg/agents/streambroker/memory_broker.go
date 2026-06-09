@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/hastekit/hastekit-sdk-go/pkg/agents/messages"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 )
 
@@ -18,7 +19,7 @@ type MemoryStreamBroker struct {
 	subscribers map[string][]chan *responses.ResponseChunk
 	closed      map[string]bool
 	stopped     map[string]bool
-	queues      map[string][]responses.InputMessageUnion
+	queues      map[string][]messages.Message
 	live        map[string]bool
 }
 
@@ -28,7 +29,7 @@ func NewMemoryStreamBroker() *MemoryStreamBroker {
 		subscribers: make(map[string][]chan *responses.ResponseChunk),
 		closed:      make(map[string]bool),
 		stopped:     make(map[string]bool),
-		queues:      make(map[string][]responses.InputMessageUnion),
+		queues:      make(map[string][]messages.Message),
 		live:        make(map[string]bool),
 	}
 }
@@ -122,7 +123,7 @@ func (b *MemoryStreamBroker) Close(ctx context.Context, channel string) error {
 
 // EnqueueOrStart implements RunClaimBroker: atomically join an in-flight
 // run on channel, or claim + reset the channel for a fresh run.
-func (b *MemoryStreamBroker) EnqueueOrStart(ctx context.Context, channel string, msgs []responses.InputMessageUnion) (bool, error) {
+func (b *MemoryStreamBroker) EnqueueOrStart(ctx context.Context, channel string, msgs []messages.Message) (bool, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -157,7 +158,7 @@ func (b *MemoryStreamBroker) IsStopped(ctx context.Context, channel string) (boo
 
 // EnqueueMessage appends a message onto the channel's pending queue.
 // The message remains available until DrainMessages is called.
-func (b *MemoryStreamBroker) EnqueueMessage(ctx context.Context, channel string, msg responses.InputMessageUnion) error {
+func (b *MemoryStreamBroker) EnqueueMessage(ctx context.Context, channel string, msg messages.Message) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.queues[channel] = append(b.queues[channel], msg)
@@ -166,7 +167,7 @@ func (b *MemoryStreamBroker) EnqueueMessage(ctx context.Context, channel string,
 
 // DrainMessages atomically returns and removes all queued messages
 // for the channel.
-func (b *MemoryStreamBroker) DrainMessages(ctx context.Context, channel string) ([]responses.InputMessageUnion, error) {
+func (b *MemoryStreamBroker) DrainMessages(ctx context.Context, channel string) ([]messages.Message, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	msgs := b.queues[channel]
@@ -202,6 +203,6 @@ func (b *MemoryStreamBroker) Reset() {
 	b.subscribers = make(map[string][]chan *responses.ResponseChunk)
 	b.closed = make(map[string]bool)
 	b.stopped = make(map[string]bool)
-	b.queues = make(map[string][]responses.InputMessageUnion)
+	b.queues = make(map[string][]messages.Message)
 	b.live = make(map[string]bool)
 }

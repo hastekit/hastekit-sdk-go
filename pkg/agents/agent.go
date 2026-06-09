@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/agentstate"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/history"
+	"github.com/hastekit/hastekit-sdk-go/pkg/agents/messages"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/streambroker"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/constants"
@@ -171,11 +172,11 @@ func (e *Agent) GetRunID(ctx context.Context) string {
 }
 
 type AgentInput struct {
-	Namespace         string                        `json:"namespace"`
-	ThreadID          string                        `json:"thread_id"`
-	PreviousMessageID string                        `json:"previous_message_id"`
-	Messages          []responses.InputMessageUnion `json:"messages"`
-	RunContext        map[string]any                `json:"run_context"`
+	Namespace         string          `json:"namespace"`
+	ThreadID          string          `json:"thread_id"`
+	PreviousMessageID string          `json:"previous_message_id"`
+	Message           history.Message `json:"messages"`
+	RunContext        map[string]any  `json:"run_context"`
 
 	// StreamID is the broker channel used for streaming chunks and for
 	// stop signaling. The runtime and the agent loop use it to publish
@@ -260,10 +261,13 @@ func (e *Agent) ExecuteLocal(ctx context.Context, in *AgentInput) (*AgentOutput,
 		defer e.streamBroker.Close(context.Background(), in.StreamID)
 	}
 
-	run, err := history.NewRun(ctx, e.history, in.Namespace, in.ThreadID, in.PreviousMessageID, in.Messages, history.WithRunContext(in.RunContext))
+	run, err := history.NewRun(ctx, e.history, in.Namespace, in.ThreadID, in.PreviousMessageID, history.WithRunContext(in.RunContext))
 	if err != nil {
 		return &AgentOutput{Status: agentstate.RunStatusError, RunID: ""}, err
 	}
+
+	// Add the incoming message to the run
+	run.AddMessages(ctx, in.Message, nil)
 
 	runId := run.GetMessageID()
 
@@ -398,7 +402,7 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, run *history
 						},
 					},
 				}
-				run.AddMessages(ctx, []responses.InputMessageUnion{cancelMsg}, nil)
+				run.AddMessages(ctx, messages.New(in.Message.SenderID, []responses.InputMessageUnion{cancelMsg}), nil)
 				finalOutput = append(finalOutput, cancelMsg)
 				run.RunState.TransitionToComplete()
 			}
@@ -407,13 +411,13 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, run *history
 		// Drain queued input messages from the broker.
 		if in.StreamID != "" && e.streamBroker != nil && !run.RunState.IsComplete() {
 			queued, _ := e.streamBroker.DrainMessages(context.Background(), in.StreamID)
-			run.ProcessIncomingMessages(queued)
+			run.AddMessagesToQueue(ctx, queued)
 		}
 
 		switch run.RunState.NextStep() {
 
 		case agentstate.StepCallLLM:
-			convMessages, err := run.GetMessages(ctx)
+			convMessages, err := run.GetMessages(ctx, e.Name)
 			if err != nil {
 				return &AgentOutput{Status: agentstate.RunStatusError, RunID: runId}, err
 			}
@@ -458,7 +462,7 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, run *history
 				inputMsgs = append(inputMsgs, inputMsg)
 			}
 
-			run.AddMessages(ctx, inputMsgs, resp.Usage)
+			run.AddMessages(ctx, messages.New(e.Name, inputMsgs), resp.Usage)
 			finalOutput = append(finalOutput, inputMsgs...)
 
 			// Extract tool calls
@@ -636,7 +640,7 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, run *history
 				}
 
 				// Add tool result to history
-				run.AddMessages(ctx, toolResultMsg, nil)
+				run.AddMessages(ctx, messages.New(in.Message.SenderID, toolResultMsg), nil)
 				finalOutput = append(finalOutput, toolResultMsg...)
 			}
 
@@ -816,7 +820,7 @@ func (h *AgentHandle) Stop(ctx context.Context) error {
 // decisions) to a run that's still in flight. For runs that have
 // already paused and exited, the next agent.Execute on the same
 // thread is the right entry instead.
-func (h *AgentHandle) EnqueueMessage(ctx context.Context, msg responses.InputMessageUnion) error {
+func (h *AgentHandle) EnqueueMessage(ctx context.Context, msg history.Message) error {
 	return h.broker.EnqueueMessage(ctx, h.StreamID, msg)
 }
 

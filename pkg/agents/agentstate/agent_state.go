@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"github.com/bytedance/sonic"
+	"github.com/hastekit/hastekit-sdk-go/pkg/agents/messages"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 )
 
@@ -36,7 +37,7 @@ type RunState struct {
 	ToolsAwaitingApproval []responses.FunctionCallMessage `json:"tools_awaiting_approval,omitempty"`
 	QueuedApprovals       []string                        `json:"queued_approvals,omitempty"`
 	QueuedRejections      []string                        `json:"queued_rejections,omitempty"`
-	QueuedMessages        []responses.InputMessageUnion   `json:"queued_messages,omitempty"`
+	QueuedMessages        []messages.Message              `json:"queued_messages,omitempty"`
 	TraceID               string                          `json:"traceid"`
 
 	// PendingNestedToolCalls maps the parent tool call ID to the nested tool call ID
@@ -44,6 +45,9 @@ type RunState struct {
 
 	// PausedToolCalls maps the parent tool call ID to the paused tool call
 	PausedToolCalls map[string]responses.FunctionCallMessage `json:"paused_tool_calls,omitempty"`
+
+	// LastAgentName is the name of the agent that was responding to the user last.
+	LastAgentName string `json:"last_agent_name,omitempty"`
 }
 
 // NextStep returns what the agent should do next
@@ -149,6 +153,10 @@ func (s *RunState) ToMeta() map[string]any {
 		runStateMap["paused_tool_calls"] = s.PausedToolCalls
 	}
 
+	if s.LastAgentName != "" {
+		runStateMap["last_agent_name"] = s.LastAgentName
+	}
+
 	return map[string]any{
 		"run_state": runStateMap,
 	}
@@ -247,6 +255,10 @@ func LoadRunStateFromMeta(meta map[string]any) *RunState {
 		if err == nil {
 			sonic.Unmarshal(pausedToolCallsBytes, &state.PausedToolCalls)
 		}
+	}
+
+	if lastAgentName, ok := runStateData["last_agent_name"].(string); ok {
+		state.LastAgentName = lastAgentName
 	}
 
 	return state

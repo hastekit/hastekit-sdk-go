@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents"
-	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
+	"github.com/hastekit/hastekit-sdk-go/pkg/agents/history"
 	restate "github.com/restatedev/sdk-go"
 	"github.com/restatedev/sdk-go/ingress"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -19,7 +19,7 @@ type WorkflowInput struct {
 	Namespace         string
 	ThreadID          string
 	PreviousMessageID string
-	Messages          []responses.InputMessageUnion
+	Message           history.Message
 	RunContext        map[string]any
 
 	// StreamID is the broker channel used for streaming chunks and for
@@ -58,7 +58,7 @@ func (r *RestateRuntime) Run(ctx context.Context, agent *agents.Agent, in *agent
 		Namespace:         in.Namespace,
 		ThreadID:          in.ThreadID,
 		PreviousMessageID: in.PreviousMessageID,
-		Messages:          in.Messages,
+		Message:           in.Message,
 		RunContext:        in.RunContext,
 		StreamID:          streamID,
 	}

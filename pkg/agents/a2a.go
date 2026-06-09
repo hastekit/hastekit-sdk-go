@@ -8,6 +8,7 @@ import (
 	"github.com/a2aproject/a2a-go/a2a"
 	"github.com/a2aproject/a2a-go/a2asrv"
 	"github.com/a2aproject/a2a-go/a2asrv/eventqueue"
+	"github.com/hastekit/hastekit-sdk-go/pkg/agents/history"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
 )
@@ -102,7 +103,7 @@ func (agent *A2A) Execute(ctx context.Context, reqCtx *a2asrv.RequestContext, q 
 	handle, err := agent.agent.Execute(ctx, &AgentInput{
 		Namespace:         "",
 		PreviousMessageID: "",
-		Messages:          []responses.InputMessageUnion{},
+		Message:           history.Message{Messages: []responses.InputMessageUnion{}},
 	})
 	if err != nil {
 		return nil
