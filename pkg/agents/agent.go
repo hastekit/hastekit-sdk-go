@@ -171,6 +171,13 @@ func (e *Agent) GetRunID(ctx context.Context) string {
 	return uuid.NewString()
 }
 
+// History returns the agent's conversation manager. Callers can use it
+// to inspect stored conversations, e.g. listing threads when the
+// persistence adapter implements history.ThreadLister.
+func (e *Agent) History() *history.CommonConversationManager {
+	return e.history
+}
+
 type AgentInput struct {
 	Namespace         string          `json:"namespace"`
 	ThreadID          string          `json:"thread_id"`

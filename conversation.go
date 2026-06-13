@@ -14,7 +14,8 @@ func (c *SDK) NewConversationManager(opts ...history.ConversationManagerOptions)
 
 func (c *SDK) getConversationPersistence() history.ConversationPersistenceAdapter {
 	if c.endpoint == "" {
-		return history.NewInMemoryConversationPersistence()
+		h, _ := history.NewFileConversationPersistence("./conversations")
+		return h
 	}
 
 	return hastekitgateway.NewExternalConversationPersistence(c.endpoint, c.projectId, c.httpClient)
