@@ -5,12 +5,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/streambroker"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway"
-	"github.com/hastekit/hastekit-sdk-go/pkg/hastekitgateway"
-	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
 	"go.opentelemetry.io/otel"
 	"go.temporal.io/sdk/client"
 )
@@ -23,8 +20,8 @@ type SDK struct {
 	*gateway.LLMClient
 
 	endpoint       string
-	orgId          uuid.UUID
-	projectId      uuid.UUID
+	orgName        string
+	projectName    string
 	virtualKey     string
 	directMode     bool
 	llmConfigs     gateway.ConfigStore
@@ -48,10 +45,10 @@ type ServerConfig struct {
 	// For LLM calls
 	VirtualKey string
 
-	// Org ID
-	OrgID string
+	// Org name — the org segment of the GitHub-style API path
+	OrgName string
 
-	// For conversations
+	// Project name — the project segment of the API path.
 	ProjectName string
 }
 
@@ -82,12 +79,12 @@ type ClientOptions struct {
 type ClientOption func(*ClientOptions)
 
 // WithServerConfig configures the SDK to use a HasteKit Gateway server
-func WithServerConfig(endpoint, virtualKey, orgID, projectName string) ClientOption {
+func WithServerConfig(endpoint, virtualKey, orgName, projectName string) ClientOption {
 	return func(opts *ClientOptions) {
 		opts.serverConfig = ServerConfig{
 			Endpoint:    endpoint,
 			VirtualKey:  virtualKey,
-			OrgID:       orgID,
+			OrgName:     orgName,
 			ProjectName: projectName,
 		}
 	}
@@ -145,16 +142,6 @@ type LegacyClientOptions struct {
 	RestateConfig  RestateConfig
 	TemporalConfig TemporalConfig
 	RedisConfig    RedisConfig
-}
-
-type authTransport struct {
-	underlying http.RoundTripper
-	token      string
-}
-
-func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	req.Header.Set("X-Org-ID", t.token)
-	return t.underlying.RoundTrip(req)
 }
 
 // New creates a new SDK instance with the struct-based options (legacy)
@@ -232,20 +219,12 @@ func newSDK(opts *ClientOptions) (*SDK, error) {
 		}
 	}
 
-	if opts.serverConfig.Endpoint != "" {
-		httpClient = &http.Client{
-			Timeout: opts.timeout,
-			Transport: &authTransport{
-				underlying: http.DefaultTransport,
-				token:      opts.serverConfig.OrgID,
-			},
-		}
-	}
-
 	sdk := &SDK{
 		llmConfigs:     configStore,
 		directMode:     configStore != nil,
 		endpoint:       opts.serverConfig.Endpoint,
+		orgName:        opts.serverConfig.OrgName,
+		projectName:    opts.serverConfig.ProjectName,
 		virtualKey:     opts.serverConfig.VirtualKey,
 		restateConfig:  opts.restateConfig,
 		temporalConfig: opts.temporalConfig,
@@ -261,39 +240,5 @@ func newSDK(opts *ClientOptions) (*SDK, error) {
 	sdk.setTemporalClient()
 	sdk.setLLMClient()
 
-	// Project name to ID resolution (only if using server config with project name)
-	if opts.serverConfig.Endpoint != "" && opts.serverConfig.ProjectName != "" {
-		// Convert project name to ID via API call
-		resp, err := sdk.httpClient.Get(fmt.Sprintf("%s/api/agent-server/projects", opts.serverConfig.Endpoint))
-		if err != nil {
-			return nil, fmt.Errorf("failed to lookup project: %w", err)
-		}
-		defer resp.Body.Close()
-
-		projectsRes := hastekitgateway.Response[[]Project]{}
-		if err := utils.DecodeJSON(resp.Body, &projectsRes); err != nil {
-			return nil, fmt.Errorf("failed to parse projects response: %w", err)
-		}
-
-		// Find matching project by name
-		for _, proj := range projectsRes.Data {
-			if proj.Name == opts.serverConfig.ProjectName {
-				sdk.projectId = proj.ID
-				return sdk, nil
-			}
-		}
-
-		return nil, fmt.Errorf("project %q not found", opts.serverConfig.ProjectName)
-	}
-
 	return sdk, nil
-}
-
-// Project represents a workspace or collection an agent can belong to
-type Project struct {
-	ID         uuid.UUID `json:"id" db:"id"`
-	Name       string    `json:"name" db:"name"`
-	DefaultKey *string   `json:"default_key,omitempty" db:"default_key"`
-	CreatedAt  time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at" db:"updated_at"`
 }

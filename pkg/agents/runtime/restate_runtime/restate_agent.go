@@ -46,7 +46,7 @@ func (w *AgentWorkflow) Run(restateCtx restate.WorkflowContext, input *WorkflowI
 		Namespace:         input.Namespace,
 		ThreadID:          input.ThreadID,
 		PreviousMessageID: input.PreviousMessageID,
-		Messages:          input.Messages,
+		Message:           input.Message,
 		RunContext:        input.RunContext,
 		StreamID:          streamID,
 	})
@@ -62,6 +62,10 @@ func (w *AgentWorkflow) newRestateAgentProxy(restateCtx restate.WorkflowContext,
 	if agentOptions.History.Summarizer != nil {
 		conversationSummarizerProxy := NewRestateConversationSummarizer(restateCtx, agentOptions.History.Summarizer)
 		options = append(options, history.WithSummarizer(conversationSummarizerProxy))
+	}
+	if agentOptions.History.MessageFilter != nil {
+		conversationFilterProxy := NewRestateMessageFilter(restateCtx, agentOptions.History.MessageFilter)
+		options = append(options, history.WithMessageFilter(conversationFilterProxy))
 	}
 	conversationHistory := history.NewConversationManager(conversationPersistenceProxy, options...)
 

@@ -5,15 +5,23 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 
 	"github.com/bytedance/sonic"
 	"github.com/google/uuid"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/history"
-	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 )
+
+// projectBasePath builds the GitHub-style project-scoped API base shared by all
+// agent-server adapters: {endpoint}/api/agent-server/orgs/{orgName}/projects/{projectName}.
+// The server resolves the org + project name to ids from the path.
+func projectBasePath(endpoint, orgName, projectName string) string {
+	return fmt.Sprintf("%s/api/agent-server/orgs/%s/projects/%s",
+		endpoint, url.PathEscape(orgName), url.PathEscape(projectName))
+}
 
 var (
 	tracer = otel.Tracer("HastekitAdapters")
@@ -28,16 +36,18 @@ type Response[T any] struct {
 }
 
 type ExternalConversationPersistence struct {
-	Endpoint   string
-	projectID  uuid.UUID
-	httpClient *http.Client
+	Endpoint    string
+	orgName     string
+	projectName string
+	httpClient  *http.Client
 }
 
-func NewExternalConversationPersistence(endpoint string, projectID uuid.UUID, httpClient *http.Client) *ExternalConversationPersistence {
+func NewExternalConversationPersistence(endpoint, orgName, projectName string, httpClient *http.Client) *ExternalConversationPersistence {
 	return &ExternalConversationPersistence{
-		Endpoint:   endpoint,
-		projectID:  projectID,
-		httpClient: httpClient,
+		Endpoint:    endpoint,
+		orgName:     orgName,
+		projectName: projectName,
+		httpClient:  httpClient,
 	}
 }
 
@@ -67,7 +77,7 @@ func (p *ExternalConversationPersistence) LoadMessages(ctx context.Context, name
 		return []history.ConversationMessage{}, nil
 	}
 
-	url := fmt.Sprintf("%s/api/agent-server/messages/summary?namespace=%s&thread_id=%s&previous_message_id=%s&project_id=%s", p.Endpoint, namespace, threadId, previousMessageId, p.projectID.String())
+	url := fmt.Sprintf("%s/messages/summary?namespace=%s&thread_id=%s&previous_message_id=%s", projectBasePath(p.Endpoint, p.orgName, p.projectName), namespace, threadId, previousMessageId)
 
 	resp, err := p.httpClient.Get(url)
 	if err != nil {
@@ -86,18 +96,18 @@ func (p *ExternalConversationPersistence) LoadMessages(ctx context.Context, name
 }
 
 type AddMessageRequest struct {
-	ProjectID         uuid.UUID                     `json:"project_id"`
-	Namespace         string                        `json:"namespace"`
-	MessageID         string                        `json:"message_id"`
-	ThreadID          string                        `json:"thread_id"`
-	PreviousMessageID string                        `json:"previous_message_id"`
-	Messages          []responses.InputMessageUnion `json:"messages"`
-	Meta              map[string]any                `json:"meta"`
-	ConversationID    string                        `json:"conversation_id"`
+	ProjectID         uuid.UUID         `json:"project_id"`
+	Namespace         string            `json:"namespace"`
+	MessageID         string            `json:"message_id"`
+	ThreadID          string            `json:"thread_id"`
+	PreviousMessageID string            `json:"previous_message_id"`
+	Messages          []history.Message `json:"messages"`
+	Meta              map[string]any    `json:"meta"`
+	ConversationID    string            `json:"conversation_id"`
 }
 
 // SaveMessages implements core.ChatHistory
-func (p *ExternalConversationPersistence) SaveMessages(ctx context.Context, namespace, msgId, previousMsgId, threadId string, conversationId string, messages []responses.InputMessageUnion, meta map[string]any) error {
+func (p *ExternalConversationPersistence) SaveMessages(ctx context.Context, namespace, msgId, previousMsgId, threadId string, conversationId string, messages []history.Message, meta map[string]any) error {
 	ctx, span := tracer.Start(ctx, "ExternalConversationPersistence.SaveMessages")
 	defer span.End()
 
@@ -110,7 +120,7 @@ func (p *ExternalConversationPersistence) SaveMessages(ctx context.Context, name
 	)
 
 	// Save regular messages
-	url := fmt.Sprintf("%s/api/agent-server/messages?project_id=%s", p.Endpoint, p.projectID.String())
+	url := fmt.Sprintf("%s/messages", projectBasePath(p.Endpoint, p.orgName, p.projectName))
 
 	payload := AddMessageRequest{
 		Namespace:         namespace,
@@ -157,7 +167,7 @@ func (p *ExternalConversationPersistence) SaveSummary(ctx context.Context, names
 	ctx, span := tracer.Start(ctx, "ExternalConversationPersistence.SaveSummary")
 	defer span.End()
 
-	url := fmt.Sprintf("%s/api/agent-server/summary?project_id=%s&namespace=%s", p.Endpoint, p.projectID.String(), namespace)
+	url := fmt.Sprintf("%s/summary?namespace=%s", projectBasePath(p.Endpoint, p.orgName, p.projectName), namespace)
 
 	payloadBytes, err := sonic.Marshal(summary)
 	if err != nil {

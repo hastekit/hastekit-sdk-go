@@ -5,7 +5,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/history"
-	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -23,7 +22,7 @@ func (t *TemporalHistory) LoadMessages(ctx context.Context, namespace string, th
 	return t.wrappedPersistence.LoadMessages(ctx, namespace, threadID, previousMessageID)
 }
 
-func (t *TemporalHistory) SaveMessages(ctx context.Context, namespace, msgId, previousMsgId, threadId, conversationId string, messages []responses.InputMessageUnion, meta map[string]any) error {
+func (t *TemporalHistory) SaveMessages(ctx context.Context, namespace, msgId, previousMsgId, threadId, conversationId string, messages []history.Message, meta map[string]any) error {
 	return t.wrappedPersistence.SaveMessages(ctx, namespace, msgId, previousMsgId, threadId, conversationId, messages, meta)
 }
 
@@ -80,7 +79,7 @@ func (t *TemporalConversationPersistenceProxy) LoadMessages(ctx context.Context,
 	return messages, nil
 }
 
-func (t *TemporalConversationPersistenceProxy) SaveMessages(ctx context.Context, namespace, msgId, previousMsgId, threadId, conversationId string, messages []responses.InputMessageUnion, meta map[string]any) error {
+func (t *TemporalConversationPersistenceProxy) SaveMessages(ctx context.Context, namespace, msgId, previousMsgId, threadId, conversationId string, messages []history.Message, meta map[string]any) error {
 	return workflow.ExecuteActivity(t.workflowCtx, t.prefix+"_SaveMessagesActivity", namespace, msgId, previousMsgId, threadId, conversationId, messages, meta).Get(t.workflowCtx, nil)
 }
 

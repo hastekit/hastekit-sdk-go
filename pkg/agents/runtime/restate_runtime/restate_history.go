@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/history"
-	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	restate "github.com/restatedev/sdk-go"
 )
 
@@ -35,7 +34,7 @@ func (t *RestateHistory) LoadMessages(ctx context.Context, namespace string, thr
 	}, restate.WithName("LoadMessages"))
 }
 
-func (t *RestateHistory) SaveMessages(ctx context.Context, namespace, msgId, previousMsgId, threadId, conversationId string, messages []responses.InputMessageUnion, meta map[string]any) error {
+func (t *RestateHistory) SaveMessages(ctx context.Context, namespace, msgId, previousMsgId, threadId, conversationId string, messages []history.Message, meta map[string]any) error {
 	_, err := restate.Run(t.restateCtx, func(ctx restate.RunContext) (any, error) {
 		return nil, t.wrappedPersistence.SaveMessages(ctx, namespace, msgId, previousMsgId, threadId, conversationId, messages, meta)
 	}, restate.WithName("SaveMessages"))

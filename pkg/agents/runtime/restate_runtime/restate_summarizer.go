@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/history"
+	"github.com/hastekit/hastekit-sdk-go/pkg/agents/messages"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	restate "github.com/restatedev/sdk-go"
 )
@@ -20,8 +21,8 @@ func NewRestateConversationSummarizer(restateCtx restate.WorkflowContext, wrappe
 	}
 }
 
-func (t *RestateConversationSummarizer) Summarize(ctx context.Context, msgIdToRunId map[string]string, messages []responses.InputMessageUnion, usage *responses.Usage) (*history.SummaryResult, error) {
+func (t *RestateConversationSummarizer) Summarize(ctx context.Context, msgIdToRunId map[string]string, msgs []messages.Message, usage *responses.Usage) (*history.SummaryResult, error) {
 	return restate.Run(t.restateCtx, func(ctx restate.RunContext) (*history.SummaryResult, error) {
-		return t.wrappedSummarizer.Summarize(ctx, msgIdToRunId, messages, usage)
+		return t.wrappedSummarizer.Summarize(ctx, msgIdToRunId, msgs, usage)
 	})
 }

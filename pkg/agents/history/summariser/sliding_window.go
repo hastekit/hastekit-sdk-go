@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/history"
+	"github.com/hastekit/hastekit-sdk-go/pkg/agents/messages"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 )
 
@@ -26,22 +27,22 @@ func NewSlidingWindowHistorySummarizer(opts *SlidingWindowHistorySummarizerOptio
 // Summarize implements the HistorySummarizer interface.
 // For sliding window, we simply keep the most recent N runs and discard the rest.
 // We don't create a summary message, we just return which messages to keep.
-func (s *SlidingWindowHistorySummarizer) Summarize(ctx context.Context, msgIdToRunId map[string]string, messages []responses.InputMessageUnion, usage *responses.Usage) (*history.SummaryResult, error) {
+func (s *SlidingWindowHistorySummarizer) Summarize(ctx context.Context, msgIdToRunId map[string]string, msgs []messages.Message, usage *responses.Usage) (*history.SummaryResult, error) {
 	// Group messages by their run ID
 	type Run struct {
 		RunID    string
-		Messages []responses.InputMessageUnion
+		Messages []messages.Message
 	}
 
 	runs := []Run{}
 	runIdsSeen := []string{}
-	for _, msg := range messages {
-		runId := msgIdToRunId[msg.ID()]
+	for _, mm := range msgs {
+		runId := msgIdToRunId[mm.ID]
 
 		if !slices.Contains(runIdsSeen, runId) {
 			runs = append(runs, Run{
 				RunID:    runId,
-				Messages: []responses.InputMessageUnion{msg},
+				Messages: []messages.Message{mm},
 			})
 			runIdsSeen = append(runIdsSeen, runId)
 			continue
@@ -49,7 +50,7 @@ func (s *SlidingWindowHistorySummarizer) Summarize(ctx context.Context, msgIdToR
 
 		// Add message to the last run (assumes messages are grouped by run ID)
 		run := &runs[len(runs)-1]
-		run.Messages = append(run.Messages, msg)
+		run.Messages = append(run.Messages, mm)
 	}
 
 	// If we have fewer or equal runs than keepCount, keep everything
@@ -63,7 +64,7 @@ func (s *SlidingWindowHistorySummarizer) Summarize(ctx context.Context, msgIdToR
 	runsToDiscard := runs[:keepFromIndex]
 
 	// Collect all messages from runs to keep
-	messagesToKeep := []responses.InputMessageUnion{}
+	messagesToKeep := []messages.Message{}
 	for _, run := range runsToKeep {
 		messagesToKeep = append(messagesToKeep, run.Messages...)
 	}

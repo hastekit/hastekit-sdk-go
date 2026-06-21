@@ -23,9 +23,15 @@ func (c *SDK) NewLLM(opts LLMOptions) llm.Provider {
 
 // setLLMClient creates a new LLMClient that provides access to multiple LLM providers.
 func (c *SDK) setLLMClient() {
+	var opts []gateway.LLMClientOption
+	if c.virtualKey != "" {
+		opts = append(opts, gateway.WithKey(c.virtualKey))
+	}
+
 	c.LLMClient = gateway.NewLLMClient(
 		c.getGatewayAdapter(),
 		c.llmConfigs,
+		opts...,
 	)
 }
 

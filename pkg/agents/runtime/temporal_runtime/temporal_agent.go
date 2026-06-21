@@ -46,6 +46,11 @@ func (a *TemporalAgentV2) GetActivities() map[string]interface{} {
 		activities[a.options.Name+"_SummarizerActivity"] = temporalSummarizer
 	}
 
+	if a.options.History.MessageFilter != nil {
+		temporalMessageFilter := NewTemporalMessageFilter(a.options.History.MessageFilter)
+		activities[a.options.Name+"_MessageFilterActivity"] = temporalMessageFilter.Filter
+	}
+
 	for _, tool := range a.options.Tools {
 		temporalTool := NewTemporalTool(tool)
 		activities[getToolName(a.options.Name, tool)+"_ExecuteToolActivity"] = temporalTool.Execute
@@ -87,6 +92,10 @@ func (a *TemporalAgentV2) newTemporalProxyAgent(ctx workflow.Context) *agents.Ag
 	if a.options.History.Summarizer != nil {
 		conversationSummarizerProxy := NewTemporalConversationSummarizerProxy(ctx, a.options.Name)
 		options = append(options, history.WithSummarizer(conversationSummarizerProxy))
+	}
+	if a.options.History.MessageFilter != nil {
+		conversationFilterProxy := NewTemporalMessageFilterProxy(ctx, a.options.Name)
+		options = append(options, history.WithMessageFilter(conversationFilterProxy))
 	}
 	conversationHistory := history.NewConversationManager(conversationPersistenceProxy, options...)
 

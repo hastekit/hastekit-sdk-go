@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
+	"github.com/hastekit/hastekit-sdk-go/pkg/agents/messages"
 	"go.opentelemetry.io/otel/attribute"
 )
 
@@ -17,7 +17,7 @@ type inMemoryMessage struct {
 	ThreadID          string
 	ConversationID    string
 	Namespace         string
-	Messages          []responses.InputMessageUnion
+	Messages          []Message
 	Meta              map[string]any
 	CreatedAt         time.Time
 }
@@ -37,7 +37,7 @@ type inMemorySummary struct {
 	ID                      string
 	ThreadID                string
 	Namespace               string
-	SummaryMessage          responses.InputMessageUnion
+	SummaryMessage          messages.Message
 	LastSummarizedMessageID string
 	CreatedAt               time.Time
 	Meta                    map[string]any
@@ -133,7 +133,7 @@ func (p *InMemoryConversationPersistence) LoadMessages(ctx context.Context, name
 				MessageID:      summary.ID,
 				ThreadID:       summary.ThreadID,
 				ConversationID: thread.ConversationID,
-				Messages:       []responses.InputMessageUnion{summary.SummaryMessage},
+				Messages:       []Message{summary.SummaryMessage},
 				Meta:           summary.Meta,
 			}
 			result = append(result, summaryMsg)
@@ -176,7 +176,7 @@ func (p *InMemoryConversationPersistence) LoadMessages(ctx context.Context, name
 }
 
 // SaveMessages saves messages with support for conversations and threads
-func (p *InMemoryConversationPersistence) SaveMessages(ctx context.Context, namespace, msgId, previousMsgId, threadId, conversationId string, messages []responses.InputMessageUnion, meta map[string]any) error {
+func (p *InMemoryConversationPersistence) SaveMessages(ctx context.Context, namespace, msgId, previousMsgId, threadId, conversationId string, messages []Message, meta map[string]any) error {
 	ctx, span := tracer.Start(ctx, "InMemoryConversationPersistence.SaveMessages")
 	defer span.End()
 
@@ -192,6 +192,24 @@ func (p *InMemoryConversationPersistence) SaveMessages(ctx context.Context, name
 	defer p.mu.Unlock()
 
 	now := time.Now()
+
+	// Incremental save of an already-saved run. A single run can be
+	// saved more than once under the same msgId — e.g. it pauses for a
+	// tool/approval round and is later continued — and each save carries
+	// only the messages added since the previous one. Append those to
+	// the existing record instead of overwriting it (which would drop
+	// the earlier messages, often the user turn that opened the run) and
+	// don't re-index the run in its thread.
+	if existing, ok := p.messages[msgId]; ok {
+		existing.Messages = append(existing.Messages, messages...)
+		if meta != nil {
+			existing.Meta = meta
+		}
+		if t := p.threads[existing.ThreadID]; t != nil {
+			t.LastMessageID = msgId
+		}
+		return nil
+	}
 
 	var threadID string
 	var convID string
@@ -329,6 +347,20 @@ func (p *InMemoryConversationPersistence) SaveSummary(ctx context.Context, names
 	}
 
 	return nil
+}
+
+// getMessage returns the stored message for an ID, or nil if absent
+func (p *InMemoryConversationPersistence) getMessage(msgID string) *inMemoryMessage {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.messages[msgID]
+}
+
+// getThread returns the stored thread for an ID, or nil if absent
+func (p *InMemoryConversationPersistence) getThread(threadID string) *inMemoryThread {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.threads[threadID]
 }
 
 // Clear removes all stored data (useful for testing)
