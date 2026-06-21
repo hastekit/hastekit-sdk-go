@@ -27,6 +27,7 @@ A powerful Golang SDK for building AI agents and making LLM calls across multipl
 - [Usage](#usage)
   - [LLM Calls](#llm-calls)
   - [Agents](#agents)
+  - [AG-UI](#ag-ui)
   - [Tools](#tools)
   - [Conversation History](#conversation-history)
   - [Durable Agents](#durable-agents)
@@ -431,6 +432,63 @@ out, err := handle.Wait()
 ```
 
 The `StreamID` on the handle (also returned in the `X-Stream-Id` HTTP header when serving over HTTP) lets you re-subscribe to the same broker channel — useful for resuming a stream after a page refresh, or for stopping the run from a different process.
+
+### AG-UI
+
+Agents are served to the browser over the [AG-UI protocol](https://github.com/ag-ui-protocol/ag-ui) — the standard event-stream protocol that frontend agent frameworks (CopilotKit, raw `@ag-ui/client`, etc.) speak. The `pkg/agui` package translates the SDK's streaming chunks into canonical AG-UI events (text messages, reasoning, tool calls, steps, human-in-the-loop interrupts) over SSE:
+
+```go
+import "github.com/hastekit/hastekit-sdk-go/pkg/agui"
+
+client, _ := hastekit.NewWithOptions(...)
+
+client.NewAgent(&hastekit.AgentOptions{
+    Name: "Assistant",
+    // ...
+})
+
+// Exposes:
+//   GET  /agents                                   → registered agent names
+//   POST /agents/{agent}/run                       → AG-UI run endpoint (SSE)
+//   GET  /agents/{agent}/threads                   → stored conversation threads, newest first
+//   GET  /agents/{agent}/threads/{thread}/messages → thread history as AG-UI messages
+http.ListenAndServe(":8080", agui.NewHandler(client))
+
+// Or mount a single agent's run endpoint on an existing mux:
+// mux.Handle("POST /assistant/run", agui.AgentHandler(agent))
+```
+
+For a zero-setup browser chat UI, the `pkg/agui/web` package embeds a ready-made [CopilotKit](https://copilotkit.ai) chat into your binary with `go:embed` — no Node toolchain or separate frontend deploy needed to *run* it:
+
+```go
+import "github.com/hastekit/hastekit-sdk-go/pkg/agui/web"
+
+// Serves the embedded CopilotKit chat UI at / and the AG-UI protocol
+// endpoints under /api/agui/*.
+if err := web.Serve(":8080", client); err != nil {
+    log.Fatal(err)
+}
+```
+
+The embedded UI lists registered agents, shows a sidebar of prior conversations (select one to resume it on the same thread), streams assistant text, reasoning, and tool calls live, and renders CopilotKit's `useInterrupt` approval cards inline when a run pauses for human-in-the-loop tool approval.
+
+Conversation listing works when the agent's persistence adapter implements `history.ThreadLister` — the SDK's built-in in-memory and file adapters both do. For adapters that can't enumerate threads, the listing endpoint answers `501` and the UI hides the picker.
+
+The CopilotKit UI is a Vite/React app under [`pkg/agui/web/ui`](pkg/agui/web/ui); its build output is committed to `pkg/agui/web/static`, so `go build` never needs Node. Rebuild only when changing the UI source (`cd pkg/agui/web/ui && pnpm install && pnpm build`). CopilotKit v2 can't be loaded from a public ESM CDN (its dependency graph breaks esm.sh/jsDelivr), so it's bundled. To keep the embedded weight down to ~1MB (from ~17MB), the build aliases out CopilotKit's heaviest optional dependencies — the markdown renderer's Shiki/Mermaid/Cytoscape stack (swapped for a lightweight `react-markdown` shim), KaTeX's math fonts, and the dev-console web-inspector — none of which the chat needs. An offline, framework-free fallback UI is embedded at `/basic.html`.
+
+Options (shared by `agui.NewHandler`, `agui.AgentHandler`, and `web.Serve`):
+
+```go
+web.Serve(":8080", client,
+    agui.WithNamespace("user-123"), // conversation namespace (default "default")
+    agui.WithSenderID("alice"),     // sender attribution (default "user")
+    agui.WithFullHistory(),         // forward the client's full message list
+                                    // (only for agents without persistence)
+    agui.WithKeepalive(10*time.Second), // SSE keep-alive interval (default 15s)
+)
+```
+
+Human-in-the-loop: when a run pauses for tool approval, the stream emits a `CUSTOM` event named `on_interrupt` (CopilotKit's `useInterrupt` convention) followed by `RUN_FINISHED` with `result.status: "paused"`. The client resumes by POSTing decisions back on the same thread under `forwardedProps.command.resume.decisions[]` (`{toolCallId, approved}`).
 
 ### Tools
 

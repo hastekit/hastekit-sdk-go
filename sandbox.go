@@ -19,5 +19,5 @@ func (c *SDK) NewKnowledgeManager(name string) tools.KnowledgePersistence {
 		return nil
 	}
 
-	return hastekitgateway.NewExternalKnowledgePersistence(c.endpoint, c.projectId, name, c.httpClient)
+	return hastekitgateway.NewExternalKnowledgePersistence(c.endpoint, c.orgName, c.projectName, name, c.httpClient)
 }

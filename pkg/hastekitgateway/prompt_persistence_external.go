@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,20 +18,22 @@ import (
 // returns the chosen version's template — keeping the SDK to a
 // single round trip per LoadPrompt call.
 type ExternalPromptPersistence struct {
-	Endpoint   string
-	projectID  uuid.UUID
-	name       string
-	alias      string
-	httpClient *http.Client
+	Endpoint    string
+	orgName     string
+	projectName string
+	name        string
+	alias       string
+	httpClient  *http.Client
 }
 
-func NewExternalPromptPersistence(endpoint string, projectID uuid.UUID, name string, alias string, httpClient *http.Client) *ExternalPromptPersistence {
+func NewExternalPromptPersistence(endpoint, orgName, projectName, name, alias string, httpClient *http.Client) *ExternalPromptPersistence {
 	return &ExternalPromptPersistence{
-		Endpoint:   endpoint,
-		projectID:  projectID,
-		name:       name,
-		alias:      alias,
-		httpClient: httpClient,
+		Endpoint:    endpoint,
+		orgName:     orgName,
+		projectName: projectName,
+		name:        name,
+		alias:       alias,
+		httpClient:  httpClient,
 	}
 }
 
@@ -52,7 +55,7 @@ type PromptVersionWithPrompt struct {
 }
 
 func (p *ExternalPromptPersistence) LoadPrompt(ctx context.Context) (string, error) {
-	url := fmt.Sprintf("%s/api/agent-server/prompts/%s/by-alias/%s?project_id=%s", p.Endpoint, p.name, p.alias, p.projectID)
+	url := fmt.Sprintf("%s/prompts/%s/by-alias/%s", projectBasePath(p.Endpoint, p.orgName, p.projectName), url.PathEscape(p.name), url.PathEscape(p.alias))
 
 	resp, err := p.httpClient.Get(url)
 	if err != nil {

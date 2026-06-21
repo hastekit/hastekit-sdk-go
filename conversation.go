@@ -18,5 +18,5 @@ func (c *SDK) getConversationPersistence() history.ConversationPersistenceAdapte
 		return h
 	}
 
-	return hastekitgateway.NewExternalConversationPersistence(c.endpoint, c.projectId, c.httpClient)
+	return hastekitgateway.NewExternalConversationPersistence(c.endpoint, c.orgName, c.projectName, c.httpClient)
 }

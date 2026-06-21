@@ -35,7 +35,7 @@ func NewInMemoryConfigStore(configs []ProviderConfig) *InMemoryConfigStore {
 func (s *InMemoryConfigStore) GetProviderConfig(_ context.Context, providerName llm.ProviderName, key string) (*ProviderConfig, error) {
 	config := s.providerConfigs[providerName]
 
-	if len(config.ApiKeys) == 0 {
+	if config == nil || len(config.ApiKeys) == 0 {
 		return nil, fmt.Errorf("no API key configured for provider %s", providerName)
 	}
 

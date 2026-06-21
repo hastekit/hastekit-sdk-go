@@ -10,7 +10,7 @@ func (c *SDK) Prompt(prompt string) *prompts.SimplePrompt {
 }
 
 func (c *SDK) RemotePrompt(name, alias string) *prompts.SimplePrompt {
-	return prompts.NewWithLoader(hastekitgateway.NewExternalPromptPersistence(c.endpoint, c.projectId, name, alias, c.httpClient))
+	return prompts.NewWithLoader(hastekitgateway.NewExternalPromptPersistence(c.endpoint, c.orgName, c.projectName, name, alias, c.httpClient))
 }
 
 func (c *SDK) CustomPrompt(loader prompts.PromptLoader) *prompts.SimplePrompt {

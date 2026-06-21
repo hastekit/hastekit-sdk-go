@@ -2,7 +2,6 @@ package gateway
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm"
@@ -20,7 +19,6 @@ func (g *LLMGateway) getProvider(ctx context.Context, providerName llm.ProviderN
 
 	providerConfig, err := g.ConfigStore.GetProviderConfig(ctx, providerName, key)
 	if err != nil {
-		err = errors.New("failed to get provider config")
 		return nil, err
 	}
 

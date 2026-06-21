@@ -6,37 +6,37 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/google/uuid"
 	"github.com/hastekit/hastekit-sdk-go/pkg/knowledge/vectorstores"
 	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
 )
 
 type ExternalKnowledgePersistence struct {
-	endpoint  string
-	projectId uuid.UUID
-	name      string
+	endpoint    string
+	orgName     string
+	projectName string
+	name        string
 
 	httpClient *http.Client
 }
 
-func NewExternalKnowledgePersistence(endpoint string, projectId uuid.UUID, name string, httpClient *http.Client) *ExternalKnowledgePersistence {
+func NewExternalKnowledgePersistence(endpoint, orgName, projectName, name string, httpClient *http.Client) *ExternalKnowledgePersistence {
 	return &ExternalKnowledgePersistence{
-		endpoint:   endpoint,
-		projectId:  projectId,
-		name:       name,
-		httpClient: httpClient,
+		endpoint:    endpoint,
+		orgName:     orgName,
+		projectName: projectName,
+		name:        name,
+		httpClient:  httpClient,
 	}
 }
 
 func (kp *ExternalKnowledgePersistence) Search(ctx context.Context, query string, limit int) ([]vectorstores.SearchResult, error) {
-	u, err := url.Parse(fmt.Sprintf("%s/api/agent-server/knowledges/by-name/%s/search", kp.endpoint, kp.name))
+	u, err := url.Parse(fmt.Sprintf("%s/knowledges/by-name/%s/search", projectBasePath(kp.endpoint, kp.orgName, kp.projectName), url.PathEscape(kp.name)))
 	if err != nil {
 		return nil, err
 	}
 
-	// 2. Add all query parameters (including project_id and limit)
+	// Add query parameters (project scope is carried by the path).
 	q := u.Query()
-	q.Set("project_id", kp.projectId.String())
 	q.Set("limit", fmt.Sprintf("%d", limit))
 	q.Set("query", query)
 
