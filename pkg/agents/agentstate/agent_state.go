@@ -33,6 +33,7 @@ type RunState struct {
 	CurrentStep           Step                            `json:"current_step"`
 	LoopIteration         int                             `json:"loop_iteration"`
 	Usage                 responses.Usage                 `json:"usage"`
+	ContextTokens         int                             `json:"context_tokens"` // ContextTokens is the total token count of the most recent LLM call (input + output of a single response)
 	PendingToolCalls      []responses.FunctionCallMessage `json:"pending_tool_calls,omitempty"`
 	ToolsAwaitingApproval []responses.FunctionCallMessage `json:"tools_awaiting_approval,omitempty"`
 	QueuedApprovals       []string                        `json:"queued_approvals,omitempty"`
@@ -122,6 +123,7 @@ func (s *RunState) ToMeta() map[string]any {
 		"current_step":   string(s.CurrentStep),
 		"loop_iteration": s.LoopIteration,
 		"usage":          s.Usage,
+		"context_tokens": s.ContextTokens,
 		"traceid":        s.TraceID,
 	}
 
@@ -196,6 +198,10 @@ func LoadRunStateFromMeta(meta map[string]any) *RunState {
 
 	if loopIteration, ok := runStateData["loop_iteration"].(float64); ok {
 		state.LoopIteration = int(loopIteration)
+	}
+
+	if contextTokens, ok := runStateData["context_tokens"].(float64); ok {
+		state.ContextTokens = int(contextTokens)
 	}
 
 	if usageData, ok := runStateData["usage"].(map[string]any); ok {

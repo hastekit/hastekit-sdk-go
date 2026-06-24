@@ -52,13 +52,8 @@ func NewLLMHistorySummarizer(opts *LLMHistorySummarizerOptions) *LLMHistorySumma
 // Returns (shouldSummarize, keepFromIndex)
 // If shouldSummarize is false, keepFromIndex is -1
 // If shouldSummarize is true, keepFromIndex is the index from which to keep messages (messages[keepFromIndex:] are kept)
-func (s *LLMHistorySummarizer) shouldSummarize(ctx context.Context, runs []Run, usage *responses.Usage) (bool, int) {
-	if usage == nil {
-		return false, -1
-	}
-
-	// If token count is below threshold, no need to summarize
-	if usage.TotalTokens < s.tokenThreshold {
+func (s *LLMHistorySummarizer) shouldSummarize(ctx context.Context, runs []Run, contextTokens int) (bool, int) {
+	if contextTokens < s.tokenThreshold {
 		return false, -1
 	}
 
@@ -87,7 +82,7 @@ type Run struct {
 	Messages []messages.Message
 }
 
-func (s *LLMHistorySummarizer) Summarize(ctx context.Context, msgIdToRunId map[string]string, msgs []messages.Message, usage *responses.Usage) (*history.SummaryResult, error) {
+func (s *LLMHistorySummarizer) Summarize(ctx context.Context, msgIdToRunId map[string]string, msgs []messages.Message, contextTokens int) (*history.SummaryResult, error) {
 	// Group messages using their run id
 	runs := []Run{}
 	runIdsSeen := []string{}
@@ -107,7 +102,7 @@ func (s *LLMHistorySummarizer) Summarize(ctx context.Context, msgIdToRunId map[s
 		run.Messages = append(run.Messages, msg)
 	}
 
-	shouldSummarize, keepFromIndex := s.shouldSummarize(ctx, runs, usage)
+	shouldSummarize, keepFromIndex := s.shouldSummarize(ctx, runs, contextTokens)
 	if !shouldSummarize {
 		return nil, nil
 	}

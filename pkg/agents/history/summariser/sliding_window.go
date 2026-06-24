@@ -7,7 +7,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/history"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/messages"
-	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 )
 
 type SlidingWindowHistorySummarizer struct {
@@ -27,7 +26,7 @@ func NewSlidingWindowHistorySummarizer(opts *SlidingWindowHistorySummarizerOptio
 // Summarize implements the HistorySummarizer interface.
 // For sliding window, we simply keep the most recent N runs and discard the rest.
 // We don't create a summary message, we just return which messages to keep.
-func (s *SlidingWindowHistorySummarizer) Summarize(ctx context.Context, msgIdToRunId map[string]string, msgs []messages.Message, usage *responses.Usage) (*history.SummaryResult, error) {
+func (s *SlidingWindowHistorySummarizer) Summarize(ctx context.Context, msgIdToRunId map[string]string, msgs []messages.Message, contextTokens int) (*history.SummaryResult, error) {
 	// Group messages by their run ID
 	type Run struct {
 		RunID    string

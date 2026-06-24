@@ -5,7 +5,6 @@ import (
 
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/history"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/messages"
-	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -17,8 +16,8 @@ func NewTemporalConversationSummarizer(wrappedSummarizer history.HistorySummariz
 	return &TemporalConversationSummarizer{wrappedSummarizer: wrappedSummarizer}
 }
 
-func (t *TemporalConversationSummarizer) Summarize(ctx context.Context, msgIdToRunId map[string]string, msgs []messages.Message, usage *responses.Usage) (*history.SummaryResult, error) {
-	return t.wrappedSummarizer.Summarize(ctx, msgIdToRunId, msgs, usage)
+func (t *TemporalConversationSummarizer) Summarize(ctx context.Context, msgIdToRunId map[string]string, msgs []messages.Message, contextTokens int) (*history.SummaryResult, error) {
+	return t.wrappedSummarizer.Summarize(ctx, msgIdToRunId, msgs, contextTokens)
 }
 
 type TemporalConversationSummarizerProxy struct {
@@ -33,9 +32,9 @@ func NewTemporalConversationSummarizerProxy(workflowCtx workflow.Context, prefix
 	}
 }
 
-func (t *TemporalConversationSummarizerProxy) Summarize(ctx context.Context, msgIdToRunId map[string]string, msgs []messages.Message, usage *responses.Usage) (*history.SummaryResult, error) {
+func (t *TemporalConversationSummarizerProxy) Summarize(ctx context.Context, msgIdToRunId map[string]string, msgs []messages.Message, contextTokens int) (*history.SummaryResult, error) {
 	var summaryResult *history.SummaryResult
-	err := workflow.ExecuteActivity(t.workflowCtx, t.prefix+"_SummarizerActivity", msgIdToRunId, msgs, usage).Get(t.workflowCtx, &summaryResult)
+	err := workflow.ExecuteActivity(t.workflowCtx, t.prefix+"_SummarizerActivity", msgIdToRunId, msgs, contextTokens).Get(t.workflowCtx, &summaryResult)
 	if err != nil {
 		return nil, err
 	}

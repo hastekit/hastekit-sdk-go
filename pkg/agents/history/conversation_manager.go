@@ -94,7 +94,6 @@ type ConversationRunManager struct {
 	convMessages    []ConversationMessage
 	oldMessages     []Message
 	newMessages     []Message
-	usage           *responses.Usage
 	lastMessageMeta map[string]any
 
 	// runContext
@@ -174,12 +173,8 @@ func WithRunContext(rc map[string]any) RunOption {
 	}
 }
 
-func (cm *ConversationRunManager) AddMessages(ctx context.Context, message Message, usage *responses.Usage) {
+func (cm *ConversationRunManager) AddMessages(ctx context.Context, message Message) {
 	cm.ProcessIncomingMessages(message, false)
-
-	if usage != nil {
-		cm.usage = usage
-	}
 }
 
 func (cm *ConversationRunManager) AddMessagesToQueue(ctx context.Context, msgs []Message) {
@@ -193,7 +188,7 @@ func (cm *ConversationRunManager) GetMessages(ctx context.Context, agentName str
 
 	// Process messages with summarizer if available
 	if cm.summarizer != nil {
-		summaryResult, err := cm.summarizer.Summarize(ctx, cm.msgIdToRunId, cm.oldMessages, cm.usage)
+		summaryResult, err := cm.summarizer.Summarize(ctx, cm.msgIdToRunId, cm.oldMessages, cm.RunState.ContextTokens)
 		if err != nil {
 			return nil, err
 		}
@@ -267,9 +262,6 @@ func (cm *ConversationRunManager) LoadMessages(ctx context.Context, namespace st
 	cm.oldMessages = oldMessages
 	cm.RunState = agentstate.LoadRunStateFromMeta(cm.lastMessageMeta)
 	cm.loadSubAgentContext(ctx)
-	if cm.RunState != nil {
-		cm.usage = &cm.RunState.Usage
-	}
 
 	return nil
 }
@@ -356,6 +348,9 @@ func (cm *ConversationRunManager) TrackUsage(usage *responses.Usage) {
 	cm.RunState.Usage.OutputTokens += usage.OutputTokens
 	cm.RunState.Usage.InputTokensDetails.CachedTokens += usage.InputTokensDetails.CachedTokens
 	cm.RunState.Usage.TotalTokens += usage.TotalTokens
+
+	// ContextTokens tracks the most recent call's size
+	cm.RunState.ContextTokens = usage.TotalTokens
 }
 
 func (cm *ConversationRunManager) loadSubAgentContext(ctx context.Context) {

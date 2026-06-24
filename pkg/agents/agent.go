@@ -274,7 +274,7 @@ func (e *Agent) ExecuteLocal(ctx context.Context, in *AgentInput) (*AgentOutput,
 	}
 
 	// Add the incoming message to the run
-	run.AddMessages(ctx, in.Message, nil)
+	run.AddMessages(ctx, in.Message)
 
 	runId := run.GetMessageID()
 
@@ -409,7 +409,7 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, run *history
 						},
 					},
 				}
-				run.AddMessages(ctx, messages.New(in.Message.SenderID, []responses.InputMessageUnion{cancelMsg}), nil)
+				run.AddMessages(ctx, messages.New(in.Message.SenderID, []responses.InputMessageUnion{cancelMsg}))
 				finalOutput = append(finalOutput, cancelMsg)
 				run.RunState.TransitionToComplete()
 			}
@@ -469,7 +469,7 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, run *history
 				inputMsgs = append(inputMsgs, inputMsg)
 			}
 
-			run.AddMessages(ctx, messages.New(e.Name, inputMsgs), resp.Usage)
+			run.AddMessages(ctx, messages.New(e.Name, inputMsgs))
 			finalOutput = append(finalOutput, inputMsgs...)
 
 			// Extract tool calls
@@ -647,7 +647,7 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, run *history
 				}
 
 				// Add tool result to history
-				run.AddMessages(ctx, messages.New(in.Message.SenderID, toolResultMsg), nil)
+				run.AddMessages(ctx, messages.New(in.Message.SenderID, toolResultMsg))
 				finalOutput = append(finalOutput, toolResultMsg...)
 			}
 
