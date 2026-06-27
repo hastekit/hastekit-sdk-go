@@ -7,9 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mark3labs/mcp-go/client"
-	"github.com/mark3labs/mcp-go/client/transport"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 var (
@@ -34,13 +32,13 @@ type SchemaCache interface {
 
 // CachedToolEntry stores cached MCP tool schemas.
 type CachedToolEntry struct {
-	Tools []mcp.Tool `json:"tools"`
-	Meta  *mcp.Meta  `json:"meta,omitempty"`
+	Tools []*mcp.Tool `json:"tools"`
+	Meta  mcp.Meta    `json:"meta,omitempty"`
 }
 
 // poolEntry holds a live MCP connection.
 type poolEntry struct {
-	client   *client.Client
+	client   *mcp.ClientSession
 	lastUsed time.Time
 	mu       sync.Mutex
 }
@@ -79,7 +77,7 @@ func poolKey(endpoint, transportType string, headers map[string]string) string {
 // the activity/handler context is cancelled after the function returns. If the SSE
 // reader goroutine were tied to that context, it would die after the first tool call,
 // making the pooled connection unusable for subsequent calls.
-func (p *connectionPool) Checkout(ctx context.Context, endpoint, transportType string, headers map[string]string) (*client.Client, error) {
+func (p *connectionPool) Checkout(ctx context.Context, endpoint, transportType string, headers map[string]string, disableStandaloneSSE bool) (*mcp.ClientSession, error) {
 	key := poolKey(endpoint, transportType, headers)
 
 	p.mu.RLock()
@@ -99,7 +97,7 @@ func (p *connectionPool) Checkout(ctx context.Context, endpoint, transportType s
 
 	// Create new connection using context.Background() so the SSE stream
 	// survives beyond the caller's context (e.g. a Temporal activity context).
-	cli, err := createConnection(context.Background(), endpoint, transportType, headers)
+	cli, err := createConnection(context.Background(), endpoint, transportType, headers, disableStandaloneSSE)
 	if err != nil {
 		return nil, err
 	}
@@ -178,38 +176,14 @@ func (p *connectionPool) Close() {
 	})
 }
 
-// createConnection establishes a new MCP connection (Start + Initialize, no ListTools).
-func createConnection(ctx context.Context, endpoint, transportType string, headers map[string]string) (*client.Client, error) {
-	var cli *client.Client
-	var err error
-
-	switch transportType {
-	case "sse":
-		cli, err = client.NewSSEMCPClient(endpoint, client.WithHeaders(headers))
-	case "streamable-http":
-		cli, err = client.NewStreamableHttpClient(endpoint, transport.WithHTTPHeaders(headers))
-	default:
-		cli, err = client.NewSSEMCPClient(endpoint, client.WithHeaders(headers))
-	}
+// createConnection establishes a new MCP connection (Connect performs
+// the initialize handshake; no separate ListTools).
+func createConnection(ctx context.Context, endpoint, transportType string, headers map[string]string, disableStandaloneSSE bool) (*mcp.ClientSession, error) {
+	session, err := connect(ctx, endpoint, transportType, headers, disableStandaloneSSE)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create MCP client: %w", err)
+		return nil, fmt.Errorf("failed to connect MCP client: %w", err)
 	}
-
-	if err = cli.Start(ctx); err != nil {
-		return nil, fmt.Errorf("failed to start MCP client: %w", err)
-	}
-
-	if _, err = cli.Initialize(ctx, mcp.InitializeRequest{
-		Request: mcp.Request{},
-		Params: mcp.InitializeParams{
-			ProtocolVersion: "2025-06-18",
-		},
-	}); err != nil {
-		cli.Close()
-		return nil, fmt.Errorf("failed to initialize MCP client: %w", err)
-	}
-
-	return cli, nil
+	return session, nil
 }
 
 // sortedHeadersString produces a deterministic string from headers for use as cache/pool key.

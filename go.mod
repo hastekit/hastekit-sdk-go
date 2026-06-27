@@ -6,7 +6,7 @@ require (
 	github.com/a2aproject/a2a-go v0.3.3
 	github.com/bytedance/sonic v1.15.0
 	github.com/google/uuid v1.6.0
-	github.com/mark3labs/mcp-go v0.41.1
+	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/qdrant/go-client v1.17.1
 	github.com/redis/go-redis/v9 v9.17.3
 	github.com/restatedev/sdk-go v0.23.0
@@ -32,8 +32,9 @@ require (
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/golang-jwt/jwt/v5 v5.2.3 // indirect
+	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/golang/mock v1.6.0 // indirect
+	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.2 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.7 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
@@ -43,7 +44,8 @@ require (
 	github.com/nexus-rpc/sdk-go v0.5.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/robfig/cron v1.2.0 // indirect
-	github.com/spf13/cast v1.7.1 // indirect
+	github.com/segmentio/asm v1.1.3 // indirect
+	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/tetratelabs/wazero v1.9.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
@@ -54,6 +56,7 @@ require (
 	go.temporal.io/api v1.62.1 // indirect
 	golang.org/x/arch v0.17.0 // indirect
 	golang.org/x/net v0.50.0 // indirect
+	golang.org/x/oauth2 v0.35.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/text v0.34.0 // indirect

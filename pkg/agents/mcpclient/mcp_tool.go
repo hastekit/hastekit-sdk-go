@@ -8,8 +8,7 @@ import (
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
-	"github.com/mark3labs/mcp-go/client"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -20,11 +19,11 @@ var (
 
 type McpTool struct {
 	*agents.BaseTool
-	Client *client.Client `json:"-"`
-	Meta   *mcp.Meta      `json:"-"`
+	Session *mcp.ClientSession `json:"-"`
+	Meta    mcp.Meta           `json:"-"`
 }
 
-func NewMcpTool(t mcp.Tool, cli *client.Client, Meta *mcp.Meta, requiresApproval bool, deferred bool) *McpTool {
+func NewMcpTool(t *mcp.Tool, session *mcp.ClientSession, Meta mcp.Meta, requiresApproval bool, deferred bool) *McpTool {
 	inputSchema := map[string]any{
 		"type":       "object",
 		"properties": map[string]any{},
@@ -32,12 +31,6 @@ func NewMcpTool(t mcp.Tool, cli *client.Client, Meta *mcp.Meta, requiresApproval
 	inputSchemaBytes, err := sonic.Marshal(t.InputSchema)
 	if err == nil {
 		_ = sonic.Unmarshal(inputSchemaBytes, &inputSchema)
-	}
-
-	outputSchema := map[string]any{}
-	outputSchemaBytes, err := t.RawOutputSchema.MarshalJSON()
-	if err == nil {
-		_ = sonic.Unmarshal(outputSchemaBytes, &outputSchema)
 	}
 
 	return &McpTool{
@@ -53,8 +46,8 @@ func NewMcpTool(t mcp.Tool, cli *client.Client, Meta *mcp.Meta, requiresApproval
 				},
 			},
 		},
-		Client: cli,
-		Meta:   Meta,
+		Session: session,
+		Meta:    Meta,
 	}
 }
 
@@ -83,13 +76,10 @@ func (c *McpTool) Execute(ctx context.Context, params *agents.ToolCall) (*agents
 	}
 
 	// Call the MCP tool
-	res, err := c.Client.CallTool(ctx, mcp.CallToolRequest{
-		Request: mcp.Request{},
-		Params: mcp.CallToolParams{
-			Name:      params.Name,
-			Arguments: args,
-			Meta:      c.Meta,
-		},
+	res, err := c.Session.CallTool(ctx, &mcp.CallToolParams{
+		Meta:      c.Meta,
+		Name:      params.Name,
+		Arguments: args,
 	})
 	if err != nil {
 		span.RecordError(err)
@@ -107,13 +97,12 @@ func (c *McpTool) Execute(ctx context.Context, params *agents.ToolCall) (*agents
 
 	// Return the tool result
 	for _, r := range res.Content {
-		switch r.(type) {
-		case mcp.TextContent:
+		if tc, ok := r.(*mcp.TextContent); ok {
 			out := &responses.FunctionCallOutputMessage{
 				ID:     params.ID,
 				CallID: params.CallID,
 				Output: responses.FunctionCallOutputContentUnion{
-					OfString: utils.Ptr(r.(mcp.TextContent).Text),
+					OfString: utils.Ptr(tc.Text),
 				},
 			}
 			outStr, _ := sonic.Marshal(out)
@@ -131,14 +120,15 @@ func (c *McpTool) Execute(ctx context.Context, params *agents.ToolCall) (*agents
 // This allows ListTools() to return tool definitions without establishing a live connection.
 type LazyMcpTool struct {
 	*agents.BaseTool
-	endpoint        string
-	transportType   string
-	resolvedHeaders map[string]string
-	meta            *mcp.Meta
-	toolName        string
+	endpoint             string
+	transportType        string
+	resolvedHeaders      map[string]string
+	meta                 mcp.Meta
+	toolName             string
+	disableStandaloneSSE bool
 }
 
-func NewLazyMcpTool(t mcp.Tool, endpoint, transportType string, resolvedHeaders map[string]string, meta *mcp.Meta, requiresApproval bool, deferred bool) *LazyMcpTool {
+func NewLazyMcpTool(t *mcp.Tool, endpoint, transportType string, resolvedHeaders map[string]string, meta mcp.Meta, disableStandaloneSSE bool, requiresApproval bool, deferred bool) *LazyMcpTool {
 	inputSchema := map[string]any{
 		"type":       "object",
 		"properties": map[string]any{},
@@ -146,12 +136,6 @@ func NewLazyMcpTool(t mcp.Tool, endpoint, transportType string, resolvedHeaders 
 	inputSchemaBytes, err := sonic.Marshal(t.InputSchema)
 	if err == nil {
 		_ = sonic.Unmarshal(inputSchemaBytes, &inputSchema)
-	}
-
-	outputSchema := map[string]any{}
-	outputSchemaBytes, err := t.RawOutputSchema.MarshalJSON()
-	if err == nil {
-		_ = sonic.Unmarshal(outputSchemaBytes, &outputSchema)
 	}
 
 	return &LazyMcpTool{
@@ -167,11 +151,12 @@ func NewLazyMcpTool(t mcp.Tool, endpoint, transportType string, resolvedHeaders 
 				},
 			},
 		},
-		endpoint:        endpoint,
-		transportType:   transportType,
-		resolvedHeaders: resolvedHeaders,
-		meta:            meta,
-		toolName:        t.Name,
+		endpoint:             endpoint,
+		transportType:        transportType,
+		resolvedHeaders:      resolvedHeaders,
+		meta:                 meta,
+		toolName:             t.Name,
+		disableStandaloneSSE: disableStandaloneSSE,
 	}
 }
 
@@ -199,7 +184,7 @@ func (c *LazyMcpTool) Execute(ctx context.Context, params *agents.ToolCall) (*ag
 	}
 
 	// Get a connection from the pool (or create a new one)
-	cli, err := globalPool.Checkout(ctx, c.endpoint, c.transportType, c.resolvedHeaders)
+	cli, err := globalPool.Checkout(ctx, c.endpoint, c.transportType, c.resolvedHeaders, c.disableStandaloneSSE)
 	if err != nil {
 		span.RecordError(err)
 		return &agents.ToolCallResponse{
@@ -214,18 +199,15 @@ func (c *LazyMcpTool) Execute(ctx context.Context, params *agents.ToolCall) (*ag
 	}
 
 	// Call the MCP tool directly by name — no ListTools needed
-	res, err := cli.CallTool(ctx, mcp.CallToolRequest{
-		Request: mcp.Request{},
-		Params: mcp.CallToolParams{
-			Name:      params.Name,
-			Arguments: args,
-			Meta:      c.meta,
-		},
+	res, err := cli.CallTool(ctx, &mcp.CallToolParams{
+		Meta:      c.meta,
+		Name:      params.Name,
+		Arguments: args,
 	})
 	if err != nil {
 		// Connection might be dead — remove from pool and retry once
 		globalPool.Remove(c.endpoint, c.transportType, c.resolvedHeaders)
-		cli, retryErr := globalPool.Checkout(ctx, c.endpoint, c.transportType, c.resolvedHeaders)
+		cli, retryErr := globalPool.Checkout(ctx, c.endpoint, c.transportType, c.resolvedHeaders, c.disableStandaloneSSE)
 		if retryErr != nil {
 			span.RecordError(err)
 			return &agents.ToolCallResponse{
@@ -238,13 +220,10 @@ func (c *LazyMcpTool) Execute(ctx context.Context, params *agents.ToolCall) (*ag
 				},
 			}, nil
 		}
-		res, err = cli.CallTool(ctx, mcp.CallToolRequest{
-			Request: mcp.Request{},
-			Params: mcp.CallToolParams{
-				Name:      params.Name,
-				Arguments: args,
-				Meta:      c.meta,
-			},
+		res, err = cli.CallTool(ctx, &mcp.CallToolParams{
+			Meta:      c.meta,
+			Name:      params.Name,
+			Arguments: args,
 		})
 		if err != nil {
 			span.RecordError(err)
@@ -262,13 +241,12 @@ func (c *LazyMcpTool) Execute(ctx context.Context, params *agents.ToolCall) (*ag
 
 	// Return the tool result
 	for _, r := range res.Content {
-		switch r.(type) {
-		case mcp.TextContent:
+		if tc, ok := r.(*mcp.TextContent); ok {
 			out := &responses.FunctionCallOutputMessage{
 				ID:     params.ID,
 				CallID: params.CallID,
 				Output: responses.FunctionCallOutputContentUnion{
-					OfString: utils.Ptr(r.(mcp.TextContent).Text),
+					OfString: utils.Ptr(tc.Text),
 				},
 			}
 			outStr, _ := sonic.Marshal(out)

@@ -8,9 +8,7 @@ import (
 
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents"
 	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
-	"github.com/mark3labs/mcp-go/client"
-	"github.com/mark3labs/mcp-go/client/transport"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type MCPClient struct {
@@ -18,44 +16,15 @@ type MCPClient struct {
 	Transport string            `json:"-"`
 	Headers   map[string]string `json:"-"`
 
-	Client                *client.Client `json:"-"`
-	Tools                 []mcp.Tool     `json:"-"`
-	Meta                  *mcp.Meta      `json:"-"`
-	ToolFilter            []string       `json:"-"`
-	ApprovalRequiredTools []string       `json:"-"`
-	DeferredTools         []string       `json:"-"`
-	CacheTTL              time.Duration  `json:"-"`
-	schemaCache           SchemaCache    // injected cache (required for caching)
-}
-
-func NewInProcessMCPServer(ctx context.Context, client *client.Client, headers map[string]any) (*MCPClient, error) {
-	err := client.Start(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = client.Initialize(ctx, mcp.InitializeRequest{
-		Request: mcp.Request{},
-		Params:  mcp.InitializeParams{},
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	tools, err := client.ListTools(ctx, mcp.ListToolsRequest{
-		PaginatedRequest: mcp.PaginatedRequest{},
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return &MCPClient{
-		Tools:  tools.Tools,
-		Client: client,
-		Meta: &mcp.Meta{
-			AdditionalFields: headers,
-		},
-	}, nil
+	Session               *mcp.ClientSession `json:"-"`
+	Tools                 []*mcp.Tool        `json:"-"`
+	Meta                  mcp.Meta           `json:"-"`
+	ToolFilter            []string           `json:"-"`
+	ApprovalRequiredTools []string           `json:"-"`
+	DeferredTools         []string           `json:"-"`
+	CacheTTL              time.Duration      `json:"-"`
+	DisableStandaloneSSE  bool               `json:"-"`
+	schemaCache           SchemaCache        // injected cache (required for caching)
 }
 
 func NewClient(ctx context.Context, endpoint string, options ...McpServerOption) (*MCPClient, error) {
@@ -112,6 +81,16 @@ func WithCacheTTL(ttl time.Duration) McpServerOption {
 	}
 }
 
+// WithDisableStandaloneSSE disables the post-init server→client SSE stream
+// on the streamable-http transport. Enable it for servers that don't
+// support the standalone GET stream (the client otherwise hangs waiting
+// on a stream that never opens). Has no effect on the sse transport.
+func WithDisableStandaloneSSE(disable bool) McpServerOption {
+	return func(srv *MCPClient) {
+		srv.DisableStandaloneSSE = disable
+	}
+}
+
 // WithSchemaCache injects a SchemaCache implementation for caching tool schemas.
 // When set, ListTools() will check the cache before connecting to the MCP server.
 // This enables multi-pod cache sharing when backed by Redis or similar stores.
@@ -132,47 +111,12 @@ func (srv *MCPClient) GetClient(ctx context.Context, runContext map[string]any) 
 		headers[k] = utils.TryAndParseAsTemplate(v, runContext)
 	}
 
-	var cli *client.Client
-	var err error
-	switch srv.Transport {
-	case "sse":
-		cli, err = client.NewSSEMCPClient(
-			srv.Endpoint,
-			client.WithHeaders(headers),
-		)
-	case "streamable-http":
-		cli, err = client.NewStreamableHttpClient(
-			srv.Endpoint,
-			transport.WithHTTPHeaders(headers),
-		)
-	default:
-		cli, err = client.NewSSEMCPClient(
-			srv.Endpoint,
-			client.WithHeaders(headers),
-		)
-	}
+	session, err := connect(ctx, srv.Endpoint, srv.Transport, headers, srv.DisableStandaloneSSE)
 	if err != nil {
 		return nil, err
 	}
 
-	err = cli.Start(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = cli.Initialize(ctx, mcp.InitializeRequest{
-		Request: mcp.Request{},
-		Params: mcp.InitializeParams{
-			ProtocolVersion: "2025-06-18",
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	tools, err := cli.ListTools(ctx, mcp.ListToolsRequest{
-		PaginatedRequest: mcp.PaginatedRequest{},
-	})
+	tools, err := session.ListTools(ctx, &mcp.ListToolsParams{})
 	if err != nil {
 		return nil, err
 	}
@@ -180,12 +124,13 @@ func (srv *MCPClient) GetClient(ctx context.Context, runContext map[string]any) 
 	return &MCPClient{
 		Endpoint:              srv.Endpoint,
 		Headers:               headers,
-		Client:                cli,
+		Session:               session,
 		Tools:                 tools.Tools,
 		Meta:                  srv.Meta,
 		ToolFilter:            srv.ToolFilter,
 		ApprovalRequiredTools: srv.ApprovalRequiredTools,
 		DeferredTools:         srv.DeferredTools,
+		DisableStandaloneSSE:  srv.DisableStandaloneSSE,
 	}, nil
 }
 
@@ -214,7 +159,7 @@ func (srv *MCPClient) GetTools(opts ...McpServerOption) []agents.Tool {
 			deferred = true
 		}
 
-		mcpTools = append(mcpTools, NewMcpTool(tool, srv.Client, srv.Meta, requiresApproval, deferred))
+		mcpTools = append(mcpTools, NewMcpTool(tool, srv.Session, srv.Meta, requiresApproval, deferred))
 	}
 
 	return mcpTools
@@ -255,11 +200,12 @@ func (srv *MCPClient) ListTools(ctx context.Context, runContext map[string]any) 
 func (srv *MCPClient) CallToolDirect(ctx context.Context, runContext map[string]any, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
 	resolvedHeaders := srv.resolveHeaders(runContext)
 	tool := &LazyMcpTool{
-		endpoint:        srv.Endpoint,
-		transportType:   srv.Transport,
-		resolvedHeaders: resolvedHeaders,
-		meta:            srv.Meta,
-		toolName:        params.Name,
+		endpoint:             srv.Endpoint,
+		transportType:        srv.Transport,
+		resolvedHeaders:      resolvedHeaders,
+		meta:                 srv.Meta,
+		toolName:             params.Name,
+		disableStandaloneSSE: srv.DisableStandaloneSSE,
 	}
 	return tool.Execute(ctx, params)
 }
@@ -312,54 +258,28 @@ func (srv *MCPClient) schemaCacheKey(resolvedHeaders map[string]string) string {
 }
 
 // fetchToolSchemas connects to the MCP server, fetches tool schemas, and closes the connection.
-func (srv *MCPClient) fetchToolSchemas(ctx context.Context, resolvedHeaders map[string]string) ([]mcp.Tool, *mcp.Meta, error) {
-	var cli *client.Client
-	var err error
-
-	switch srv.Transport {
-	case "sse":
-		cli, err = client.NewSSEMCPClient(srv.Endpoint, client.WithHeaders(resolvedHeaders))
-	case "streamable-http":
-		cli, err = client.NewStreamableHttpClient(srv.Endpoint, transport.WithHTTPHeaders(resolvedHeaders))
-	default:
-		cli, err = client.NewSSEMCPClient(srv.Endpoint, client.WithHeaders(resolvedHeaders))
-	}
+func (srv *MCPClient) fetchToolSchemas(ctx context.Context, resolvedHeaders map[string]string) ([]*mcp.Tool, mcp.Meta, error) {
+	session, err := connect(ctx, srv.Endpoint, srv.Transport, resolvedHeaders, srv.DisableStandaloneSSE)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	if err = cli.Start(ctx); err != nil {
-		return nil, nil, err
-	}
-
-	if _, err = cli.Initialize(ctx, mcp.InitializeRequest{
-		Request: mcp.Request{},
-		Params: mcp.InitializeParams{
-			ProtocolVersion: "2025-06-18",
-		},
-	}); err != nil {
-		cli.Close()
-		return nil, nil, err
-	}
-
-	tools, err := cli.ListTools(ctx, mcp.ListToolsRequest{
-		PaginatedRequest: mcp.PaginatedRequest{},
-	})
+	tools, err := session.ListTools(ctx, &mcp.ListToolsParams{})
 	if err != nil {
-		cli.Close()
+		session.Close()
 		return nil, nil, err
 	}
 
 	// Close the connection — we only needed the schemas.
 	// Actual tool execution will use the connection pool.
-	cli.Close()
+	session.Close()
 
 	return tools.Tools, srv.Meta, nil
 }
 
 // buildLazyTools converts cached mcp.Tool schemas into LazyMcpTool instances,
 // applying tool filters, approval flags, and deferred flags.
-func (srv *MCPClient) buildLazyTools(tools []mcp.Tool, meta *mcp.Meta, resolvedHeaders map[string]string) []agents.Tool {
+func (srv *MCPClient) buildLazyTools(tools []*mcp.Tool, meta mcp.Meta, resolvedHeaders map[string]string) []agents.Tool {
 	var result []agents.Tool
 	for _, tool := range tools {
 		if len(srv.ToolFilter) > 0 && !slices.Contains(srv.ToolFilter, tool.Name) {
@@ -369,7 +289,7 @@ func (srv *MCPClient) buildLazyTools(tools []mcp.Tool, meta *mcp.Meta, resolvedH
 		requiresApproval := len(srv.ApprovalRequiredTools) > 0 && slices.Contains(srv.ApprovalRequiredTools, tool.Name)
 		deferred := len(srv.DeferredTools) > 0 && slices.Contains(srv.DeferredTools, tool.Name)
 
-		result = append(result, NewLazyMcpTool(tool, srv.Endpoint, srv.Transport, resolvedHeaders, meta, requiresApproval, deferred))
+		result = append(result, NewLazyMcpTool(tool, srv.Endpoint, srv.Transport, resolvedHeaders, meta, srv.DisableStandaloneSSE, requiresApproval, deferred))
 	}
 	return result
 }
