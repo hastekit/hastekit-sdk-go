@@ -1,0 +1,4 @@
+/* Intentionally empty. Aliased in vite.config.ts to replace
+   katex/dist/katex.min.css, which CopilotKit dynamically imports for
+   LaTeX math styling. Our react-markdown shim does not render math, and
+   that CSS drags ~1MB of KaTeX fonts into the build. */
