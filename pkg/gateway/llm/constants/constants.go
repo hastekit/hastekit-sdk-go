@@ -45,15 +45,15 @@ func (m *MessageTypeFunctionCall) UnmarshalJSON(buf []byte) error {
 	return unmarshalConstantString(m, buf)
 }
 
-type MessageTypeFunctionCallApprovalResponse string
+type MessageTypeFunctionCallInterruptResolution string
 
-func (m *MessageTypeFunctionCallApprovalResponse) Value() string {
-	return "function_call_approval_response"
+func (m *MessageTypeFunctionCallInterruptResolution) Value() string {
+	return "function_call_interrupt_resolution"
 }
-func (m MessageTypeFunctionCallApprovalResponse) MarshalJSON() ([]byte, error) {
+func (m MessageTypeFunctionCallInterruptResolution) MarshalJSON() ([]byte, error) {
 	return sonic.Marshal(m.Value())
 }
-func (m *MessageTypeFunctionCallApprovalResponse) UnmarshalJSON(buf []byte) error {
+func (m *MessageTypeFunctionCallInterruptResolution) UnmarshalJSON(buf []byte) error {
 	return unmarshalConstantString(m, buf)
 }
 

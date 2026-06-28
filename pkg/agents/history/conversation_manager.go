@@ -377,21 +377,42 @@ func (cm *ConversationRunManager) ProcessIncomingMessages(message Message, queue
 	hasNewApproval := false
 	var stored []responses.InputMessageUnion
 	for _, msg := range message.Messages {
-		if msg.OfFunctionCallApprovalResponse != nil {
-			hasNewApproval = true
-			r := msg.OfFunctionCallApprovalResponse
-			cm.RunState.QueuedApprovals = append(cm.RunState.QueuedApprovals, r.ApprovedCallIds...)
-			cm.RunState.QueuedRejections = append(cm.RunState.QueuedRejections, r.RejectedCallIds...)
+		if msg.OfFunctionCallInterruptResolution != nil {
+			// Interrupt resume path. approve/reject actions drain onto the
+			// QueuedApprovals/QueuedRejections queues; Content is ignored
+			// until a data-carrying mode (e.g. form elicitation) is wired.
+			r := msg.OfFunctionCallInterruptResolution
+			for _, res := range r.Resolutions {
+				switch res.Action {
+				case responses.InterruptActionApprove:
+					hasNewApproval = true
+					cm.RunState.QueuedApprovals = append(cm.RunState.QueuedApprovals, res.CallID)
+				case responses.InterruptActionReject:
+					hasNewApproval = true
+					cm.RunState.QueuedRejections = append(cm.RunState.QueuedRejections, res.CallID)
+				}
+			}
 		} else {
 			stored = append(stored, msg)
 		}
 	}
 
 	if len(stored) > 0 {
+		// Persist only the real messages. Interrupt resolutions were drained
+		// into the queues above and must never reach history or the LLM
+		// provider — their type isn't a valid provider input item, so a
+		// replayed bundle that still carried one would be rejected. When the
+		// bundle came mixed (resolution prepended to a turn's messages, as
+		// the AG-UI handler does), drop the resolution; otherwise keep the
+		// original bundle as-is.
+		bundle := message
+		if len(stored) != len(message.Messages) {
+			bundle.Messages = stored
+		}
 		if queue {
-			cm.RunState.QueuedMessages = append(cm.RunState.QueuedMessages, message)
+			cm.RunState.QueuedMessages = append(cm.RunState.QueuedMessages, bundle)
 		} else {
-			cm.newMessages = append(cm.newMessages, message)
+			cm.newMessages = append(cm.newMessages, bundle)
 		}
 	}
 
@@ -404,22 +425,40 @@ func (cm *ConversationRunManager) ProcessIncomingMessages(message Message, queue
 	}
 }
 
-func (cm *ConversationRunManager) ProcessPendingNestedToolCalls(parentToolCall responses.FunctionCallMessage, toolCalls []responses.FunctionCallMessage) {
+// ProcessInterrupts records the bookkeeping for a paused tool call across
+// every interrupt mode (human approval, URL elicitation, …). It tracks the
+// nested parent↔child relationship — so agent→tool→agent→tool resume works
+// for all modes — and stashes the Interrupt record (mode + payload) in
+// RunState.Interrupts so the pause chunk can surface mode-specific data to
+// the UI.
+func (cm *ConversationRunManager) ProcessInterrupts(parentToolCall responses.FunctionCallMessage, interrupts []responses.Interrupt) {
 	if cm.RunState.PendingNestedToolCalls == nil {
 		cm.RunState.PendingNestedToolCalls = map[string]string{}
 	}
-
 	if cm.RunState.PausedToolCalls == nil {
 		cm.RunState.PausedToolCalls = map[string]responses.FunctionCallMessage{}
 	}
-
-	cm.RunState.ToolsAwaitingApproval = append(cm.RunState.ToolsAwaitingApproval, toolCalls...)
-
-	// Track the parent tool call ID and the nested tool call IDs
-	for _, pendingApproval := range toolCalls {
-		cm.RunState.PendingNestedToolCalls[pendingApproval.CallID] = parentToolCall.CallID
+	if cm.RunState.Interrupts == nil {
+		cm.RunState.Interrupts = map[string]responses.Interrupt{}
 	}
 
-	// Add the parent tool call to the paused tool calls
+	for _, intr := range interrupts {
+		// This is the tool that has raised the interrupt
+		call := intr.FunctionCallMessage
+
+		cm.RunState.ToolsAwaitingApproval = append(cm.RunState.ToolsAwaitingApproval, call)
+
+		// Track the parent so resume can flatten the nested call.
+		cm.RunState.PendingNestedToolCalls[call.CallID] = parentToolCall.CallID
+
+		// Nested only when the interrupt bubbled up from a different
+		// (inner) call than the parent the loop is pausing on. A top-level
+		// tool raising its own interrupt has parent == call.
+		intr.IsNested = call.CallID != parentToolCall.CallID
+		cm.RunState.Interrupts[call.CallID] = intr
+	}
+
+	// Add the parent tool call to the paused tool calls so the loop
+	// re-executes it (with ShouldResume) once the user resolves.
 	cm.RunState.PausedToolCalls[parentToolCall.CallID] = parentToolCall
 }

@@ -107,10 +107,13 @@ func TestNewTurnSDKMessagesApprovalOnly(t *testing.T) {
 
 	out := in.NewTurnSDKMessages()
 	// History tail is an assistant message → no new turn messages;
-	// only the approval response is forwarded, and it goes first.
+	// only the resolution is forwarded, and it goes first.
 	require.Len(t, out, 1)
-	require.NotNil(t, out[0].OfFunctionCallApprovalResponse)
-	assert.Equal(t, []string{"call_1"}, out[0].OfFunctionCallApprovalResponse.ApprovedCallIds)
+	require.NotNil(t, out[0].OfFunctionCallInterruptResolution)
+	res := out[0].OfFunctionCallInterruptResolution.Resolutions
+	require.Len(t, res, 1)
+	assert.Equal(t, "call_1", res[0].CallID)
+	assert.Equal(t, "approve", res[0].Action)
 }
 
 func TestMessageIDsAreProviderPrefixed(t *testing.T) {

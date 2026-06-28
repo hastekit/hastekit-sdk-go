@@ -64,9 +64,16 @@ func runCompleted() *responses.ResponseChunk {
 }
 
 func runPaused(calls ...responses.FunctionCallMessage) *responses.ResponseChunk {
+	interrupts := make([]responses.Interrupt, 0, len(calls))
+	for _, c := range calls {
+		interrupts = append(interrupts, responses.Interrupt{
+			FunctionCallMessage: c,
+			Mode:                responses.InterruptModeApproval,
+		})
+	}
 	return &responses.ResponseChunk{
 		OfRunPaused: &responses.ChunkRun[constants.ChunkTypeRunPaused]{
-			RunState: responses.ChunkRunData{PendingToolCalls: calls},
+			RunState: responses.ChunkRunData{PendingInterrupts: interrupts},
 		},
 	}
 }

@@ -85,12 +85,12 @@ func NewAgentTool(name string, description string, agent *agents.Agent, contextM
 // one — recovers the inner thread id and prior AgentOutput from
 // params.State (written on the earlier pause), then re-enters the
 // inner agent with params.ResumeMessages (typically a single
-// FunctionCallApprovalResponseMessage). Otherwise, parses the LLM's
+// FunctionCallInterruptResolutionMessage). Otherwise, parses the LLM's
 // arguments, picks/derives a thread id per contextMode, and starts
 // the inner agent fresh.
 //
 // In both branches, the inner result is shaped by responseFromResult:
-// a paused inner re-emits PendingApprovals (and refreshes the saved
+// a paused inner re-emits its Interrupts (and refreshes the saved
 // state entries on params.State for the next resume); a completed
 // inner produces the outer call's FunctionCallOutputMessage so the
 // outer history regains its function_call ↔ function_call_output
@@ -196,7 +196,7 @@ func (t *AgentTool) responseFromResult(params *agents.ToolCall, result *agents.A
 				t.getResumeThreadIdStateKey(params.ID): threadId,
 				t.getRunStateKey(params.ID):            string(resultBuf),
 			},
-			PendingApprovals: result.PendingApprovals,
+			Interrupts: result.Interrupts,
 		}, nil
 	}
 

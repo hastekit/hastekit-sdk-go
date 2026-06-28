@@ -25,7 +25,7 @@ type ToolCall struct {
 
 	// ResumeMessages carries the continuation messages the tool
 	// should forward into its inner run on resume — typically a
-	// single FunctionCallApprovalResponseMessage built by the agent
+	// single FunctionCallInterruptResolutionMessage built by the agent
 	// loop from QueuedApprovals / QueuedRejections. Nil when
 	// ShouldResume is false.
 	ResumeMessages []responses.InputMessageUnion `json:"resume_messages,omitempty"`
@@ -33,8 +33,8 @@ type ToolCall struct {
 
 type ToolCallResponse struct {
 	*responses.FunctionCallOutputMessage
-	StateUpdates     map[string]string               `json:"state_updates,omitempty"`
-	PendingApprovals []responses.FunctionCallMessage `json:"pending_approvals,omitempty"`
+	StateUpdates map[string]string     `json:"state_updates,omitempty"`
+	Interrupts   []responses.Interrupt `json:"interrupts,omitempty"`
 }
 
 type Tool interface {

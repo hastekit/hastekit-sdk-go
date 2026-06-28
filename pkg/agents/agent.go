@@ -196,10 +196,10 @@ type AgentInput struct {
 
 // AgentOutput represents the result of agent execution
 type AgentOutput struct {
-	RunID            string                          `json:"run_id"`
-	Status           agentstate.RunStatus            `json:"status"`
-	Output           []responses.InputMessageUnion   `json:"output"`
-	PendingApprovals []responses.FunctionCallMessage `json:"pending_approvals"`
+	RunID      string                        `json:"run_id"`
+	Status     agentstate.RunStatus          `json:"status"`
+	Output     []responses.InputMessageUnion `json:"output"`
+	Interrupts []responses.Interrupt         `json:"interrupts,omitempty"`
 }
 
 // Execute is the single public entry point for running the agent. It
@@ -570,11 +570,17 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, run *history
 					if resuming {
 						approvedInner, rejectedInner := run.RunState.CollectNestedApprovalsForParent(toolCall.CallID)
 						if len(approvedInner) > 0 || len(rejectedInner) > 0 {
+							resolutions := make([]responses.InterruptResolution, 0, len(approvedInner)+len(rejectedInner))
+							for _, id := range approvedInner {
+								resolutions = append(resolutions, responses.InterruptResolution{CallID: id, Action: responses.InterruptActionApprove})
+							}
+							for _, id := range rejectedInner {
+								resolutions = append(resolutions, responses.InterruptResolution{CallID: id, Action: responses.InterruptActionReject})
+							}
 							resumeMessages = []responses.InputMessageUnion{
 								{
-									OfFunctionCallApprovalResponse: &responses.FunctionCallApprovalResponseMessage{
-										ApprovedCallIds: approvedInner,
-										RejectedCallIds: rejectedInner,
+									OfFunctionCallInterruptResolution: &responses.FunctionCallInterruptResolutionMessage{
+										Resolutions: resolutions,
 									},
 								},
 							}
@@ -615,8 +621,10 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, run *history
 						toolResults[pe.Index] = toolResponse(*pe.ToolCall.FunctionCallMessage, fmt.Sprintf("Tool execution failed: %v", result.Err))
 					} else {
 						toolResults[pe.Index] = result.Response
-						if len(result.Response.PendingApprovals) > 0 {
-							run.ProcessPendingNestedToolCalls(*pe.ToolCall.FunctionCallMessage, result.Response.PendingApprovals)
+
+						// If the tool response has interrupts process it
+						if len(result.Response.Interrupts) > 0 {
+							run.ProcessInterrupts(*pe.ToolCall.FunctionCallMessage, result.Response.Interrupts)
 						}
 					}
 				}
@@ -633,7 +641,8 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, run *history
 					maps.Copy(run.State, toolResult.StateUpdates)
 				}
 
-				if len(toolResult.PendingApprovals) > 0 {
+				// Tool had interrupts, don't count it as completed
+				if len(toolResult.Interrupts) > 0 {
 					continue
 				}
 
@@ -674,9 +683,9 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, run *history
 			e.runPaused(ctx, in.StreamID, runId, run.RunState)
 
 			return &AgentOutput{
-				RunID:            runId,
-				Status:           agentstate.RunStatusPaused,
-				PendingApprovals: run.RunState.PendingToolCalls,
+				RunID:      runId,
+				Status:     agentstate.RunStatusPaused,
+				Interrupts: run.RunState.PendingInterrupts(),
 			}, nil
 
 		case agentstate.StepComplete:
@@ -768,12 +777,12 @@ func (e *Agent) runPaused(ctx context.Context, streamID, runId string, runState 
 	e.publisher(streamID)(&responses.ResponseChunk{
 		OfRunPaused: &responses.ChunkRun[constants.ChunkTypeRunPaused]{
 			RunState: responses.ChunkRunData{
-				Id:               runId,
-				Object:           "run",
-				Status:           "paused",
-				PendingToolCalls: runState.PendingToolCalls,
-				Usage:            runState.Usage,
-				TraceID:          runState.TraceID,
+				Id:                runId,
+				Object:            "run",
+				Status:            "paused",
+				PendingInterrupts: runState.PendingInterrupts(),
+				Usage:             runState.Usage,
+				TraceID:           runState.TraceID,
 			},
 		},
 	})
