@@ -75,9 +75,9 @@ func (in *RunAgentInput) Validate() error {
 // ApprovalDecision is one entry in forwardedProps.command.resume —
 // the AG-UI-side expression of a human-in-the-loop decision for a
 // paused tool call. We split the protocol-side shape (a forwardedProps
-// extension) from the SDK-side shape (FunctionCallApprovalResponseMessage
-// with approved/rejected ID arrays) so the wire contract stays AG-UI-
-// native while the agent loop sees the form it already understands.
+// extension) from the SDK-side shape (FunctionCallInterruptResolutionMessage
+// with action verbs) so the wire contract stays AG-UI-native while the
+// agent loop sees the form it already understands.
 type ApprovalDecision struct {
 	ToolCallID string `json:"toolCallId"`
 	Approved   bool   `json:"approved"`
@@ -171,23 +171,26 @@ func decodeDecisions(raw any) []ApprovalDecision {
 	return cleaned
 }
 
-// ApprovalsToMessage builds the SDK-shaped approval response message
-// that the agent loop's ProcessIncomingMessages recognises. Returns
-// (nil, false) when there are no approvals so callers can skip the
-// append cleanly.
-func ApprovalsToMessage(decisions []ApprovalDecision) (*responses.FunctionCallApprovalResponseMessage, bool) {
+// ApprovalsToMessage builds the SDK-shaped interrupt resolution message
+// that the agent loop's ProcessIncomingMessages recognises, mapping each
+// approve/reject decision onto a resolution action. Returns (nil, false)
+// when there are no decisions so callers can skip the append cleanly.
+func ApprovalsToMessage(decisions []ApprovalDecision) (*responses.FunctionCallInterruptResolutionMessage, bool) {
 	if len(decisions) == 0 {
 		return nil, false
 	}
-	msg := &responses.FunctionCallApprovalResponseMessage{
-		ID: "fcar_" + uuid.NewString(),
+	msg := &responses.FunctionCallInterruptResolutionMessage{
+		ID: "fcir_" + uuid.NewString(),
 	}
 	for _, d := range decisions {
+		action := responses.InterruptActionReject
 		if d.Approved {
-			msg.ApprovedCallIds = append(msg.ApprovedCallIds, d.ToolCallID)
-		} else {
-			msg.RejectedCallIds = append(msg.RejectedCallIds, d.ToolCallID)
+			action = responses.InterruptActionApprove
 		}
+		msg.Resolutions = append(msg.Resolutions, responses.InterruptResolution{
+			CallID: d.ToolCallID,
+			Action: action,
+		})
 	}
 	return msg, true
 }
@@ -231,12 +234,12 @@ func (in *RunAgentInput) NewTurnSDKMessages() []responses.InputMessageUnion {
 // poor default given the spec lets clients invent custom roles.
 //
 // If approval decisions are present in forwardedProps, a single
-// FunctionCallApprovalResponseMessage is prepended so the agent's
+// FunctionCallInterruptResolutionMessage is prepended so the agent's
 // next iteration drains it via ProcessIncomingMessages and
-// transitions out of StepAwaitApproval. Approvals always go first
+// transitions out of StepAwaitApproval. Resolutions always go first
 // in the list — the SDK reads them on iteration boundaries before
 // any LLM call, and ordering them ahead of any new user messages
-// matches the user's mental model ("I approved this, then asked
+// matches the user's mental model ("I resolved this, then asked
 // something else").
 func (in *RunAgentInput) ToSDKMessages() []responses.InputMessageUnion {
 	return in.toSDKMessages(in.Messages)
@@ -247,7 +250,7 @@ func (in *RunAgentInput) toSDKMessages(msgs []Message) []responses.InputMessageU
 	out := make([]responses.InputMessageUnion, 0, len(msgs)+1)
 	if approval, ok := ApprovalsToMessage(approvals); ok {
 		out = append(out, responses.InputMessageUnion{
-			OfFunctionCallApprovalResponse: approval,
+			OfFunctionCallInterruptResolution: approval,
 		})
 	}
 	for _, m := range msgs {

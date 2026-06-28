@@ -39,9 +39,9 @@ func TestHistoryToMessages(t *testing.T) {
 						{OfOutputText: &responses.OutputTextContent{Text: "It's 22C in Paris."}},
 					},
 				}},
-				// Approval responses and reasoning are skipped.
-				{OfFunctionCallApprovalResponse: &responses.FunctionCallApprovalResponseMessage{
-					ID: "fcar_1", ApprovedCallIds: []string{"call_1"},
+				// Interrupt resolutions and reasoning are skipped.
+				{OfFunctionCallInterruptResolution: &responses.FunctionCallInterruptResolutionMessage{
+					ID: "fcir_1", Resolutions: []responses.InterruptResolution{{CallID: "call_1", Action: "approve"}},
 				}},
 			}),
 		},

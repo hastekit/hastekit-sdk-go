@@ -133,10 +133,16 @@ func userMessage(text string) history.Message {
 }
 
 func approvalMessage(approved, rejected []string) history.Message {
+	resolutions := make([]responses.InterruptResolution, 0, len(approved)+len(rejected))
+	for _, id := range approved {
+		resolutions = append(resolutions, responses.InterruptResolution{CallID: id, Action: responses.InterruptActionApprove})
+	}
+	for _, id := range rejected {
+		resolutions = append(resolutions, responses.InterruptResolution{CallID: id, Action: responses.InterruptActionReject})
+	}
 	return messages.New("user", []responses.InputMessageUnion{{
-		OfFunctionCallApprovalResponse: &responses.FunctionCallApprovalResponseMessage{
-			ApprovedCallIds: approved,
-			RejectedCallIds: rejected,
+		OfFunctionCallInterruptResolution: &responses.FunctionCallInterruptResolutionMessage{
+			Resolutions: resolutions,
 		},
 	}})
 }
@@ -201,10 +207,14 @@ func requireStatus(t *testing.T, out *agents.AgentOutput, want agentstate.RunSta
 
 func requireSinglePendingApproval(t *testing.T, out *agents.AgentOutput, toolName, callID string) {
 	t.Helper()
-	if len(out.PendingApprovals) != 1 {
-		t.Fatalf("pending approvals = %d, want 1: %+v", len(out.PendingApprovals), out.PendingApprovals)
+	if len(out.Interrupts) != 1 {
+		t.Fatalf("interrupts = %d, want 1: %+v", len(out.Interrupts), out.Interrupts)
 	}
-	pa := out.PendingApprovals[0]
+	intr := out.Interrupts[0]
+	if intr.Mode != responses.InterruptModeApproval {
+		t.Fatalf("interrupt mode = %q, want approval", intr.Mode)
+	}
+	pa := intr.FunctionCallMessage
 	if pa.Name != toolName || pa.CallID != callID {
 		t.Fatalf("pending approval = %s/%s, want %s/%s", pa.Name, pa.CallID, toolName, callID)
 	}

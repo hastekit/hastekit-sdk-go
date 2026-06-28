@@ -30,16 +30,21 @@ const (
 
 // RunState encapsulates the execution state of an agent run
 type RunState struct {
-	CurrentStep           Step                            `json:"current_step"`
-	LoopIteration         int                             `json:"loop_iteration"`
-	Usage                 responses.Usage                 `json:"usage"`
-	ContextTokens         int                             `json:"context_tokens"` // ContextTokens is the total token count of the most recent LLM call (input + output of a single response)
-	PendingToolCalls      []responses.FunctionCallMessage `json:"pending_tool_calls,omitempty"`
+	CurrentStep   Step            `json:"current_step"`
+	LoopIteration int             `json:"loop_iteration"`
+	Usage         responses.Usage `json:"usage"`
+	ContextTokens int             `json:"context_tokens"` // ContextTokens is the total token count of the most recent LLM call (input + output of a single response)
+
+	QueuedApprovals  []string           `json:"queued_approvals,omitempty"`
+	QueuedRejections []string           `json:"queued_rejections,omitempty"`
+	QueuedMessages   []messages.Message `json:"queued_messages,omitempty"`
+	TraceID          string             `json:"traceid"`
+
+	// PendingTools is a work list of tools to be executed immediately
+	PendingToolCalls []responses.FunctionCallMessage `json:"pending_tool_calls,omitempty"`
+
+	// ToolsAwaitingApproval list of tools that is awaiting to raise approval interrupt
 	ToolsAwaitingApproval []responses.FunctionCallMessage `json:"tools_awaiting_approval,omitempty"`
-	QueuedApprovals       []string                        `json:"queued_approvals,omitempty"`
-	QueuedRejections      []string                        `json:"queued_rejections,omitempty"`
-	QueuedMessages        []messages.Message              `json:"queued_messages,omitempty"`
-	TraceID               string                          `json:"traceid"`
 
 	// PendingNestedToolCalls maps the parent tool call ID to the nested tool call ID
 	PendingNestedToolCalls map[string]string `json:"pending_nested_tool_calls,omitempty"`
@@ -47,8 +52,35 @@ type RunState struct {
 	// PausedToolCalls maps the parent tool call ID to the paused tool call
 	PausedToolCalls map[string]responses.FunctionCallMessage `json:"paused_tool_calls,omitempty"`
 
+	// Interrupts maps a paused call ID to its flexible Interrupt
+	Interrupts map[string]responses.Interrupt `json:"interrupts,omitempty"`
+
 	// LastAgentName is the name of the agent that was responding to the user last.
 	LastAgentName string `json:"last_agent_name,omitempty"`
+}
+
+// PendingInterrupts projects the current PendingToolCalls into the unified
+// Interrupt view. Calls that raised an explicit Interrupt (workflow
+// approval, URL elicitation, …) return their recorded record with mode +
+// payload; any remaining paused call is a tool-level RequiresApproval gate
+// and is synthesized as an approval-mode interrupt. Every pause therefore
+// surfaces through this single list.
+func (s *RunState) PendingInterrupts() []responses.Interrupt {
+	if len(s.PendingToolCalls) == 0 {
+		return nil
+	}
+	out := make([]responses.Interrupt, 0, len(s.PendingToolCalls))
+	for _, tc := range s.PendingToolCalls {
+		if intr, ok := s.Interrupts[tc.CallID]; ok {
+			out = append(out, intr)
+			continue
+		}
+		out = append(out, responses.Interrupt{
+			FunctionCallMessage: tc,
+			Mode:                responses.InterruptModeApproval,
+		})
+	}
+	return out
 }
 
 // NextStep returns what the agent should do next
@@ -72,6 +104,31 @@ func (s *RunState) TransitionToExecuteTools(tools []responses.FunctionCallMessag
 func (s *RunState) TransitionToAwaitApproval(tools []responses.FunctionCallMessage) {
 	s.CurrentStep = StepAwaitApproval
 	s.PendingToolCalls = tools
+	s.recordApprovalInterrupts()
+}
+
+// recordApprovalInterrupts ensures every currently-pending tool call has an
+// Interrupt record persisted in s.Interrupts. Calls raised via
+// ProcessInterrupts (workflow approval, URL elicitation) already have one;
+// the rest are tool-level RequiresApproval gates and get an approval-mode
+// record so the pause is persisted (ToMeta) and surfaced consistently
+// rather than only synthesized on the wire.
+func (s *RunState) recordApprovalInterrupts() {
+	if len(s.PendingToolCalls) == 0 {
+		return
+	}
+	if s.Interrupts == nil {
+		s.Interrupts = map[string]responses.Interrupt{}
+	}
+	for _, tc := range s.PendingToolCalls {
+		if _, ok := s.Interrupts[tc.CallID]; ok {
+			continue
+		}
+		s.Interrupts[tc.CallID] = responses.Interrupt{
+			FunctionCallMessage: tc,
+			Mode:                responses.InterruptModeApproval,
+		}
+	}
 }
 
 // TransitionToComplete moves to the complete step and clears pending tools
@@ -95,6 +152,7 @@ func (s *RunState) PromoteAwaitingToApproval() {
 	s.CurrentStep = StepAwaitApproval
 	s.PendingToolCalls = s.ToolsAwaitingApproval
 	s.ToolsAwaitingApproval = nil
+	s.recordApprovalInterrupts()
 }
 
 // IsPaused returns true if the state is awaiting approval
@@ -127,8 +185,16 @@ func (s *RunState) ToMeta() map[string]any {
 		"traceid":        s.TraceID,
 	}
 
-	if len(s.PendingToolCalls) > 0 {
-		runStateMap["pending_tool_calls"] = s.PendingToolCalls
+	// pending_interrupts is the single canonical representation of a paused
+	// run's pending calls. Each entry carries the full FunctionCallMessage
+	// plus mode + payload, so PendingToolCalls and the Interrupts map are
+	// reconstructed from it on load (LoadRunStateFromMeta) — we don't store
+	// the same FunctionCallMessage three times. It's also the shape the
+	// streaming pause chunk and the UI consume, so reload matches live.
+	// (ToMeta is only persisted at await/complete, so this always covers
+	// PendingToolCalls.)
+	if pi := s.PendingInterrupts(); len(pi) > 0 {
+		runStateMap["pending_interrupts"] = pi
 	}
 
 	if len(s.ToolsAwaitingApproval) > 0 {
@@ -212,11 +278,33 @@ func LoadRunStateFromMeta(meta map[string]any) *RunState {
 		}
 	}
 
-	if pendingToolCalls, ok := runStateData["pending_tool_calls"]; ok {
-		// Parse pending tool calls using JSON marshaling
-		toolCallsBytes, err := sonic.Marshal(pendingToolCalls)
-		if err == nil {
-			sonic.Unmarshal(toolCallsBytes, &state.PendingToolCalls)
+	// pending_interrupts is the canonical persisted pause: rebuild both the
+	// PendingToolCalls work list and the Interrupts map (mode + payload)
+	// from it, so the same FunctionCallMessage is stored only once.
+	if pendingInterrupts, ok := runStateData["pending_interrupts"]; ok {
+		var interrupts []responses.Interrupt
+		if b, err := sonic.Marshal(pendingInterrupts); err == nil {
+			sonic.Unmarshal(b, &interrupts)
+		}
+		if len(interrupts) > 0 {
+			state.PendingToolCalls = make([]responses.FunctionCallMessage, 0, len(interrupts))
+			state.Interrupts = make(map[string]responses.Interrupt, len(interrupts))
+			for _, it := range interrupts {
+				state.PendingToolCalls = append(state.PendingToolCalls, it.FunctionCallMessage)
+				state.Interrupts[it.FunctionCallMessage.CallID] = it
+			}
+		}
+	}
+
+	// Back-compat: rows written before pending_interrupts became canonical
+	// stored pending_tool_calls / interrupts directly. Only read them when
+	// the reconstruction above didn't run.
+	if state.PendingToolCalls == nil {
+		if pendingToolCalls, ok := runStateData["pending_tool_calls"]; ok {
+			toolCallsBytes, err := sonic.Marshal(pendingToolCalls)
+			if err == nil {
+				sonic.Unmarshal(toolCallsBytes, &state.PendingToolCalls)
+			}
 		}
 	}
 
@@ -260,6 +348,16 @@ func LoadRunStateFromMeta(meta map[string]any) *RunState {
 		pausedToolCallsBytes, err := sonic.Marshal(pausedToolCalls)
 		if err == nil {
 			sonic.Unmarshal(pausedToolCallsBytes, &state.PausedToolCalls)
+		}
+	}
+
+	// Back-compat only (see pending_interrupts reconstruction above).
+	if state.Interrupts == nil {
+		if interrupts, ok := runStateData["interrupts"]; ok {
+			interruptsBytes, err := sonic.Marshal(interrupts)
+			if err == nil {
+				sonic.Unmarshal(interruptsBytes, &state.Interrupts)
+			}
 		}
 	}
 

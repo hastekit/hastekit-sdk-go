@@ -143,13 +143,13 @@ func (t *Translator) Translate(chunk *responses.ResponseChunk) []Event {
 
 	case chunk.OfRunPaused != nil:
 		// Run paused for human-in-the-loop approval. The agent loop
-		// has already exited at this point — the approval-resume path
-		// is a fresh AG-UI POST carrying forwardedProps.command.resume,
-		// which loads the paused RunState from history and transitions
-		// on the new FunctionCallApprovalResponseMessage. So from
-		// AG-UI's perspective this run is over (RUN_FINISHED), but the
-		// thread isn't (the client renders an approval UI and POSTs
-		// the decisions back to continue).
+		// has already exited at this point — the resume path is a fresh
+		// AG-UI POST carrying forwardedProps.command.resume, which loads
+		// the paused RunState from history and transitions on the new
+		// FunctionCallInterruptResolutionMessage. So from AG-UI's
+		// perspective this run is over (RUN_FINISHED), but the thread
+		// isn't (the client renders an approval UI and POSTs the
+		// decisions back to continue).
 		//
 		// Emission order matters for AG-UI clients that drive UI
 		// off events in arrival order:
@@ -163,7 +163,7 @@ func (t *Translator) Translate(chunk *responses.ResponseChunk) []Event {
 		//      need to read code to wire the resume.
 		//   4. RUN_FINISHED last with result.status=paused so
 		//      clients that track run state see the transition.
-		pending := projectPendingToolCalls(chunk.OfRunPaused.RunState.PendingToolCalls)
+		pending := projectPendingToolCalls(approvalCalls(chunk.OfRunPaused.RunState.PendingInterrupts))
 		out := t.closeOpenItems()
 		out = append(out,
 			&StateSnapshotEvent{
@@ -713,6 +713,19 @@ func projectPendingToolCalls(calls []responses.FunctionCallMessage) []map[string
 			"toolCallName": c.Name,
 			"arguments":    c.Arguments,
 		})
+	}
+	return out
+}
+
+// approvalCalls pulls the function calls from the approval-mode interrupts
+// of a paused run — the subset this demo's tool_approval event renders.
+// Non-approval modes (e.g. URL elicitation) are left to other handlers.
+func approvalCalls(interrupts []responses.Interrupt) []responses.FunctionCallMessage {
+	out := make([]responses.FunctionCallMessage, 0, len(interrupts))
+	for _, it := range interrupts {
+		if it.Mode == responses.InterruptModeApproval {
+			out = append(out, it.FunctionCallMessage)
+		}
 	}
 	return out
 }

@@ -1,6 +1,7 @@
 package responses
 
 import (
+	"encoding/json"
 	"errors"
 
 	"github.com/bytedance/sonic"
@@ -100,16 +101,16 @@ func (u *InputUnion) MarshalJSON() ([]byte, error) {
 type InputMessageList []InputMessageUnion
 
 type InputMessageUnion struct {
-	OfEasyInput                    *EasyMessage                         `json:",omitempty"`
-	OfInputMessage                 *InputMessage                        `json:",omitempty"`
-	OfOutputMessage                *OutputMessage                       `json:",omitempty"`
-	OfFunctionCall                 *FunctionCallMessage                 `json:",omitempty"`
-	OfFunctionCallApprovalResponse *FunctionCallApprovalResponseMessage `json:",omitempty"`
-	OfFunctionCallOutput           *FunctionCallOutputMessage           `json:",omitempty"`
-	OfReasoning                    *ReasoningMessage                    `json:",omitempty"`
-	OfImageGenerationCall          *ImageGenerationCallMessage          `json:",omitempty,inline"`
-	OfWebSearchCall                *WebSearchCallMessage                `json:",omitempty,inline"`
-	OfCodeInterpreterCall          *CodeInterpreterCallMessage          `json:",omitempty,inline"`
+	OfEasyInput                       *EasyMessage                            `json:",omitempty"`
+	OfInputMessage                    *InputMessage                           `json:",omitempty"`
+	OfOutputMessage                   *OutputMessage                          `json:",omitempty"`
+	OfFunctionCall                    *FunctionCallMessage                    `json:",omitempty"`
+	OfFunctionCallInterruptResolution *FunctionCallInterruptResolutionMessage `json:",omitempty"`
+	OfFunctionCallOutput              *FunctionCallOutputMessage              `json:",omitempty"`
+	OfReasoning                       *ReasoningMessage                       `json:",omitempty"`
+	OfImageGenerationCall             *ImageGenerationCallMessage             `json:",omitempty,inline"`
+	OfWebSearchCall                   *WebSearchCallMessage                   `json:",omitempty,inline"`
+	OfCodeInterpreterCall             *CodeInterpreterCallMessage             `json:",omitempty,inline"`
 	//OfFileSearchCall       *ResponseFileSearchToolCallParam            `json:",omitempty,inline"`
 	//OfComputerCall         *ResponseComputerToolCallParam              `json:",omitempty,inline"`
 	//OfComputerCallOutput   *ResponseInputItemComputerCallOutputParam   `json:",omitempty,inline"`
@@ -141,8 +142,8 @@ func (u *InputMessageUnion) ID() string {
 		return u.OfFunctionCall.ID
 	}
 
-	if u.OfFunctionCallApprovalResponse != nil {
-		return u.OfFunctionCallApprovalResponse.ID
+	if u.OfFunctionCallInterruptResolution != nil {
+		return u.OfFunctionCallInterruptResolution.ID
 	}
 
 	if u.OfFunctionCallOutput != nil {
@@ -193,9 +194,9 @@ func (u *InputMessageUnion) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 
-	var fnCallApprovalResponse FunctionCallApprovalResponseMessage
-	if err := sonic.Unmarshal(data, &fnCallApprovalResponse); err == nil {
-		u.OfFunctionCallApprovalResponse = &fnCallApprovalResponse
+	var fnCallInterruptResolution FunctionCallInterruptResolutionMessage
+	if err := sonic.Unmarshal(data, &fnCallInterruptResolution); err == nil {
+		u.OfFunctionCallInterruptResolution = &fnCallInterruptResolution
 		return nil
 	}
 
@@ -249,8 +250,8 @@ func (u *InputMessageUnion) MarshalJSON() ([]byte, error) {
 		return sonic.Marshal(u.OfFunctionCall)
 	}
 
-	if u.OfFunctionCallApprovalResponse != nil {
-		return sonic.Marshal(u.OfFunctionCallApprovalResponse)
+	if u.OfFunctionCallInterruptResolution != nil {
+		return sonic.Marshal(u.OfFunctionCallInterruptResolution)
 	}
 
 	if u.OfFunctionCallOutput != nil {
@@ -299,11 +300,32 @@ type FunctionCallMessage struct {
 	ThoughtSignature *string                           `json:"thought_signature,omitempty"` // Only for gemini
 }
 
-type FunctionCallApprovalResponseMessage struct {
-	Type            constants.MessageTypeFunctionCallApprovalResponse `json:"type"`
-	ID              string                                            `json:"id"`
-	ApprovedCallIds []string                                          `json:"approved_call_ids"`
-	RejectedCallIds []string                                          `json:"rejected_call_ids"`
+// Interrupt resolution actions. v1 supports approve/reject; accept/decline/
+// cancel are reserved for future data-carrying modes.
+const (
+	InterruptActionApprove = "approve"
+	InterruptActionReject  = "reject"
+)
+
+// InterruptResolution is one user decision for a paused interrupt. Action
+// is the verb the user took (InterruptActionApprove / InterruptActionReject
+// in v1). Content carries mode-specific response data (e.g. a filled form
+// for MCP structured elicitation) and is ignored by the v1 approve/reject
+// drain.
+type InterruptResolution struct {
+	CallID  string          `json:"call_id"`
+	Action  string          `json:"action"`
+	Content json.RawMessage `json:"content,omitempty"`
+}
+
+// FunctionCallInterruptResolutionMessage is the resume message for the
+// Interrupt path — the inbound counterpart of a paused run's interrupts.
+// The agent loop drains it into the QueuedApprovals/QueuedRejections
+// queues in v1 (approve/reject actions).
+type FunctionCallInterruptResolutionMessage struct {
+	Type        constants.MessageTypeFunctionCallInterruptResolution `json:"type"`
+	ID          string                                               `json:"id"`
+	Resolutions []InterruptResolution                                `json:"resolutions"`
 }
 
 type FunctionCallOutputMessage struct {

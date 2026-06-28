@@ -5,6 +5,7 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/constants"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // --------------------//
@@ -561,12 +562,41 @@ type ChunkRun[T any] struct {
 }
 
 type ChunkRunData struct {
-	Id               string                `json:"id"`
-	Object           string                `json:"object"` // "run"
-	Status           string                `json:"status"` // "created", "in_progress", "paused", "resumed", "completed", "aborted"
-	PendingToolCalls []FunctionCallMessage `json:"pending_tool_calls"`
-	Usage            Usage                 `json:"usage"`
-	TraceID          string                `json:"traceid"`
+	Id                string      `json:"id"`
+	Object            string      `json:"object"` // "run"
+	Status            string      `json:"status"` // "created", "in_progress", "paused", "resumed", "completed", "aborted"
+	PendingInterrupts []Interrupt `json:"pending_interrupts,omitempty"`
+	Usage             Usage       `json:"usage"`
+	TraceID           string      `json:"traceid"`
+}
+
+// InterruptMode discriminates the kind of tool-call intercept a run is
+// paused on. It lets a single Interrupt carry orchestrator HITL,
+// MCP URL elicitation, and future intercept types under one shape.
+type InterruptMode string
+
+const (
+	// InterruptModeApproval is a human approve/reject gate (workflow
+	// approval nodes and tool-level RequiresApproval).
+	InterruptModeApproval InterruptMode = "approval"
+	// InterruptModeURL is an MCP URL elicitation — the user must visit a
+	// URL (e.g. an OAuth connect flow) before the tool can proceed.
+	InterruptModeURL InterruptMode = "url"
+	// InterruptModeForm is reserved for MCP structured/data elicitation.
+	// InterruptModeForm InterruptMode = "form"
+)
+
+// Interrupt is the unified representation of one paused tool call awaiting
+// user input. FunctionCallMessage identifies the paused call (and, for
+// approval mode, carries the name/args the user is approving). Mode-
+// specific payload lives in Elicitations (URL/form modes). IsNested is
+// true when the interrupt was raised inside a nested tool call (e.g. an
+// inner agent's MCP tool) and bubbled up to the top-level run.
+type Interrupt struct {
+	FunctionCallMessage FunctionCallMessage `json:"function_call_message"`
+	Mode                InterruptMode       `json:"mode"`
+	Elicitations        []mcp.ElicitParams  `json:"elicitations,omitempty"`
+	IsNested            bool                `json:"is_nested,omitempty"`
 }
 
 type ChunkResponse[T any] struct {
