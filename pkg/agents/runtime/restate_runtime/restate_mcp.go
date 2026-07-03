@@ -3,8 +3,12 @@ package restate_runtime
 import (
 	"context"
 
+	"github.com/bytedance/sonic"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents"
+	"github.com/hastekit/hastekit-sdk-go/pkg/genai"
 	restate "github.com/restatedev/sdk-go"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
 
 type RestateMCPServer struct {
@@ -73,27 +77,56 @@ func NewRestateMCPTool(restateCtx restate.WorkflowContext, wrappedMcpServer agen
 func (t *RestateMCPTool) Execute(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
 	// Execute via restate.Run for determinism. The underlying MCPClient.CallToolDirect
 	// uses the connection pool — no ListTools call needed.
-	return restate.Run(t.restateCtx, func(ctx restate.RunContext) (*agents.ToolCallResponse, error) {
-		// Use CallToolDirect on the wrapped MCPToolset if it supports it,
-		// otherwise fall back to ListTools + find (for non-MCPClient implementations).
-		type directCaller interface {
-			CallToolDirect(ctx context.Context, runContext map[string]any, params *agents.ToolCall) (*agents.ToolCallResponse, error)
+	return restate.Run(t.restateCtx, func(runCtx restate.RunContext) (*agents.ToolCallResponse, error) {
+		// GenAI execute_tool span, created inside restate.Run so it fires
+		// exactly once (on real execution) and never on replay.
+		ctx, span := tracer.Start(runCtx, genai.OpExecuteTool+" "+params.Name)
+		defer span.End()
+		span.SetAttributes(
+			attribute.String(genai.AttrOperationName, genai.OpExecuteTool),
+			attribute.String(genai.AttrToolName, params.Name),
+			attribute.String(genai.AttrToolCallID, params.CallID),
+			attribute.String(genai.AttrToolArguments, params.Arguments),
+		)
+		if t.BaseTool != nil && t.ToolUnion.OfFunction != nil && t.ToolUnion.OfFunction.Description != nil {
+			span.SetAttributes(attribute.String(genai.AttrToolDescription, *t.ToolUnion.OfFunction.Description))
 		}
 
-		if dc, ok := t.wrappedMcpServer.(directCaller); ok {
-			return dc.CallToolDirect(ctx, t.runContext, params)
-		}
-
-		// Fallback: ListTools uses schema cache so this is still fast
-		mcpTools, err := t.wrappedMcpServer.ListTools(ctx, t.runContext)
+		resp, err := t.callTool(ctx, params)
 		if err != nil {
-			return nil, err
-		}
-		for _, tool := range mcpTools {
-			if td := tool.Tool(ctx); td != nil && td.OfFunction != nil && params.Name == td.OfFunction.Name {
-				return tool.Execute(ctx, params)
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		} else if resp != nil && resp.FunctionCallOutputMessage != nil {
+			if out, mErr := sonic.Marshal(resp.Output); mErr == nil {
+				span.SetAttributes(attribute.String(genai.AttrToolResult, string(out)))
 			}
 		}
-		return nil, err
+
+		return resp, err
 	}, restate.WithName("MCPToolCall"))
+}
+
+// callTool invokes the MCP tool on the wrapped toolset.
+func (t *RestateMCPTool) callTool(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
+	// Use CallToolDirect on the wrapped MCPToolset if it supports it,
+	// otherwise fall back to ListTools + find (for non-MCPClient implementations).
+	type directCaller interface {
+		CallToolDirect(ctx context.Context, runContext map[string]any, params *agents.ToolCall) (*agents.ToolCallResponse, error)
+	}
+
+	if dc, ok := t.wrappedMcpServer.(directCaller); ok {
+		return dc.CallToolDirect(ctx, t.runContext, params)
+	}
+
+	// Fallback: ListTools uses schema cache so this is still fast
+	mcpTools, err := t.wrappedMcpServer.ListTools(ctx, t.runContext)
+	if err != nil {
+		return nil, err
+	}
+	for _, tool := range mcpTools {
+		if td := tool.Tool(ctx); td != nil && td.OfFunction != nil && params.Name == td.OfFunction.Name {
+			return tool.Execute(ctx, params)
+		}
+	}
+	return nil, err
 }

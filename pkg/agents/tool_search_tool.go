@@ -8,7 +8,6 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
-	"go.opentelemetry.io/otel/attribute"
 )
 
 type ToolSearchTool struct {
@@ -53,11 +52,6 @@ func NewToolSearchTool(deferredTools []Tool) *ToolSearchTool {
 }
 
 func (t *ToolSearchTool) Execute(ctx context.Context, params *ToolCall) (*ToolCallResponse, error) {
-	ctx, span := tracer.Start(ctx, "ToolSearchTool")
-	defer span.End()
-
-	span.SetAttributes(attribute.String("args", params.Arguments))
-
 	var in ToolSearchInput
 	err := sonic.Unmarshal([]byte(params.Arguments), &in)
 	if err != nil {

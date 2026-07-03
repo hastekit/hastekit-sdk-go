@@ -9,12 +9,6 @@ import (
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-)
-
-var (
-	tracer = otel.Tracer("MCPTool")
 )
 
 type McpTool struct {
@@ -52,17 +46,10 @@ func NewMcpTool(t *mcp.Tool, session *mcp.ClientSession, Meta mcp.Meta, requires
 }
 
 func (c *McpTool) Execute(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
-	ctx, span := tracer.Start(ctx, "McpTool: "+params.Name)
-	defer span.End()
-
-	span.SetAttributes(attribute.String("input", params.Arguments))
-
 	var args map[string]any
 	if params.Arguments != "" {
 		err := sonic.Unmarshal([]byte(params.Arguments), &args)
 		if err != nil {
-			span.RecordError(err)
-			span.SetAttributes(attribute.String("output", err.Error()))
 			return &agents.ToolCallResponse{
 				FunctionCallOutputMessage: &responses.FunctionCallOutputMessage{
 					ID:     params.ID,
@@ -82,8 +69,6 @@ func (c *McpTool) Execute(ctx context.Context, params *agents.ToolCall) (*agents
 		Arguments: args,
 	})
 	if err != nil {
-		span.RecordError(err)
-		span.SetAttributes(attribute.String("output", err.Error()))
 		return &agents.ToolCallResponse{
 			FunctionCallOutputMessage: &responses.FunctionCallOutputMessage{
 				ID:     params.ID,
@@ -105,14 +90,11 @@ func (c *McpTool) Execute(ctx context.Context, params *agents.ToolCall) (*agents
 					OfString: utils.Ptr(tc.Text),
 				},
 			}
-			outStr, _ := sonic.Marshal(out)
-			span.SetAttributes(attribute.String("output", string(outStr)))
 			return &agents.ToolCallResponse{FunctionCallOutputMessage: out}, nil
 		}
 	}
 
 	err = errors.New("missing mcp tool result")
-	span.RecordError(err)
 	return nil, err
 }
 
@@ -161,16 +143,10 @@ func NewLazyMcpTool(t *mcp.Tool, endpoint, transportType string, resolvedHeaders
 }
 
 func (c *LazyMcpTool) Execute(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
-	ctx, span := tracer.Start(ctx, "LazyMcpTool: "+params.Name)
-	defer span.End()
-
-	span.SetAttributes(attribute.String("input", params.Arguments))
-
 	var args map[string]any
 	if params.Arguments != "" {
 		err := sonic.Unmarshal([]byte(params.Arguments), &args)
 		if err != nil {
-			span.RecordError(err)
 			return &agents.ToolCallResponse{
 				FunctionCallOutputMessage: &responses.FunctionCallOutputMessage{
 					ID:     params.ID,
@@ -186,7 +162,6 @@ func (c *LazyMcpTool) Execute(ctx context.Context, params *agents.ToolCall) (*ag
 	// Get a connection from the pool (or create a new one)
 	cli, err := globalPool.Checkout(ctx, c.endpoint, c.transportType, c.resolvedHeaders, c.disableStandaloneSSE)
 	if err != nil {
-		span.RecordError(err)
 		return &agents.ToolCallResponse{
 			FunctionCallOutputMessage: &responses.FunctionCallOutputMessage{
 				ID:     params.ID,
@@ -209,7 +184,6 @@ func (c *LazyMcpTool) Execute(ctx context.Context, params *agents.ToolCall) (*ag
 		globalPool.Remove(c.endpoint, c.transportType, c.resolvedHeaders)
 		cli, retryErr := globalPool.Checkout(ctx, c.endpoint, c.transportType, c.resolvedHeaders, c.disableStandaloneSSE)
 		if retryErr != nil {
-			span.RecordError(err)
 			return &agents.ToolCallResponse{
 				FunctionCallOutputMessage: &responses.FunctionCallOutputMessage{
 					ID:     params.ID,
@@ -226,7 +200,6 @@ func (c *LazyMcpTool) Execute(ctx context.Context, params *agents.ToolCall) (*ag
 			Arguments: args,
 		})
 		if err != nil {
-			span.RecordError(err)
 			return &agents.ToolCallResponse{
 				FunctionCallOutputMessage: &responses.FunctionCallOutputMessage{
 					ID:     params.ID,
@@ -249,13 +222,10 @@ func (c *LazyMcpTool) Execute(ctx context.Context, params *agents.ToolCall) (*ag
 					OfString: utils.Ptr(tc.Text),
 				},
 			}
-			outStr, _ := sonic.Marshal(out)
-			span.SetAttributes(attribute.String("output", string(outStr)))
 			return &agents.ToolCallResponse{FunctionCallOutputMessage: out}, nil
 		}
 	}
 
 	err = errors.New("missing mcp tool result")
-	span.RecordError(err)
 	return nil, err
 }

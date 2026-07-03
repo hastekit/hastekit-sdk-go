@@ -17,8 +17,10 @@ import (
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/constants"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
+	"github.com/hastekit/hastekit-sdk-go/pkg/genai"
 	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -234,8 +236,13 @@ func (e *Agent) Execute(ctx context.Context, in *AgentInput) (*AgentHandle, erro
 	go func() {
 		defer close(handle.done)
 
-		runCtx, span := tracer.Start(ctx, "Agent.Execute")
+		// GenAI invoke_agent span for the whole run.
+		runCtx, span := tracer.Start(ctx, genai.OpInvokeAgent+" "+e.Name)
 		defer span.End()
+		span.SetAttributes(
+			attribute.String(genai.AttrOperationName, genai.OpInvokeAgent),
+			attribute.String(genai.AttrAgentName, e.Name),
+		)
 
 		// Stream lifecycle (Subscribe/Close) is owned by ExecuteLocal,
 		// which is the loop runner. We just observe it here.

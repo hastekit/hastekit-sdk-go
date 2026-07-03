@@ -5,19 +5,21 @@ import (
 
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/image_edit"
+	"github.com/hastekit/hastekit-sdk-go/pkg/genai"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 )
 
 func (g *LLMGateway) handleImageEditRequest(ctx context.Context, providerName llm.ProviderName, p llm.Provider, in *image_edit.Request) (*image_edit.Response, error) {
-	ctx, span := tracer.Start(ctx, "LLM.ImageEdit")
+	ctx, span := tracer.Start(ctx, genai.OpImageEdit+" "+in.Model)
 	defer span.End()
 
 	addToSpan(ctx, span)
 	span.SetAttributes(
-		attribute.String("llm.provider", string(providerName)),
-		attribute.String("llm.model", in.Model),
-		attribute.String("llm.request_type", "ImageEdit"),
+		attribute.String(genai.AttrOperationName, genai.OpImageEdit),
+		attribute.String(genai.AttrProviderName, string(providerName)),
+		attribute.String(genai.AttrRequestModel, in.Model),
+		attribute.String(genai.AttrRequestType, genai.RequestTypeImageEdit),
 	)
 
 	out, err := p.NewImageEdit(ctx, in)

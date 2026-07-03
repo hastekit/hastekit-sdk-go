@@ -5,19 +5,21 @@ import (
 
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/speech"
+	"github.com/hastekit/hastekit-sdk-go/pkg/genai"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 )
 
 func (g *LLMGateway) handleSpeechRequest(ctx context.Context, providerName llm.ProviderName, p llm.Provider, in *speech.Request) (*speech.Response, error) {
-	ctx, span := tracer.Start(ctx, "LLM.Speech")
+	ctx, span := tracer.Start(ctx, genai.OpSpeech+" "+in.Model)
 	defer span.End()
 
 	addToSpan(ctx, span)
 	span.SetAttributes(
-		attribute.String("llm.provider", string(providerName)),
-		attribute.String("llm.model", in.Model),
-		attribute.String("llm.request_type", "Speech"),
+		attribute.String(genai.AttrOperationName, genai.OpSpeech),
+		attribute.String(genai.AttrProviderName, string(providerName)),
+		attribute.String(genai.AttrRequestModel, in.Model),
+		attribute.String(genai.AttrRequestType, genai.RequestTypeSpeech),
 	)
 
 	out, err := p.NewSpeech(ctx, in)
@@ -27,27 +29,19 @@ func (g *LLMGateway) handleSpeechRequest(ctx context.Context, providerName llm.P
 		return nil, err
 	}
 
-	// Add output attributes
-	//if out.Usage.TotalTokens > 0 {
-	//	span.SetAttributes(
-	//		attribute.Int64("llm.usage.prompt_tokens", out.Usage.PromptTokens),
-	//		attribute.Int64("llm.usage.completion_tokens", out.Usage.CompletionTokens),
-	//		attribute.Int64("llm.usage.total_tokens", out.Usage.TotalTokens),
-	//	)
-	//}
-
 	return out, nil
 }
 
 func (g *LLMGateway) handleStreamingSpeechRequest(ctx context.Context, providerName llm.ProviderName, p llm.Provider, in *speech.Request) (chan *speech.ResponseChunk, error) {
-	ctx, span := tracer.Start(ctx, "LLM.Speech")
+	ctx, span := tracer.Start(ctx, genai.OpSpeech+" "+in.Model)
 	defer span.End()
 
 	addToSpan(ctx, span)
 	span.SetAttributes(
-		attribute.String("llm.provider", string(providerName)),
-		attribute.String("llm.model", in.Model),
-		attribute.String("llm.request_type", "Speech"),
+		attribute.String(genai.AttrOperationName, genai.OpSpeech),
+		attribute.String(genai.AttrProviderName, string(providerName)),
+		attribute.String(genai.AttrRequestModel, in.Model),
+		attribute.String(genai.AttrRequestType, genai.RequestTypeSpeechStream),
 	)
 
 	streamChan, err := p.NewStreamingSpeech(ctx, in)
@@ -69,10 +63,9 @@ func (g *LLMGateway) handleStreamingSpeechRequest(ctx context.Context, providerN
 			wrappedChan <- chunk
 
 			if chunk.OfAudioDone != nil {
-				span.SetAttributes(attribute.Int("gen_ai.response.usage.input_tokens", chunk.OfAudioDone.Usage.InputTokens))
-				span.SetAttributes(attribute.Int("gen_ai.response.usage.cached_input_tokens", chunk.OfAudioDone.Usage.InputTokensDetails.CachedTokens))
-				span.SetAttributes(attribute.Int("gen_ai.response.usage.output_tokens", chunk.OfAudioDone.Usage.OutputTokens))
-				span.SetAttributes(attribute.Int("gen_ai.response.usage.total_tokens", chunk.OfAudioDone.Usage.TotalTokens))
+				span.SetAttributes(attribute.Int(genai.AttrUsageInputTokens, chunk.OfAudioDone.Usage.InputTokens))
+				span.SetAttributes(attribute.Int(genai.AttrCachedInputTokens, chunk.OfAudioDone.Usage.InputTokensDetails.CachedTokens))
+				span.SetAttributes(attribute.Int(genai.AttrUsageOutputTokens, chunk.OfAudioDone.Usage.OutputTokens))
 			}
 		}
 	}()

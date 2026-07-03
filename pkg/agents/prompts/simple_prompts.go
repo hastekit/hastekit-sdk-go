@@ -74,7 +74,7 @@ func WithSkills(skills []agents.Skill) PromptOption {
 }
 
 func (sp *SimplePrompt) GetPrompt(ctx context.Context, deps *agents.Dependencies) (string, error) {
-	ctx, span := tracer.Start(ctx, "GetPrompt")
+	ctx, span := tracer.Start(ctx, "Prompt.Load")
 	defer span.End()
 
 	prompt, err := sp.loader.LoadPrompt(ctx)

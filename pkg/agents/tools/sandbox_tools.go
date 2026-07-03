@@ -8,12 +8,6 @@ import (
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/sandbox"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-)
-
-var (
-	tracer = otel.Tracer("Tools")
 )
 
 type sandboxHelper struct {
@@ -42,7 +36,7 @@ func (t *sandboxHelper) getClient(ctx context.Context, params *agents.ToolCall) 
 	// Restore the working directory from state.
 	workdir, ok := params.State[t.getSandboxCwdStateKey()]
 	if !ok || workdir == "" {
-		workdir = "/workspace"
+		workdir = "/"
 	}
 
 	// Create a sandbox daemon client
@@ -105,11 +99,6 @@ func NewBashTool(svc sandbox.Manager, image string, env map[string]string) *Bash
 }
 
 func (t *BashTool) Execute(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
-	ctx, span := tracer.Start(ctx, "BashTool")
-	defer span.End()
-
-	span.SetAttributes(attribute.String("args.code", params.Arguments))
-
 	var in BashToolInput
 	err := sonic.Unmarshal([]byte(params.Arguments), &in)
 	if err != nil {
@@ -187,11 +176,6 @@ func NewReadFileTool(svc sandbox.Manager, image string, env map[string]string) *
 }
 
 func (t *ReadFileTool) Execute(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
-	ctx, span := tracer.Start(ctx, "ReadFileTool")
-	defer span.End()
-
-	span.SetAttributes(attribute.String("args.code", params.Arguments))
-
 	var in ReadFileToolInput
 	err := sonic.Unmarshal([]byte(params.Arguments), &in)
 	if err != nil {
@@ -261,11 +245,6 @@ func NewDeleteFileTool(svc sandbox.Manager, image string, env map[string]string)
 }
 
 func (t *DeleteFileTool) Execute(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
-	ctx, span := tracer.Start(ctx, "DeleteFileTool")
-	defer span.End()
-
-	span.SetAttributes(attribute.String("args.code", params.Arguments))
-
 	var in ReadFileToolInput
 	err := sonic.Unmarshal([]byte(params.Arguments), &in)
 	if err != nil {
@@ -337,11 +316,6 @@ func NewWriteFileTool(svc sandbox.Manager, image string, env map[string]string) 
 }
 
 func (t *WriteFileTool) Execute(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
-	ctx, span := tracer.Start(ctx, "WriteFileTool")
-	defer span.End()
-
-	span.SetAttributes(attribute.String("args.code", params.Arguments))
-
 	var in WriteFileToolInput
 	err := sonic.Unmarshal([]byte(params.Arguments), &in)
 	if err != nil {
@@ -354,7 +328,7 @@ func (t *WriteFileTool) Execute(ctx context.Context, params *agents.ToolCall) (*
 	}
 
 	// Run bash command
-	_, err = cli.WriteFile(ctx, in.FilePath, in.Content)
+	resp, err := cli.WriteFile(ctx, in.FilePath, in.Content)
 	if err != nil {
 		return nil, err
 	}
@@ -364,7 +338,7 @@ func (t *WriteFileTool) Execute(ctx context.Context, params *agents.ToolCall) (*
 			ID:     params.ID,
 			CallID: params.CallID,
 			Output: responses.FunctionCallOutputContentUnion{
-				OfString: utils.Ptr("Written successfully"),
+				OfString: utils.Ptr("Written successfully to " + resp.Path),
 			},
 		},
 	}, nil

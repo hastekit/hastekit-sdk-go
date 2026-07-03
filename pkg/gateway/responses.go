@@ -6,23 +6,37 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
+	"github.com/hastekit/hastekit-sdk-go/pkg/genai"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 )
 
 func (g *LLMGateway) handleResponsesRequest(ctx context.Context, providerName llm.ProviderName, p llm.Provider, in *responses.Request) (*responses.Response, error) {
-	ctx, span := tracer.Start(ctx, "LLM.Responses")
+	ctx, span := tracer.Start(ctx, genai.OpChat+" "+in.Model)
 	defer span.End()
 
 	addToSpan(ctx, span)
 	span.SetAttributes(
-		attribute.String("llm.provider", string(providerName)),
-		attribute.String("llm.model", in.Model),
-		attribute.Bool("llm.streaming", false),
-		attribute.Int("llm.tools_count", len(in.Tools)),
-		attribute.String("gen_ai.provider.name", string(providerName)),
-		attribute.String("gen_ai.request.model", in.Model),
+		attribute.String(genai.AttrOperationName, genai.OpChat),
+		attribute.String(genai.AttrProviderName, string(providerName)),
+		attribute.String(genai.AttrRequestModel, in.Model),
+		attribute.String(genai.AttrRequestType, genai.RequestTypeResponses),
 	)
+	if in.Temperature != nil {
+		span.SetAttributes(attribute.Float64(genai.AttrRequestTemperature, *in.Temperature))
+	}
+	if in.TopP != nil {
+		span.SetAttributes(attribute.Float64(genai.AttrRequestTopP, *in.TopP))
+	}
+	if in.MaxOutputTokens != nil {
+		span.SetAttributes(attribute.Int(genai.AttrRequestMaxTokens, *in.MaxOutputTokens))
+	}
+	if in.Instructions != nil {
+		span.SetAttributes(attribute.String(genai.AttrSystemInstructions, *in.Instructions))
+	}
+	if msgsString, err := sonic.Marshal(in.Input); err == nil {
+		span.SetAttributes(attribute.String(genai.AttrInputMessages, string(msgsString)))
+	}
 
 	out, err := p.NewResponses(ctx, in)
 	if err != nil {
@@ -31,12 +45,17 @@ func (g *LLMGateway) handleResponsesRequest(ctx context.Context, providerName ll
 		return nil, err
 	}
 
-	// Add output attributes
+	span.SetAttributes(attribute.String(genai.AttrResponseModel, out.Model))
+	if out.ID != "" {
+		span.SetAttributes(attribute.String(genai.AttrResponseID, out.ID))
+	}
+	if outString, err := sonic.Marshal(out.Output); err == nil {
+		span.SetAttributes(attribute.String(genai.AttrOutputMessages, string(outString)))
+	}
 	if out.Usage != nil {
 		span.SetAttributes(
-			attribute.Int("llm.usage.input_tokens", int(out.Usage.InputTokens)),
-			attribute.Int("llm.usage.output_tokens", int(out.Usage.OutputTokens)),
-			attribute.Int("llm.usage.total_tokens", int(out.Usage.TotalTokens)),
+			attribute.Int(genai.AttrUsageInputTokens, int(out.Usage.InputTokens)),
+			attribute.Int(genai.AttrUsageOutputTokens, int(out.Usage.OutputTokens)),
 		)
 	}
 
@@ -44,19 +63,26 @@ func (g *LLMGateway) handleResponsesRequest(ctx context.Context, providerName ll
 }
 
 func (g *LLMGateway) handleStreamingResponsesRequest(ctx context.Context, providerName llm.ProviderName, p llm.Provider, in *responses.Request) (chan *responses.ResponseChunk, error) {
-	ctx, span := tracer.Start(ctx, "LLM.StreamingResponses")
+	ctx, span := tracer.Start(ctx, genai.OpChat+" "+in.Model)
 
 	addToSpan(ctx, span)
 	span.SetAttributes(
-		attribute.String("llm.provider", string(providerName)),
-		attribute.String("llm.model", in.Model),
-		attribute.Int("tools_count", len(in.Tools)),
-		attribute.String("gen_ai.provider.name", string(providerName)),
-		attribute.String("gen_ai.request.model", in.Model),
+		attribute.String(genai.AttrOperationName, genai.OpChat),
+		attribute.String(genai.AttrProviderName, string(providerName)),
+		attribute.String(genai.AttrRequestModel, in.Model),
+		attribute.String(genai.AttrRequestType, genai.RequestTypeResponsesStream),
 	)
-
+	if in.Temperature != nil {
+		span.SetAttributes(attribute.Float64(genai.AttrRequestTemperature, *in.Temperature))
+	}
+	if in.TopP != nil {
+		span.SetAttributes(attribute.Float64(genai.AttrRequestTopP, *in.TopP))
+	}
+	if in.MaxOutputTokens != nil {
+		span.SetAttributes(attribute.Int(genai.AttrRequestMaxTokens, *in.MaxOutputTokens))
+	}
 	if in.Instructions != nil {
-		span.SetAttributes(attribute.String("gen_ai.system_instructions", *in.Instructions))
+		span.SetAttributes(attribute.String(genai.AttrSystemInstructions, *in.Instructions))
 	}
 
 	msgsString, err := sonic.Marshal(in.Input)
@@ -64,7 +90,7 @@ func (g *LLMGateway) handleStreamingResponsesRequest(ctx context.Context, provid
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 	}
-	span.SetAttributes(attribute.String("gen_ai.input.messages", string(msgsString)))
+	span.SetAttributes(attribute.String(genai.AttrInputMessages, string(msgsString)))
 
 	streamChan, err := p.NewStreamingResponses(ctx, in)
 	if err != nil {
@@ -86,16 +112,15 @@ func (g *LLMGateway) handleStreamingResponsesRequest(ctx context.Context, provid
 			wrappedChan <- chunk
 
 			if chunk.OfResponseCompleted != nil {
-				span.SetAttributes(attribute.Int("gen_ai.response.usage.input_tokens", chunk.OfResponseCompleted.Response.Usage.InputTokens))
-				span.SetAttributes(attribute.Int("gen_ai.response.usage.cached_input_tokens", chunk.OfResponseCompleted.Response.Usage.InputTokensDetails.CachedTokens))
-				span.SetAttributes(attribute.Int("gen_ai.response.usage.output_tokens", chunk.OfResponseCompleted.Response.Usage.OutputTokens))
-				span.SetAttributes(attribute.Int("gen_ai.response.usage.total_tokens", chunk.OfResponseCompleted.Response.Usage.TotalTokens))
+				span.SetAttributes(attribute.Int(genai.AttrUsageInputTokens, chunk.OfResponseCompleted.Response.Usage.InputTokens))
+				span.SetAttributes(attribute.Int(genai.AttrCachedInputTokens, chunk.OfResponseCompleted.Response.Usage.InputTokensDetails.CachedTokens))
+				span.SetAttributes(attribute.Int(genai.AttrUsageOutputTokens, chunk.OfResponseCompleted.Response.Usage.OutputTokens))
 
 				msgsString, err = sonic.Marshal(chunk.OfResponseCompleted.Response.Output)
 				if err != nil {
 					span.RecordError(err)
 				}
-				span.SetAttributes(attribute.String("gen_ai.output.messages", string(msgsString)))
+				span.SetAttributes(attribute.String(genai.AttrOutputMessages, string(msgsString)))
 			}
 		}
 	}()

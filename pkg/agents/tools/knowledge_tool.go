@@ -8,7 +8,6 @@ import (
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 	"github.com/hastekit/hastekit-sdk-go/pkg/knowledge/vectorstores"
 	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
-	"go.opentelemetry.io/otel/attribute"
 )
 
 type KnowledgePersistence interface {
@@ -54,11 +53,6 @@ func NewKnowledgeTool(svc KnowledgePersistence, name string, description string,
 }
 
 func (t *KnowledgeTool) Execute(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
-	ctx, span := tracer.Start(ctx, "KnowledgeTool")
-	defer span.End()
-
-	span.SetAttributes(attribute.String("args.query", params.Arguments))
-
 	var in KnowledgeSearchInput
 	err := sonic.Unmarshal([]byte(params.Arguments), &in)
 	if err != nil {
