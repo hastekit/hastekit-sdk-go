@@ -603,6 +603,7 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, run *history
 							AgentName:           e.Name,
 							Namespace:           in.Namespace,
 							SessionID:           in.SessionID,
+							ThreadID:            in.ThreadID,
 							RunContext:          in.RunContext,
 							State:               run.State,
 							ShouldResume:        resuming,

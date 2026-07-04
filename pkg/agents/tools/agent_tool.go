@@ -23,8 +23,9 @@ const (
 
 type AgentTool struct {
 	*agents.BaseTool
-	agent       *agents.Agent
-	contextMode SubAgentContextMode
+	agent          *agents.Agent
+	contextMode    SubAgentContextMode
+	withoutTracing bool
 }
 
 type agentToolArgument struct {
@@ -32,7 +33,13 @@ type agentToolArgument struct {
 	ThreadID string `json:"thread_id"`
 }
 
-func NewAgentTool(name string, description string, agent *agents.Agent, contextMode SubAgentContextMode) *AgentTool {
+type AgentToolOption func(*AgentTool)
+
+func WithoutTracing(t *AgentTool) {
+	t.withoutTracing = true
+}
+
+func NewAgentTool(name string, description string, agent *agents.Agent, contextMode SubAgentContextMode, opts ...AgentToolOption) *AgentTool {
 	toolUnion := responses.ToolUnion{
 		OfFunction: &responses.FunctionTool{
 			Name:        name,
@@ -71,13 +78,19 @@ func NewAgentTool(name string, description string, agent *agents.Agent, contextM
 		}
 	}
 
-	return &AgentTool{
+	at := &AgentTool{
 		BaseTool: &agents.BaseTool{
 			ToolUnion: toolUnion,
 		},
 		agent:       agent,
 		contextMode: contextMode,
 	}
+
+	for _, opt := range opts {
+		opt(at)
+	}
+
+	return at
 }
 
 // Execute runs the inner agent. When params.ShouldResume is set,
@@ -160,22 +173,32 @@ func (t *AgentTool) Execute(ctx context.Context, params *agents.ToolCall) (*agen
 		}
 	}
 
-	handle, err := t.agent.Execute(ctx, &agents.AgentInput{
+	var result *agents.AgentOutput
+	var err error
+	agentInput := &agents.AgentInput{
 		Namespace:         namespace,
 		ThreadID:          threadId,
 		PreviousMessageID: previousMessageID,
 		Message:           history.Message{SenderID: params.AgentName, Messages: messages},
 		SessionID:         params.SessionID, // Using conversation id as the shared session id
-	})
-	if err != nil {
-		return nil, err
 	}
+	if t.withoutTracing {
+		result, err = t.agent.ExecuteWithoutTrace(ctx, agentInput)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		handle, err := t.agent.Execute(ctx, agentInput)
+		if err != nil {
+			return nil, err
+		}
 
-	// The parent agent reports tool output, not chunks. Result drains
-	// the sub-agent's chunk stream and returns the aggregated output.
-	result, err := handle.Result()
-	if err != nil {
-		return nil, err
+		// The parent agent reports tool output, not chunks. Result drains
+		// the sub-agent's chunk stream and returns the aggregated output.
+		result, err = handle.Result()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return t.responseFromResult(params, result, threadId)

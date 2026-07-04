@@ -12,6 +12,7 @@ type ToolCall struct {
 	AgentVersion string            `json:"agent_version"`
 	Namespace    string            `json:"namespace"`
 	SessionID    string            `json:"session_id"`
+	ThreadID     string            `json:"thread_id"`
 	RunContext   map[string]any    `json:"run_context"`
 	State        map[string]string `json:"state,omitempty"`
 
