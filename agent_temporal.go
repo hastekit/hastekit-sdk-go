@@ -64,6 +64,7 @@ func (c *SDK) NewTemporalAgent(options *AgentOptions) *agents.Agent {
 		Tools:       options.Tools,
 		Instruction: options.Instruction,
 		McpServers:  options.McpServers,
+		MaxLoops:    options.MaxLoops,
 		Handoffs:    options.Handoffs,
 	}
 

@@ -42,6 +42,7 @@ type Agent struct {
 	streamBroker StreamBroker
 	handoffs     []*Handoff
 	toolExecutor ToolExecutor
+	durableStep  DurableStep
 }
 
 type AgentOptions struct {
@@ -59,6 +60,7 @@ type AgentOptions struct {
 	MaxLoops     *int
 	ToolExecutor ToolExecutor
 	StreamBroker StreamBroker
+	DurableStep  DurableStep
 }
 
 func NewAgent(opts *AgentOptions) *Agent {
@@ -81,6 +83,11 @@ func NewAgent(opts *AgentOptions) *Agent {
 
 	if opts.History == nil {
 		opts.History = history.NewConversationManager(history.NewInMemoryConversationPersistence())
+	}
+
+	durableStep := opts.DurableStep
+	if durableStep == nil {
+		durableStep = localDurableStep{}
 	}
 
 	toolExecutor := opts.ToolExecutor
@@ -107,6 +114,7 @@ func NewAgent(opts *AgentOptions) *Agent {
 		handoffs:     opts.Handoffs,
 		toolExecutor: toolExecutor,
 		streamBroker: streamBroker,
+		durableStep:  durableStep,
 	}
 }
 
@@ -125,6 +133,7 @@ func (e *Agent) WithLLM(wrappedLLM LLM) *Agent {
 		streamBroker: e.streamBroker,
 		handoffs:     e.handoffs,
 		toolExecutor: e.toolExecutor,
+		durableStep:  e.durableStep,
 	}
 }
 
@@ -233,6 +242,10 @@ func (e *Agent) Execute(ctx context.Context, in *AgentInput) (*AgentHandle, erro
 		done:     make(chan struct{}),
 	}
 
+	if in.ThreadID == "" {
+		in.ThreadID = uuid.NewString()
+	}
+
 	go func() {
 		defer close(handle.done)
 
@@ -242,11 +255,23 @@ func (e *Agent) Execute(ctx context.Context, in *AgentInput) (*AgentHandle, erro
 		span.SetAttributes(
 			attribute.String(genai.AttrOperationName, genai.OpInvokeAgent),
 			attribute.String(genai.AttrAgentName, e.Name),
+			attribute.String(genai.AttrConversationID, in.ThreadID),
+			attribute.String(genai.AttrSessionID, in.ThreadID),
 		)
+
+		if s, ok := genai.InputMessages(in.Message.Messages); ok {
+			span.SetAttributes(attribute.String(genai.AttrInputMessages, s))
+		}
 
 		// Stream lifecycle (Subscribe/Close) is owned by ExecuteLocal,
 		// which is the loop runner. We just observe it here.
 		handle.result, handle.err = e.ExecuteWithoutTrace(runCtx, in)
+
+		if handle.result != nil {
+			if s, ok := genai.OutputMessages(handle.result.Output); ok {
+				span.SetAttributes(attribute.String(genai.AttrOutputMessages, s))
+			}
+		}
 	}()
 
 	return handle, nil
@@ -285,16 +310,23 @@ func (e *Agent) ExecuteLocal(ctx context.Context, in *AgentInput) (*AgentOutput,
 
 	runId := run.GetMessageID()
 
-	// TODO: what's the implication of obtaining traceid from context in case of durable execution?
+	if in.SessionID == "" {
+		in.SessionID = run.GetConversationID()
+	}
+
+	// The run's trace id comes from the ambient span (an externally-provided
+	// invoke_agent span, or the surrounding workflow span) and is echoed in the
+	// run.* chunks for client correlation.
 	var traceid string
 	if sc := trace.SpanFromContext(ctx).SpanContext(); sc.IsValid() {
 		traceid = sc.TraceID().String()
 	}
 	run.RunState.TraceID = traceid
 
-	// Emit run.created
-	// TODO: make this a durable step to avoid resending on replays
-	e.runCreated(ctx, in.StreamID, runId, traceid)
+	// Emit run.created once (durable step: not resent on replay).
+	e.durableStep.Do(func() {
+		e.runCreated(ctx, in.StreamID, runId, traceid)
+	})
 
 	return e.ExecuteWithRun(ctx, in, run)
 }
@@ -654,9 +686,12 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, run *history
 					continue
 				}
 
-				// TODO: Make this a durable step to avoid resending
-				publish(&responses.ResponseChunk{
-					OfFunctionCallOutput: toolResult.FunctionCallOutputMessage,
+				// Durable step: publish the tool output chunk once, not on
+				// every replay.
+				e.durableStep.Do(func() {
+					publish(&responses.ResponseChunk{
+						OfFunctionCallOutput: toolResult.FunctionCallOutputMessage,
+					})
 				})
 
 				toolResultMsg := []responses.InputMessageUnion{
@@ -687,8 +722,10 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, run *history
 				return &AgentOutput{Status: agentstate.RunStatusError, RunID: runId}, err
 			}
 
-			// TODO: make this a durable step to avoid resending on replays
-			e.runPaused(ctx, in.StreamID, runId, run.RunState)
+			// Durable step: emit run.paused once, not on every replay.
+			e.durableStep.Do(func() {
+				e.runPaused(ctx, in.StreamID, runId, run.RunState)
+			})
 
 			return &AgentOutput{
 				RunID:      runId,
@@ -702,8 +739,10 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, run *history
 				return &AgentOutput{Status: agentstate.RunStatusError, RunID: runId}, err
 			}
 
-			// TODO: make this a durable step to avoid resending on replays
-			e.runCompleted(ctx, in.StreamID, runId, run.RunState)
+			// Durable step: emit run.completed once, not on every replay.
+			e.durableStep.Do(func() {
+				e.runCompleted(ctx, in.StreamID, runId, run.RunState)
+			})
 
 			return &AgentOutput{
 				RunID:  runId,

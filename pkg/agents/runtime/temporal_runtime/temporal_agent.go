@@ -6,6 +6,8 @@ import (
 
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/history"
+	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/sdk/contrib/opentelemetry"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -79,7 +81,18 @@ func (a *TemporalAgentV2) Execute(ctx workflow.Context, in *agents.AgentInput) (
 
 	agent := a.newTemporalProxyAgent(ctx)
 
-	return agent.ExecuteWithoutTrace(context.Background(), in)
+	// The agent loop runs on a plain context.Context (workflow.Context can't
+	// cross into it), so bridge the workflow's OpenTelemetry span into that
+	// context. Without this, any spans the loop creates start with no parent
+	// and land in a disconnected trace instead of nesting under the Temporal
+	// workflow span. The span context is deterministic across replays, so this
+	// is replay-safe.
+	goCtx := context.Background()
+	if span, ok := opentelemetry.SpanFromWorkflowContext(ctx); ok {
+		goCtx = trace.ContextWithSpan(goCtx, span)
+	}
+
+	return agent.ExecuteWithoutTrace(goCtx, in)
 }
 
 func (a *TemporalAgentV2) newTemporalProxyAgent(ctx workflow.Context) *agents.Agent {
@@ -123,6 +136,7 @@ func (a *TemporalAgentV2) newTemporalProxyAgent(ctx workflow.Context) *agents.Ag
 		McpServers:   mcpProxies,
 		ToolExecutor: NewTemporalToolExecutor(ctx),
 		StreamBroker: NewTemporalStreamBrokerProxy(ctx, a.options.Name, a.broker),
+		DurableStep:  NewTemporalDurableStep(ctx),
 	}
 
 	for _, h := range a.options.Handoffs {

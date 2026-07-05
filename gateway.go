@@ -37,7 +37,9 @@ func (c *SDK) setLLMClient() {
 
 func (c *SDK) getGatewayAdapter() gateway.LLMGatewayAdapter {
 	if c.directMode {
-		return gateway.NewInternalLLMGateway(gateway.NewLLMGateway(c.llmConfigs))
+		gw := gateway.NewLLMGateway(c.llmConfigs)
+		gw.UseMiddleware(gateway.NewTracingMiddleware())
+		return gateway.NewInternalLLMGateway(gw)
 	}
 
 	return hastekitgateway.NewExternalLLMGateway(c.endpoint, c.httpClient)

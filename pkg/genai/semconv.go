@@ -36,8 +36,9 @@ const (
 	AttrRequestChoiceCount      = "gen_ai.request.choice.count"
 	AttrRequestEncodingFormats  = "gen_ai.request.encoding_formats"
 
-	AttrAgentName = "gen_ai.agent.name"
-	AttrAgentID   = "gen_ai.agent.id"
+	AttrAgentName    = "gen_ai.agent.name"
+	AttrAgentID      = "gen_ai.agent.id"
+	AttrAgentVersion = "gen_ai.agent.version"
 
 	AttrToolName        = "gen_ai.tool.name"
 	AttrToolCallID      = "gen_ai.tool.call.id"
@@ -49,7 +50,8 @@ const (
 	// CloudWatch GenAI Observability and AgentCore Evaluations group traces
 	// into sessions by this attribute. We use the client-facing thread id as
 	// the session identity, so a conversation thread = one session.
-	AttrSessionID = "session.id"
+	AttrSessionID      = "session.id"
+	AttrConversationID = "gen_ai.conversation.id"
 )
 
 // Supplementary hastekit attributes. The GenAI spec has no attribute for
@@ -59,6 +61,11 @@ const (
 const (
 	AttrRequestType       = "hastekit.request_type"
 	AttrCachedInputTokens = "hastekit.usage.cached_input_tokens"
+
+	// AttrRunID is the agent run's id (the run's message id). It is set on the
+	// invoke_agent span so traces can be correlated with the run.* lifecycle
+	// events, which carry the same id.
+	AttrRunID = "hastekit.run_id"
 )
 
 // gen_ai.operation.name values (plus best-effort values for operations the

@@ -36,7 +36,16 @@ func (t *TemporalMCPServer) ListTools(ctx context.Context, runContext map[string
 	return tools, nil
 }
 
+// ExecuteTool is the _ExecuteMCPToolActivity implementation. It runs inside a
+// Temporal activity (exactly once per real call), so the execute_tool span
+// opened here fires once and is replay-safe. callTool does the real work.
 func (t *TemporalMCPServer) ExecuteTool(ctx context.Context, params *agents.ToolCall, runContext map[string]any) (*agents.ToolCallResponse, error) {
+	return agents.ExecuteWithTrace(ctx, nil, params, func(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
+		return t.callTool(ctx, params, runContext)
+	})
+}
+
+func (t *TemporalMCPServer) callTool(ctx context.Context, params *agents.ToolCall, runContext map[string]any) (*agents.ToolCallResponse, error) {
 	// Use CallToolDirect if the wrapped MCPToolset supports it (e.g. MCPClient),
 	// which calls the tool directly via the connection pool without re-listing.
 	type directCaller interface {
