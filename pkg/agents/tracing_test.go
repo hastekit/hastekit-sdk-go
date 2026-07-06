@@ -1,6 +1,7 @@
 package agents_test
 
 import (
+	"context"
 	"sync"
 	"testing"
 
@@ -33,9 +34,9 @@ func recordingSpans(t *testing.T) *tracetest.InMemoryExporter {
 }
 
 // The in-process tool executor brackets every tool call with a GenAI
-// execute_tool span via ExecuteWithTrace. No run-level invoke_agent span is
-// emitted by the loop — that span, when wanted, is opened by the caller
-// outside the durable boundary and these tool spans nest under it.
+// execute_tool span via ExecuteWithTrace. Running through ExecuteWithoutTrace
+// (the entry callers use to opt out of the run-level span) isolates that tool
+// span: no invoke_agent span is opened, since that is Execute's job.
 func TestExecuteWithTrace_EmitsToolSpan(t *testing.T) {
 	exporter := recordingSpans(t)
 
@@ -51,7 +52,10 @@ func TestExecuteWithTrace_EmitsToolSpan(t *testing.T) {
 		Tools:        []agents.Tool{tool},
 	}).WithLLM(llm)
 
-	out := runAgent(t, agent, &agents.AgentInput{Message: userMessage("hi")})
+	out, err := agent.ExecuteWithoutTrace(context.Background(), &agents.AgentInput{Message: userMessage("hi")})
+	if err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
 	requireStatus(t, out, agentstate.RunStatusCompleted)
 
 	var exec tracetest.SpanStub
