@@ -379,14 +379,22 @@ func (cm *ConversationRunManager) ProcessIncomingMessages(message Message, queue
 	for _, msg := range message.Messages {
 		if msg.OfFunctionCallInterruptResolution != nil {
 			// Interrupt resume path. approve/reject actions drain onto the
-			// QueuedApprovals/QueuedRejections queues; Content is ignored
-			// until a data-carrying mode (e.g. form elicitation) is wired.
+			// QueuedApprovals/QueuedRejections queues. A data-carrying
+			// resolution (Content set, e.g. a submitted form) is also kept
+			// on RunState.Resolutions so the resuming tool receives the full
+			// resolution — Content included — through its ResumeMessages.
 			r := msg.OfFunctionCallInterruptResolution
 			for _, res := range r.Resolutions {
 				switch res.Action {
 				case responses.InterruptActionApprove:
 					hasNewApproval = true
 					cm.RunState.QueuedApprovals = append(cm.RunState.QueuedApprovals, res.CallID)
+					if len(res.Content) > 0 {
+						if cm.RunState.Resolutions == nil {
+							cm.RunState.Resolutions = map[string]responses.InterruptResolution{}
+						}
+						cm.RunState.Resolutions[res.CallID] = res
+					}
 				case responses.InterruptActionReject:
 					hasNewApproval = true
 					cm.RunState.QueuedRejections = append(cm.RunState.QueuedRejections, res.CallID)

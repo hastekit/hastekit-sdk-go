@@ -55,6 +55,14 @@ type RunState struct {
 	// Interrupts maps a paused call ID to its flexible Interrupt
 	Interrupts map[string]responses.Interrupt `json:"interrupts,omitempty"`
 
+	// Resolutions holds data-carrying interrupt resolutions (those with
+	// Content, e.g. a submitted form) drained from the incoming resume
+	// message, keyed by resolved call id. It's transient — populated on the
+	// resume invocation and consumed the same invocation when building the
+	// resuming tool's ResumeMessages — so it isn't persisted (no ToMeta
+	// entry, json:"-").
+	Resolutions map[string]responses.InterruptResolution `json:"-"`
+
 	// LastAgentName is the name of the agent that was responding to the user last.
 	LastAgentName string `json:"last_agent_name,omitempty"`
 }

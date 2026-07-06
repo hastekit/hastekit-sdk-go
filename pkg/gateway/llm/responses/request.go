@@ -308,10 +308,12 @@ const (
 )
 
 // InterruptResolution is one user decision for a paused interrupt. Action
-// is the verb the user took (InterruptActionApprove / InterruptActionReject
-// in v1). Content carries mode-specific response data (e.g. a filled form
-// for MCP structured elicitation) and is ignored by the v1 approve/reject
-// drain.
+// is the verb the user took (InterruptActionApprove / InterruptActionReject).
+// Content carries mode-specific response data (e.g. a filled form for a
+// structured/form elicitation); on resume the agent loop delivers the whole
+// resolution — Content included — to the resuming tool via its
+// ToolCall.ResumeMessages, so a tool that raised a data interrupt reads the
+// user's answer from there.
 type InterruptResolution struct {
 	CallID  string          `json:"call_id"`
 	Action  string          `json:"action"`

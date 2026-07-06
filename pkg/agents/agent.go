@@ -611,7 +611,15 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, run *history
 						if len(approvedInner) > 0 || len(rejectedInner) > 0 {
 							resolutions := make([]responses.InterruptResolution, 0, len(approvedInner)+len(rejectedInner))
 							for _, id := range approvedInner {
-								resolutions = append(resolutions, responses.InterruptResolution{CallID: id, Action: responses.InterruptActionApprove})
+								// Prefer the resolution the user actually submitted
+								// (it carries mode-specific Content, e.g. a filled
+								// form for a data elicitation); fall back to a bare
+								// approve for plain approvals.
+								if res, ok := run.RunState.Resolutions[id]; ok {
+									resolutions = append(resolutions, res)
+								} else {
+									resolutions = append(resolutions, responses.InterruptResolution{CallID: id, Action: responses.InterruptActionApprove})
+								}
 							}
 							for _, id := range rejectedInner {
 								resolutions = append(resolutions, responses.InterruptResolution{CallID: id, Action: responses.InterruptActionReject})

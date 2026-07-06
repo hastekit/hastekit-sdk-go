@@ -582,8 +582,12 @@ const (
 	// InterruptModeURL is an MCP URL elicitation — the user must visit a
 	// URL (e.g. an OAuth connect flow) before the tool can proceed.
 	InterruptModeURL InterruptMode = "url"
-	// InterruptModeForm is reserved for MCP structured/data elicitation.
-	// InterruptModeForm InterruptMode = "form"
+	// InterruptModeForm is a structured (form) elicitation: the user fills
+	// a form described by a JSON schema (carried in the Elicitations'
+	// RequestedSchema). The filled form returns as the resolution Content,
+	// which the agent loop delivers to the resuming tool via its
+	// ToolCall.ResumeMessages.
+	InterruptModeForm InterruptMode = "form"
 )
 
 // Interrupt is the unified representation of one paused tool call awaiting
