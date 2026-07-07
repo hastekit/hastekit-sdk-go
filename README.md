@@ -60,34 +60,25 @@ import (
     "os"
 
     hastekit "github.com/hastekit/hastekit-sdk-go"
-    "github.com/hastekit/hastekit-sdk-go/pkg/gateway"
-    "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm"
     "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
     "github.com/hastekit/hastekit-sdk-go/pkg/utils"
 )
 
 func main() {
-    // Initialize the SDK with functional options (recommended)
-    client, err := hastekit.NewWithOptions(
-        hastekit.WithProviderConfigs(
-            gateway.ProviderConfig{
-                ProviderName: llm.ProviderNameOpenAI,
-                ApiKeys: []*gateway.APIKeyConfig{
-                    {
-                        Name:   "default",
-                        APIKey: os.Getenv("OPENAI_API_KEY"),
-                    },
-                },
+    // Configure an LLM client with one or more providers.
+    client := hastekit.NewLLMClient([]hastekit.ProviderConfig{
+        {
+            ProviderName: hastekit.ProviderOpenAI,
+            ApiKeys: []*hastekit.APIKeyConfig{
+                {Name: "default", APIKey: os.Getenv("OPENAI_API_KEY")},
             },
-        ),
-    )
-    if err != nil {
-        log.Fatal(err)
-    }
+        },
+    })
 
-    // Make an LLM call
-    resp, err := client.NewResponses(context.Background(), &responses.Request{
-        Model:        "OpenAI/gpt-4o-mini",
+    // Bind a model, then make an LLM call.
+    model := client.Model("OpenAI/gpt-4o-mini")
+
+    resp, err := model.NewResponses(context.Background(), &responses.Request{
         Instructions: utils.Ptr("You are a helpful assistant."),
         Input: responses.InputUnion{
             OfString: utils.Ptr("What is the capital of France?"),
@@ -121,38 +112,29 @@ import (
     "log"
     "os"
 
-    "github.com/hastekit/hastekit-sdk-go/pkg/agents"
-    "github.com/hastekit/hastekit-sdk-go/pkg/gateway"
-    "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm"
-    "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
     hastekit "github.com/hastekit/hastekit-sdk-go"
+    "github.com/hastekit/hastekit-sdk-go/pkg/agents"
+    "github.com/hastekit/hastekit-sdk-go/pkg/agents/history"
+    "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
     "github.com/hastekit/hastekit-sdk-go/pkg/utils"
 )
 
 func main() {
-    // Initialize SDK with functional options
-    client, err := hastekit.NewWithOptions(
-        hastekit.WithProviderConfigs(
-            gateway.ProviderConfig{
-                ProviderName: llm.ProviderNameOpenAI,
-                ApiKeys: []*gateway.APIKeyConfig{
-                    {Name: "default", APIKey: os.Getenv("OPENAI_API_KEY")},
-                },
+    // Configure an LLM client and bind a model.
+    client := hastekit.NewLLMClient([]hastekit.ProviderConfig{
+        {
+            ProviderName: hastekit.ProviderOpenAI,
+            ApiKeys: []*hastekit.APIKeyConfig{
+                {Name: "default", APIKey: os.Getenv("OPENAI_API_KEY")},
             },
-        ),
-    )
-    if err != nil {
-        log.Fatal(err)
-    }
+        },
+    })
 
     // Create agent
-    agent := client.NewAgent(&hastekit.AgentOptions{
+    agent := hastekit.NewAgent(&hastekit.AgentConfig{
         Name:        "Assistant",
-        Instruction: client.Prompt("You are a helpful assistant."),
-        LLM: client.NewLLM(hastekit.LLMOptions{
-            Provider: llm.ProviderNameOpenAI,
-            Model:    "gpt-4o-mini",
-        }),
+        Instruction: hastekit.NewPrompt("You are a helpful assistant."),
+        LLM:         client.Model("OpenAI/gpt-4o-mini"),
         Parameters: responses.Parameters{
             Temperature: utils.Ptr(0.7),
         },
@@ -160,8 +142,10 @@ func main() {
 
     // Execute agent — returns a handle for streaming chunks + result.
     handle, err := agent.Execute(context.Background(), &agents.AgentInput{
-        Messages: []responses.InputMessageUnion{
-            responses.UserMessage("Hello! Tell me a joke."),
+        Message: history.Message{
+            Messages: []responses.InputMessageUnion{
+                responses.UserMessage("Hello! Tell me a joke."),
+            },
         },
     })
     if err != nil {
@@ -194,89 +178,56 @@ func (h *AgentHandle) Result() (*AgentOutput, error)     // drain Chunks + retur
 
 ## Usage
 
-### SDK Initialization
+### LLM Client
 
-#### Functional Options (Recommended)
-
-HasteKit SDK supports flexible configuration using Go's functional options pattern:
-
-```go
-// Minimal setup with defaults
-client, err := hastekit.NewWithOptions()
-
-// Configure OpenAI provider
-client, err := hastekit.NewWithOptions(
-    hastekit.WithProviderConfigs(
-        gateway.ProviderConfig{
-            ProviderName: llm.ProviderNameOpenAI,
-            ApiKeys: []*gateway.APIKeyConfig{
-                {Name: "default", APIKey: os.Getenv("OPENAI_API_KEY")},
-            },
-        },
-    ),
-    hastekit.WithTimeout(30*time.Second),
-)
-
-// Production setup with multiple providers
-client, err := hastekit.NewWithOptions(
-    hastekit.WithProviderConfigs(
-        gateway.ProviderConfig{
-            ProviderName: llm.ProviderNameOpenAI,
-            ApiKeys: []*gateway.APIKeyConfig{
-                {Name: "default", APIKey: os.Getenv("OPENAI_API_KEY")},
-            },
-        },
-        gateway.ProviderConfig{
-            ProviderName: llm.ProviderNameAnthropic,
-            ApiKeys: []*gateway.APIKeyConfig{
-                {Name: "default", APIKey: os.Getenv("ANTHROPIC_API_KEY")},
-            },
-        },
-    ),
-    hastekit.WithRedisConfig("redis://localhost:6379"),
-    hastekit.WithRestateConfig("http://localhost:8081"),
-)
-```
-
-#### Environment-Specific Configuration
+`hastekit.NewLLMClient` takes a list of provider configs and returns a client.
+Bind a model with `client.Model("Provider/model")` — the returned value satisfies
+the `llm.Provider` interface and exposes `NewResponses`, `NewStreamingResponses`,
+`NewEmbedding`, `NewSpeech`, and friends.
 
 ```go
-func createSDK(env string) (*hastekit.SDK, error) {
-    baseOptions := []hastekit.ClientOption{
-        hastekit.WithProviderConfigs(openaiConfig),
-        hastekit.WithTimeout(30*time.Second),
-    }
-    
-    switch env {
-    case "development":
-        return hastekit.NewWithOptions(baseOptions...)
-    case "production":
-        return hastekit.NewWithOptions(append(baseOptions,
-            hastekit.WithRedisConfig("redis://prod:6379"),
-            hastekit.WithRestateConfig("http://restate:8081"),
-        )...)
-    }
-}
-```
-
-The functional options pattern provides zero-value defaults, self-documenting configuration, and future extensibility without breaking changes.
-
-#### Legacy Configuration
-
-```go
-// Deprecated: Use NewWithOptions instead
-client, err := hastekit.New(&hastekit.LegacyClientOptions{
-    ProviderConfigs: []gateway.ProviderConfig{...},
+// Single provider
+client := hastekit.NewLLMClient([]hastekit.ProviderConfig{
+    {
+        ProviderName: hastekit.ProviderOpenAI,
+        ApiKeys: []*hastekit.APIKeyConfig{
+            {Name: "default", APIKey: os.Getenv("OPENAI_API_KEY")},
+        },
+    },
 })
+
+// Multiple providers — switch by changing the model string
+client := hastekit.NewLLMClient([]hastekit.ProviderConfig{
+    {
+        ProviderName: hastekit.ProviderOpenAI,
+        ApiKeys: []*hastekit.APIKeyConfig{
+            {Name: "default", APIKey: os.Getenv("OPENAI_API_KEY")},
+        },
+    },
+    {
+        ProviderName: hastekit.ProviderAnthropic,
+        ApiKeys: []*hastekit.APIKeyConfig{
+            {Name: "default", APIKey: os.Getenv("ANTHROPIC_API_KEY")},
+        },
+    },
+})
+
+openai := client.Model("OpenAI/gpt-4o-mini")
+claude := client.Model("Anthropic/claude-sonnet-4-5")
 ```
+
+Provider constants: `hastekit.ProviderOpenAI`, `ProviderAnthropic`,
+`ProviderGemini`, `ProviderXAI`, `ProviderBedrock`, `ProviderOllama`,
+`ProviderOpenRouter`, `ProviderElevenLabs`.
 
 ### LLM Calls
 
 #### Streaming Responses
 
 ```go
-stream, err := client.NewStreamingResponses(context.Background(), &responses.Request{
-    Model: "OpenAI/gpt-4o-mini",
+model := client.Model("OpenAI/gpt-4o-mini")
+
+stream, err := model.NewStreamingResponses(context.Background(), &responses.Request{
     Input: responses.InputUnion{
         OfString: utils.Ptr("Write a poem about coding."),
     },
@@ -295,8 +246,7 @@ for chunk := range stream {
 #### Multi-Turn Conversations
 
 ```go
-resp, err := client.NewResponses(ctx, &responses.Request{
-    Model: "OpenAI/gpt-4o-mini",
+resp, err := model.NewResponses(ctx, &responses.Request{
     Input: responses.InputUnion{
         OfInputMessageList: responses.InputMessageList{
             {
@@ -341,68 +291,45 @@ Model: "Gemini/gemini-2.5-flash"
 
 #### Agent with Custom Tools
 
+`hastekit.NewTool` turns any `func(ctx, In) (Out, error)` into a tool. The input
+JSON schema is derived from the argument struct, and arguments/results are
+marshalled for you:
+
 ```go
-type GetWeatherTool struct {
-    *agents.BaseTool
+type WeatherArgs struct {
+    Location string `json:"location" jsonschema_description:"City name"`
 }
 
-func NewGetWeatherTool() *GetWeatherTool {
-    return &GetWeatherTool{
-        BaseTool: &agents.BaseTool{
-            ToolUnion: responses.ToolUnion{
-                OfFunction: &responses.FunctionTool{
-                    Name:        "get_weather",
-                    Description: utils.Ptr("Get current weather for a location"),
-                    Parameters: map[string]any{
-                        "type": "object",
-                        "properties": map[string]any{
-                            "location": map[string]any{
-                                "type":        "string",
-                                "description": "City name",
-                            },
-                        },
-                        "required": []string{"location"},
-                    },
-                },
-            },
-        },
-    }
+type Weather struct {
+    TempC     float64 `json:"temp_c"`
+    Condition string  `json:"condition"`
 }
 
-func (t *GetWeatherTool) Execute(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
-    // Parse arguments
-    args := map[string]interface{}{}
-    json.Unmarshal([]byte(params.Arguments), &args)
-
-    location := args["location"].(string)
-
+func getWeather(ctx context.Context, args WeatherArgs) (Weather, error) {
     // Your logic here
-    weatherData := fetchWeather(location)
-
-    return &agents.ToolCallResponse{
-        FunctionCallOutputMessage: &responses.FunctionCallOutputMessage{
-            ID:     params.ID,
-            CallID: params.CallID,
-            Output: responses.FunctionCallOutputContentUnion{
-                OfString: utils.Ptr(weatherData),
-            },
-        },
-    }, nil
+    return Weather{TempC: 22.5, Condition: "Sunny"}, nil
 }
+
+weatherTool := hastekit.NewTool(getWeather,
+    hastekit.WithName("get_weather"), // optional; defaults to the function name
+    hastekit.WithDescription[WeatherArgs, Weather]("Get current weather for a location"),
+)
 
 // Use the tool
-agent := client.NewAgent(&hastekit.AgentOptions{
+agent := hastekit.NewAgent(&hastekit.AgentConfig{
     Name:        "Weather Assistant",
-    Instruction: client.Prompt("You help users check the weather."),
-    LLM:         client.NewLLM(hastekit.LLMOptions{
-        Provider: llm.ProviderNameOpenAI,
-        Model:    "gpt-4o-mini",
-    }),
-    Tools: []agents.Tool{
-        NewGetWeatherTool(),
-    },
+    Instruction: hastekit.NewPrompt("You help users check the weather."),
+    LLM:         client.Model("OpenAI/gpt-4o-mini"),
+    Tools:       []hastekit.Tool{weatherTool},
 })
 ```
+
+> `WithDescription`, `WithNeedsApproval`, and `WithDeferred` take explicit
+> `[ArgsType, ReturnType]` type parameters; `WithName` does not.
+
+Tools that implement the `agents.Tool` interface directly (embedding
+`agents.BaseTool` and defining `Execute`) also work and can be mixed into the
+same `Tools` slice.
 
 #### Streaming Chunks and Cancellation
 
@@ -410,8 +337,10 @@ agent := client.NewAgent(&hastekit.AgentOptions{
 
 ```go
 handle, err := agent.Execute(ctx, &agents.AgentInput{
-    Messages: []responses.InputMessageUnion{
-        responses.UserMessage("Walk me through how to set up Postgres replication."),
+    Message: history.Message{
+        Messages: []responses.InputMessageUnion{
+            responses.UserMessage("Walk me through how to set up Postgres replication."),
+        },
     },
 })
 if err != nil { log.Fatal(err) }
@@ -440,19 +369,21 @@ Agents are served to the browser over the [AG-UI protocol](https://github.com/ag
 ```go
 import "github.com/hastekit/hastekit-sdk-go/pkg/agui"
 
-client, _ := hastekit.NewWithOptions(...)
-
-client.NewAgent(&hastekit.AgentOptions{
+// Agents register into a package-global registry when created.
+hastekit.NewAgent(&hastekit.AgentConfig{
     Name: "Assistant",
     // ...
 })
+
+// AgentRegistry exposes the registered agents to the AG-UI handler.
+registry := &hastekit.AgentRegistry{}
 
 // Exposes:
 //   GET  /agents                                   → registered agent names
 //   POST /agents/{agent}/run                       → AG-UI run endpoint (SSE)
 //   GET  /agents/{agent}/threads                   → stored conversation threads, newest first
 //   GET  /agents/{agent}/threads/{thread}/messages → thread history as AG-UI messages
-http.ListenAndServe(":8080", agui.NewHandler(client))
+http.ListenAndServe(":8080", agui.NewHandler(registry))
 
 // Or mount a single agent's run endpoint on an existing mux:
 // mux.Handle("POST /assistant/run", agui.AgentHandler(agent))
@@ -465,7 +396,7 @@ import "github.com/hastekit/hastekit-sdk-go/pkg/agui/web"
 
 // Serves the embedded CopilotKit chat UI at / and the AG-UI protocol
 // endpoints under /api/agui/*.
-if err := web.Serve(":8080", client); err != nil {
+if err := web.Serve(":8080", &hastekit.AgentRegistry{}); err != nil {
     log.Fatal(err)
 }
 ```
@@ -513,9 +444,9 @@ if err != nil {
 }
 
 // Create agent with MCP tools
-agent := client.NewAgent(&hastekit.AgentOptions{
+agent := hastekit.NewAgent(&hastekit.AgentConfig{
     Name:        "MCP Agent",
-    Instruction: client.Prompt("You are a helpful assistant."),
+    Instruction: hastekit.NewPrompt("You are a helpful assistant."),
     LLM:         model,
     McpServers:  []agents.MCPToolset{mcpClient},
 })
@@ -526,14 +457,14 @@ agent := client.NewAgent(&hastekit.AgentOptions{
 Enable conversation memory across interactions:
 
 ```go
-// Create conversation manager
-history := client.NewConversationManager()
+// Create a file-backed conversation manager
+memory := hastekit.NewFileHistory("./conversations")
 
-agent := client.NewAgent(&hastekit.AgentOptions{
+agent := hastekit.NewAgent(&hastekit.AgentConfig{
     Name:        "Memory Agent",
-    Instruction: client.Prompt("You are a helpful assistant."),
+    Instruction: hastekit.NewPrompt("You are a helpful assistant."),
     LLM:         model,
-    History:     history, // Enable history
+    History:     memory, // Enable history
 })
 
 threadID := uuid.NewString()
@@ -542,8 +473,10 @@ threadID := uuid.NewString()
 handle, err := agent.Execute(context.Background(), &agents.AgentInput{
     Namespace: "user-123", // Bucket conversations by namespace
     ThreadID:  threadID,
-    Messages: []responses.InputMessageUnion{
-        responses.UserMessage("My name is Alice."),
+    Message: history.Message{
+        Messages: []responses.InputMessageUnion{
+            responses.UserMessage("My name is Alice."),
+        },
     },
 })
 out, err := handle.Result()
@@ -552,8 +485,10 @@ out, err := handle.Result()
 handle, err = agent.Execute(context.Background(), &agents.AgentInput{
     Namespace: "user-123",
     ThreadID:  threadID,
-    Messages: []responses.InputMessageUnion{
-        responses.UserMessage("What's my name?"),
+    Message: history.Message{
+        Messages: []responses.InputMessageUnion{
+            responses.UserMessage("What's my name?"),
+        },
     },
 })
 out, err = handle.Result()
@@ -563,35 +498,43 @@ out, err = handle.Result()
 
 Create fault-tolerant agents that survive crashes and failures:
 
+A durable agent is a regular agent with a durable `Runtime` attached via
+`hastekit.WithRuntime`. Create the runtime, build the agent, then start the
+runtime; invoke agents over HTTP with `hastekit.NewHTTPHandler()`.
+
 #### Using Restate
 
 ```go
-// Initialize SDK with Restate
-client, err := hastekit.NewWithOptions(
-    hastekit.WithProviderConfigs(
-        gateway.ProviderConfig{
-            ProviderName: llm.ProviderNameOpenAI,
-            ApiKeys: []*gateway.APIKeyConfig{
-                {Name: "default", APIKey: os.Getenv("OPENAI_API_KEY")},
-            },
+client := hastekit.NewLLMClient([]hastekit.ProviderConfig{
+    {
+        ProviderName: hastekit.ProviderOpenAI,
+        ApiKeys: []*hastekit.APIKeyConfig{
+            {Name: "default", APIKey: os.Getenv("OPENAI_API_KEY")},
         },
-    ),
-    hastekit.WithRestateConfig("http://localhost:8081"),
-)
-
-// Create durable agent
-agent := client.NewRestateAgent(&hastekit.AgentOptions{
-    Name:        "DurableAgent",
-    Instruction: client.Prompt("You are a helpful assistant."),
-    LLM: client.NewLLM(hastekit.LLMOptions{
-        Provider: llm.ProviderNameOpenAI,
-        Model:    "gpt-4o-mini",
-    }),
-    History: client.NewConversationManager(),
+    },
 })
 
-// Start Restate service
-client.StartRestateService("0.0.0.0", "9081")
+// Restate service bind address + Redis for streaming
+rt, err := hastekit.NewRestateRuntime("0.0.0.0:9081", "localhost:6379")
+if err != nil {
+    log.Fatal(err)
+}
+broker, err := hastekit.NewRedisStreamBroker("localhost:6379")
+if err != nil {
+    log.Fatal(err)
+}
+
+// Create durable agent
+agent := hastekit.NewAgent(&hastekit.AgentConfig{
+    Name:        "DurableAgent",
+    Instruction: hastekit.NewPrompt("You are a helpful assistant."),
+    LLM:         client.Model("OpenAI/gpt-4o-mini"),
+    History:     hastekit.NewFileHistory("./conversations"),
+}, hastekit.WithRuntime(rt, broker))
+
+// Start Restate service, then serve the invoke endpoint
+rt.Start()
+http.ListenAndServe(":8070", hastekit.NewHTTPHandler())
 
 // Register deployment with Restate server
 // restate deployments register http://localhost:9081
@@ -600,27 +543,35 @@ client.StartRestateService("0.0.0.0", "9081")
 #### Using Temporal
 
 ```go
-client, err := hastekit.NewWithOptions(
-    hastekit.WithProviderConfigs(
-        gateway.ProviderConfig{
-            ProviderName: llm.ProviderNameOpenAI,
-            ApiKeys: []*gateway.APIKeyConfig{
-                {Name: "default", APIKey: os.Getenv("OPENAI_API_KEY")},
-            },
+client := hastekit.NewLLMClient([]hastekit.ProviderConfig{
+    {
+        ProviderName: hastekit.ProviderOpenAI,
+        ApiKeys: []*hastekit.APIKeyConfig{
+            {Name: "default", APIKey: os.Getenv("OPENAI_API_KEY")},
         },
-    ),
-    hastekit.WithTemporalConfig("localhost:7233"),
-)
+    },
+})
+
+// Temporal server endpoint + Redis for streaming
+rt, err := hastekit.NewTemporalRuntime("localhost:7233", "localhost:6379")
+if err != nil {
+    log.Fatal(err)
+}
+broker, err := hastekit.NewRedisStreamBroker("localhost:6379")
+if err != nil {
+    log.Fatal(err)
+}
 
 // Create Temporal agent
-agent := client.NewTemporalAgent(&hastekit.AgentOptions{
+agent := hastekit.NewAgent(&hastekit.AgentConfig{
     Name:        "TemporalAgent",
-    Instruction: client.Prompt("You are a helpful assistant."),
-    LLM: client.NewLLM(hastekit.LLMOptions{
-        Provider: llm.ProviderNameOpenAI,
-        Model:    "gpt-4o-mini",
-    }),
-})
+    Instruction: hastekit.NewPrompt("You are a helpful assistant."),
+    LLM:         client.Model("OpenAI/gpt-4o-mini"),
+}, hastekit.WithRuntime(rt, broker))
+
+// Start the Temporal worker, then serve the invoke endpoint
+rt.Start()
+http.ListenAndServe(":8070", hastekit.NewHTTPHandler())
 ```
 
 ### Embeddings
@@ -630,9 +581,10 @@ Generate text embeddings for semantic search and RAG applications:
 ```go
 import "github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/embeddings"
 
+embedder := client.Model("OpenAI/text-embedding-3-small")
+
 // Single text embedding
-resp, err := client.NewEmbedding(context.Background(), &embeddings.Request{
-    Model: "OpenAI/text-embedding-3-small",
+resp, err := embedder.NewEmbedding(context.Background(), &embeddings.Request{
     Input: embeddings.InputUnion{
         OfString: utils.Ptr("The food was delicious"),
     },
@@ -650,8 +602,7 @@ for _, data := range resp.Data {
 }
 
 // Batch embeddings
-resp, err = client.NewEmbedding(context.Background(), &embeddings.Request{
-    Model: "OpenAI/text-embedding-3-small",
+resp, err = embedder.NewEmbedding(context.Background(), &embeddings.Request{
     Input: embeddings.InputUnion{
         OfList: []string{
             "The food was delicious",
@@ -669,8 +620,9 @@ Process images (vision) and generate new images:
 #### Image Processing (Vision)
 
 ```go
-resp, err := client.NewResponses(context.Background(), &responses.Request{
-    Model:        "OpenAI/gpt-4o-mini",
+model := client.Model("OpenAI/gpt-4o-mini")
+
+resp, err := model.NewResponses(context.Background(), &responses.Request{
     Instructions: utils.Ptr("Describe this image"),
     Input: responses.InputUnion{
         OfInputMessageList: responses.InputMessageList{
@@ -696,8 +648,9 @@ resp, err := client.NewResponses(context.Background(), &responses.Request{
 #### Image Generation
 
 ```go
-resp, err := client.NewResponses(context.Background(), &responses.Request{
-    Model: "OpenAI/gpt-4o-mini",
+model := client.Model("OpenAI/gpt-4o-mini")
+
+resp, err := model.NewResponses(context.Background(), &responses.Request{
     Input: responses.InputUnion{
         OfString: utils.Ptr("Generate a beautiful sunset over mountains"),
     },
