@@ -169,7 +169,7 @@ func deferredToolsToPrompts(deferredTools []agents.DeferredToolInfo) string {
 
 	p.WriteString("\n\n" + "## Deferred Tools\n")
 	p.WriteString("Deferred tools are tools that are not available in the current context. Use the `ToolSearch` tool to activate the deferred tool and get its full description and schema. \n")
-	p.WriteString("<available-deferred-tools>>")
+	p.WriteString("<available-deferred-tools>")
 	for _, tool := range deferredTools {
 		p.WriteString(fmt.Sprintf("<deferred-tool><name>%s</name><description>%s</description></deferred-tool>", tool.Name, tool.Description))
 	}
