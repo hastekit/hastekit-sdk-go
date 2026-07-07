@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hastekit/hastekit-sdk-go/pkg/agents/prompts"
 	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
 )
 
@@ -26,15 +27,15 @@ type ExternalPromptPersistence struct {
 	httpClient  *http.Client
 }
 
-func NewExternalPromptPersistence(endpoint, orgName, projectName, name, alias string, httpClient *http.Client) *ExternalPromptPersistence {
-	return &ExternalPromptPersistence{
-		Endpoint:    endpoint,
-		orgName:     orgName,
-		projectName: projectName,
+func (c *Config) NewPrompt(name, alias string) *prompts.SimplePrompt {
+	return prompts.NewWithLoader(&ExternalPromptPersistence{
+		Endpoint:    c.Endpoint,
+		orgName:     c.OrgName,
+		projectName: c.ProjectName,
+		httpClient:  c.HttpClient,
 		name:        name,
 		alias:       alias,
-		httpClient:  httpClient,
-	}
+	})
 }
 
 // PromptVersion represents a version of a prompt template

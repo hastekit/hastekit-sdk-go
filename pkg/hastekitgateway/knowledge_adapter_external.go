@@ -19,13 +19,13 @@ type ExternalKnowledgePersistence struct {
 	httpClient *http.Client
 }
 
-func NewExternalKnowledgePersistence(endpoint, orgName, projectName, name string, httpClient *http.Client) *ExternalKnowledgePersistence {
+func (c *Config) NewExternalKnowledgePersistence(name string) *ExternalKnowledgePersistence {
 	return &ExternalKnowledgePersistence{
-		endpoint:    endpoint,
-		orgName:     orgName,
-		projectName: projectName,
+		endpoint:    c.Endpoint,
+		orgName:     c.OrgName,
+		projectName: c.ProjectName,
+		httpClient:  c.HttpClient,
 		name:        name,
-		httpClient:  httpClient,
 	}
 }
 

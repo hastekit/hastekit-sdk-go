@@ -42,13 +42,13 @@ type ExternalConversationPersistence struct {
 	httpClient  *http.Client
 }
 
-func NewExternalConversationPersistence(endpoint, orgName, projectName string, httpClient *http.Client) *ExternalConversationPersistence {
-	return &ExternalConversationPersistence{
-		Endpoint:    endpoint,
-		orgName:     orgName,
-		projectName: projectName,
-		httpClient:  httpClient,
-	}
+func (c *Config) NewHistory() *history.CommonConversationManager {
+	return history.NewConversationManager(&ExternalConversationPersistence{
+		Endpoint:    c.Endpoint,
+		orgName:     c.OrgName,
+		projectName: c.ProjectName,
+		httpClient:  c.HttpClient,
+	})
 }
 
 // NewConversationID generates a unique ID for a conversation

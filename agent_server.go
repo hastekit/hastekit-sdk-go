@@ -3,20 +3,27 @@ package sdk
 import (
 	"fmt"
 	"net/http"
+	"sort"
 
 	"github.com/bytedance/sonic"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents"
 	"github.com/hastekit/hastekit-sdk-go/pkg/utils"
 )
 
-func (c *SDK) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+type HTTPHandler struct{}
+
+func NewHTTPHandler() *HTTPHandler {
+	return &HTTPHandler{}
+}
+
+func (h *HTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	agentName := r.URL.Query().Get("agent")
 	if agentName == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	agent, exists := c.agents[agentName]
+	agent, exists := agentsByName[agentName]
 	if !exists {
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -58,4 +65,23 @@ func (c *SDK) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// useful to do at this point because headers are flushed.
 		return
 	}
+}
+
+type AgentRegistry struct {
+}
+
+// Agent returns a registered agent by name.
+func (_ *AgentRegistry) Agent(name string) (*agents.Agent, bool) {
+	agent, ok := agentsByName[name]
+	return agent, ok
+}
+
+// AgentNames returns the names of all registered agents, sorted.
+func (_ *AgentRegistry) AgentNames() []string {
+	names := make([]string, 0, len(agentsByName))
+	for name := range agentsByName {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }

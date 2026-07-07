@@ -28,10 +28,10 @@ type SandboxClient struct {
 }
 
 // NewSandboxClient creates a client that talks to the agent-server sandbox API.
-func NewSandboxClient(endpoint string, httpClient *http.Client) *SandboxClient {
+func (c *Config) NewSandboxClient() *SandboxClient {
 	return &SandboxClient{
-		endpoint:   strings.TrimSuffix(endpoint, "/"),
-		httpClient: httpClient,
+		endpoint:   strings.TrimSuffix(c.Endpoint, "/"),
+		httpClient: c.HttpClient,
 	}
 }
 

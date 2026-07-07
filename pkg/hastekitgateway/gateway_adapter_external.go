@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/bytedance/sonic"
+	"github.com/hastekit/hastekit-sdk-go/pkg/gateway"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/chat_completion"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/embeddings"
@@ -29,12 +30,33 @@ type ExternalLLMGateway struct {
 	httpClient *http.Client
 }
 
-// NewExternalLLMGateway creates a provider that calls agent-server via HTTP.
-func NewExternalLLMGateway(endpoint string, httpClient *http.Client) *ExternalLLMGateway {
-	return &ExternalLLMGateway{
-		endpoint:   strings.TrimSuffix(endpoint, "/"),
-		httpClient: httpClient,
+type LLMClient struct {
+	endpoint   string
+	virtualKey string
+	httpClient *http.Client
+}
+
+// NewLLMClient creates a provider that calls agent-server via HTTP.
+func (c *Config) NewLLMClient() *LLMClient {
+	return &LLMClient{
+		endpoint:   c.Endpoint,
+		virtualKey: c.VirtualKey,
+		httpClient: c.HttpClient,
 	}
+}
+
+func (c *LLMClient) Model(id string) llm.Provider {
+	i := strings.SplitN(id, "/", 2)
+
+	return gateway.NewLLMClient(
+		&ExternalLLMGateway{
+			endpoint:   strings.TrimSuffix(c.endpoint, "/"),
+			httpClient: c.httpClient,
+		},
+		nil,
+		gateway.WithKey(c.virtualKey),
+		gateway.WithModel(llm.ProviderName(i[0]), i[1]),
+	)
 }
 
 func (p *ExternalLLMGateway) NewResponses(ctx context.Context, providerName llm.ProviderName, key string, req *responses.Request) (*responses.Response, error) {
