@@ -3,6 +3,7 @@ package sdk
 import (
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/history"
+	"github.com/hastekit/hastekit-sdk-go/pkg/agents/streambroker"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 )
@@ -11,6 +12,8 @@ var (
 	agentsByName         = map[string]*agents.Agent{}
 	temporalAgentConfigs = map[string]*agents.AgentOptions{}
 	restateAgentConfigs  = map[string]*agents.AgentOptions{}
+
+	DefaultStreamBroker = streambroker.NewMemoryStreamBroker()
 )
 
 type Agent = agents.Agent
@@ -52,6 +55,10 @@ func NewAgent(cfg *AgentConfig, opts ...AgentOption) *Agent {
 	// Apply options
 	for _, opt := range opts {
 		opt(agentOptions)
+	}
+
+	if agentOptions.StreamBroker == nil {
+		agentOptions.StreamBroker = DefaultStreamBroker
 	}
 
 	// Create the agent
