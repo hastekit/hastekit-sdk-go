@@ -70,19 +70,19 @@ func WithName(name string) ToolOption {
 	}
 }
 
-func WithDescription[T any, S any](desc string) ToolOption {
+func WithDescription(desc string) ToolOption {
 	return func(ft ToolConfig) {
 		ft.SetDescription(desc)
 	}
 }
 
-func WithNeedsApproval[T any, S any](needsApproval bool) ToolOption {
+func WithNeedsApproval(needsApproval bool) ToolOption {
 	return func(ft ToolConfig) {
 		ft.SetNeedsApproval(needsApproval)
 	}
 }
 
-func WithDeferred[T any, S any](deferred bool) ToolOption {
+func WithDeferred(deferred bool) ToolOption {
 	return func(ft ToolConfig) {
 		ft.SetDeferred(deferred)
 	}
