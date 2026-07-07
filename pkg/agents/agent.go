@@ -399,7 +399,7 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, run *history
 				}
 				info := DeferredToolInfo{Name: schema.OfFunction.Name}
 				if schema.OfFunction.Description != nil {
-					info.Description = *schema.OfFunction.Description
+					info.Description = strings.SplitN(*schema.OfFunction.Description, "\n", 1)[0]
 				}
 				deferredToolInfos = append(deferredToolInfos, info)
 			}
