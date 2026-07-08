@@ -224,10 +224,13 @@ func (e *TextMessageEndEvent) Marshal() ([]byte, error) {
 
 // ReasoningStartEvent opens a reasoning block (the LLM's private
 // chain-of-thought). Title is optional; some clients use it as a
-// header above the collapsed reasoning panel.
+// header above the collapsed reasoning panel. MessageID is required by
+// the AG-UI schema and ties the block to its message/content/end
+// events.
 type ReasoningStartEvent struct {
 	BaseEvent
-	Title string `json:"title,omitempty"`
+	MessageID string `json:"messageId"`
+	Title     string `json:"title,omitempty"`
 }
 
 func (e *ReasoningStartEvent) EventType() EventType { return EventReasoningStart }
@@ -238,6 +241,7 @@ func (e *ReasoningStartEvent) Marshal() ([]byte, error) {
 
 type ReasoningEndEvent struct {
 	BaseEvent
+	MessageID string `json:"messageId"`
 }
 
 func (e *ReasoningEndEvent) EventType() EventType { return EventReasoningEnd }
@@ -246,8 +250,12 @@ func (e *ReasoningEndEvent) Marshal() ([]byte, error) {
 	return json.Marshal(e)
 }
 
+// ReasoningMessageStartEvent opens the reasoning message. The AG-UI
+// schema requires both messageId and role (which must be "reasoning").
 type ReasoningMessageStartEvent struct {
 	BaseEvent
+	MessageID string `json:"messageId"`
+	Role      string `json:"role"`
 }
 
 func (e *ReasoningMessageStartEvent) EventType() EventType { return EventReasoningMessageStart }
@@ -258,7 +266,8 @@ func (e *ReasoningMessageStartEvent) Marshal() ([]byte, error) {
 
 type ReasoningMessageContentEvent struct {
 	BaseEvent
-	Delta string `json:"delta"`
+	MessageID string `json:"messageId"`
+	Delta     string `json:"delta"`
 }
 
 func (e *ReasoningMessageContentEvent) EventType() EventType {
@@ -271,6 +280,7 @@ func (e *ReasoningMessageContentEvent) Marshal() ([]byte, error) {
 
 type ReasoningMessageEndEvent struct {
 	BaseEvent
+	MessageID string `json:"messageId"`
 }
 
 func (e *ReasoningMessageEndEvent) EventType() EventType { return EventReasoningMessageEnd }

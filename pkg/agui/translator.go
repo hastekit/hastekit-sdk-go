@@ -103,6 +103,34 @@ func (t *Translator) stepFinish(name string) Event {
 	return &StepFinishedEvent{BaseEvent: baseNow(), StepName: name}
 }
 
+// openReasoning emits the START pair for a reasoning item and records it
+// as the open item. Every AG-UI reasoning event requires a messageId —
+// we use the upstream item id — and REASONING_MESSAGE_START additionally
+// requires role "reasoning".
+func (t *Translator) openReasoning(id string) []Event {
+	t.openReasoningItemID = id
+	return []Event{
+		&ReasoningStartEvent{BaseEvent: baseNow(), MessageID: id},
+		&ReasoningMessageStartEvent{BaseEvent: baseNow(), MessageID: id, Role: "reasoning"},
+	}
+}
+
+// closeReasoning emits the END pair for the currently-open reasoning item
+// and clears it. Returns nil when nothing is open, so callers can append
+// it unconditionally — including for empty reasoning items that open and
+// close without ever streaming a content delta.
+func (t *Translator) closeReasoning() []Event {
+	if t.openReasoningItemID == "" {
+		return nil
+	}
+	id := t.openReasoningItemID
+	t.openReasoningItemID = ""
+	return []Event{
+		&ReasoningMessageEndEvent{BaseEvent: baseNow(), MessageID: id},
+		&ReasoningEndEvent{BaseEvent: baseNow(), MessageID: id},
+	}
+}
+
 // Start returns the events that must precede any chunk-derived
 // output. Callers emit these before pumping so AG-UI clients see a
 // RUN_STARTED before anything else.
@@ -357,24 +385,20 @@ func (t *Translator) Translate(chunk *responses.ResponseChunk) []Event {
 		}}
 	}
 
+	// Reasoning event helpers live on the translator (openReasoning /
+	// closeReasoning, defined below) so every emission site supplies the
+	// messageId the AG-UI schema requires.
+
 	// ── Reasoning text (OSS-only) ────────────────────────────────
 	if chunk.OfReasoningTextDelta != nil {
 		out := []Event{}
 		if t.openReasoningItemID != chunk.OfReasoningTextDelta.ItemId {
-			if t.openReasoningItemID != "" {
-				out = append(out,
-					&ReasoningMessageEndEvent{BaseEvent: baseNow()},
-					&ReasoningEndEvent{BaseEvent: baseNow()},
-				)
-			}
-			out = append(out,
-				&ReasoningStartEvent{BaseEvent: baseNow()},
-				&ReasoningMessageStartEvent{BaseEvent: baseNow()},
-			)
-			t.openReasoningItemID = chunk.OfReasoningTextDelta.ItemId
+			out = append(out, t.closeReasoning()...)
+			out = append(out, t.openReasoning(chunk.OfReasoningTextDelta.ItemId)...)
 		}
 		out = append(out, &ReasoningMessageContentEvent{
 			BaseEvent: baseNow(),
+			MessageID: t.openReasoningItemID,
 			Delta:     chunk.OfReasoningTextDelta.Delta,
 		})
 		return out
@@ -384,20 +408,12 @@ func (t *Translator) Translate(chunk *responses.ResponseChunk) []Event {
 	if chunk.OfReasoningSummaryTextDelta != nil {
 		out := []Event{}
 		if t.openReasoningItemID != chunk.OfReasoningSummaryTextDelta.ItemId {
-			if t.openReasoningItemID != "" {
-				out = append(out,
-					&ReasoningMessageEndEvent{BaseEvent: baseNow()},
-					&ReasoningEndEvent{BaseEvent: baseNow()},
-				)
-			}
-			out = append(out,
-				&ReasoningStartEvent{BaseEvent: baseNow()},
-				&ReasoningMessageStartEvent{BaseEvent: baseNow()},
-			)
-			t.openReasoningItemID = chunk.OfReasoningSummaryTextDelta.ItemId
+			out = append(out, t.closeReasoning()...)
+			out = append(out, t.openReasoning(chunk.OfReasoningSummaryTextDelta.ItemId)...)
 		}
 		out = append(out, &ReasoningMessageContentEvent{
 			BaseEvent: baseNow(),
+			MessageID: t.openReasoningItemID,
 			Delta:     chunk.OfReasoningSummaryTextDelta.Delta,
 		})
 		return out
@@ -505,17 +521,10 @@ func (t *Translator) handleOutputItemAdded(item responses.ChunkOutputItemData) [
 
 	case "reasoning":
 		out := []Event{}
-		if t.openReasoningItemID != "" && t.openReasoningItemID != item.Id {
-			out = append(out,
-				&ReasoningMessageEndEvent{BaseEvent: baseNow()},
-				&ReasoningEndEvent{BaseEvent: baseNow()},
-			)
+		if t.openReasoningItemID != item.Id {
+			out = append(out, t.closeReasoning()...)
 		}
-		t.openReasoningItemID = item.Id
-		out = append(out,
-			&ReasoningStartEvent{BaseEvent: baseNow()},
-			&ReasoningMessageStartEvent{BaseEvent: baseNow()},
-		)
+		out = append(out, t.openReasoning(item.Id)...)
 		return out
 
 	case "image_generation_call":
@@ -562,11 +571,7 @@ func (t *Translator) handleOutputItemDone(item responses.ChunkOutputItemData) []
 		if t.openReasoningItemID != item.Id {
 			return nil
 		}
-		t.openReasoningItemID = ""
-		return []Event{
-			&ReasoningMessageEndEvent{BaseEvent: baseNow()},
-			&ReasoningEndEvent{BaseEvent: baseNow()},
-		}
+		return t.closeReasoning()
 
 	case "image_generation_call":
 		out := []Event{}
@@ -661,13 +666,7 @@ func (t *Translator) closeOpenItems() []Event {
 		})
 		delete(t.openToolCallsByItemID, itemID)
 	}
-	if t.openReasoningItemID != "" {
-		out = append(out,
-			&ReasoningMessageEndEvent{BaseEvent: baseNow()},
-			&ReasoningEndEvent{BaseEvent: baseNow()},
-		)
-		t.openReasoningItemID = ""
-	}
+	out = append(out, t.closeReasoning()...)
 	// Snapshot step names first so we can iterate safely while
 	// stepFinish deletes from the map.
 	if len(t.openSteps) > 0 {

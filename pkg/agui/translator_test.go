@@ -78,6 +78,31 @@ func runPaused(calls ...responses.FunctionCallMessage) *responses.ResponseChunk 
 	}
 }
 
+func reasoningAdded(itemID string) *responses.ResponseChunk {
+	return &responses.ResponseChunk{
+		OfOutputItemAdded: &responses.ChunkOutputItem[constants.ChunkTypeOutputItemAdded]{
+			Item: responses.ChunkOutputItemData{Type: "reasoning", Id: itemID},
+		},
+	}
+}
+
+func reasoningDone(itemID string) *responses.ResponseChunk {
+	return &responses.ResponseChunk{
+		OfOutputItemDone: &responses.ChunkOutputItem[constants.ChunkTypeOutputItemDone]{
+			Item: responses.ChunkOutputItemData{Type: "reasoning", Id: itemID},
+		},
+	}
+}
+
+func reasoningDelta(itemID, delta string) *responses.ResponseChunk {
+	return &responses.ResponseChunk{
+		OfReasoningTextDelta: &responses.ChunkReasoningText[constants.ChunkTypeReasoningTextDelta]{
+			ItemId: itemID,
+			Delta:  delta,
+		},
+	}
+}
+
 func eventTypes(events []Event) []EventType {
 	out := make([]EventType, 0, len(events))
 	for _, e := range events {
@@ -104,6 +129,61 @@ func TestLazyTextMessageOpenOnDelta(t *testing.T) {
 	// START → CONTENT sequence.
 	events := tr.Translate(textDelta("msg_1", "Hi"))
 	assert.Equal(t, []EventType{EventTextMessageStart, EventTextMessageContent}, eventTypes(events))
+}
+
+func TestReasoningEventsCarryMessageID(t *testing.T) {
+	tr := NewTranslator("thread-1", "run-1")
+	tr.Start()
+
+	events := tr.Translate(reasoningDelta("reason_1", "thinking"))
+	require.Equal(t, []EventType{
+		EventReasoningStart, EventReasoningMessageStart, EventReasoningMessageContent,
+	}, eventTypes(events))
+
+	// Every reasoning event must carry the item id as messageId (the
+	// AG-UI schema requires it), and MESSAGE_START must carry role
+	// "reasoning".
+	assert.Equal(t, "reason_1", events[0].(*ReasoningStartEvent).MessageID)
+	start := events[1].(*ReasoningMessageStartEvent)
+	assert.Equal(t, "reason_1", start.MessageID)
+	assert.Equal(t, "reasoning", start.Role)
+	content := events[2].(*ReasoningMessageContentEvent)
+	assert.Equal(t, "reason_1", content.MessageID)
+	assert.Equal(t, "thinking", content.Delta)
+
+	end := tr.Translate(reasoningDone("reason_1"))
+	require.Equal(t, []EventType{EventReasoningMessageEnd, EventReasoningEnd}, eventTypes(end))
+	assert.Equal(t, "reason_1", end[0].(*ReasoningMessageEndEvent).MessageID)
+	assert.Equal(t, "reason_1", end[1].(*ReasoningEndEvent).MessageID)
+}
+
+// An empty reasoning item — added then done with no content delta in
+// between — is exactly what tripped the CopilotKit Zod validator when
+// the END events lacked a messageId. It must still produce a fully
+// bracketed, messageId-carrying sequence.
+func TestEmptyReasoningItemIsWellFormed(t *testing.T) {
+	tr := NewTranslator("thread-1", "run-1")
+	tr.Start()
+
+	open := tr.Translate(reasoningAdded("reason_1"))
+	require.Equal(t, []EventType{EventReasoningStart, EventReasoningMessageStart}, eventTypes(open))
+
+	end := tr.Translate(reasoningDone("reason_1"))
+	require.Equal(t, []EventType{EventReasoningMessageEnd, EventReasoningEnd}, eventTypes(end))
+
+	for _, e := range append(open, end...) {
+		switch ev := e.(type) {
+		case *ReasoningStartEvent:
+			assert.Equal(t, "reason_1", ev.MessageID)
+		case *ReasoningMessageStartEvent:
+			assert.Equal(t, "reason_1", ev.MessageID)
+			assert.Equal(t, "reasoning", ev.Role)
+		case *ReasoningMessageEndEvent:
+			assert.Equal(t, "reason_1", ev.MessageID)
+		case *ReasoningEndEvent:
+			assert.Equal(t, "reason_1", ev.MessageID)
+		}
+	}
 }
 
 func TestToolCallArgsResolveItemIDToCallID(t *testing.T) {
