@@ -130,7 +130,17 @@ func NewRun(ctx context.Context, cm *CommonConversationManager, namespace string
 	if cr.RunState == nil || cr.RunState.IsComplete() {
 		// Create a new run id
 		runID = cr.ConversationPersistenceAdapter.NewRunID(ctx)
+
+		// Carry the last responding agent forward into the fresh run so a
+		// new turn can resume where the previous one left off (sticky
+		// handoff). Nothing else reads LastAgentName, so this is inert
+		// unless an agent opts into sticky routing.
+		var lastAgent string
+		if cr.RunState != nil {
+			lastAgent = cr.RunState.LastAgentName
+		}
 		cr.RunState = agentstate.NewRunState()
+		cr.RunState.LastAgentName = lastAgent
 	} else {
 		// Continuing the previous run
 		runID = cr.previousMsgId

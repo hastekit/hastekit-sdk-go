@@ -571,6 +571,183 @@ func TestAgentLoop_HandoffToolApprovalPausesRun(t *testing.T) {
 	}
 }
 
+func TestAgentLoop_StickyHandoffRoutesNextTurnToSpecialist(t *testing.T) {
+	persistence := history.NewInMemoryConversationPersistence()
+	hist := history.NewConversationManager(persistence)
+	broker := streambroker.NewMemoryStreamBroker()
+
+	bLLM := &scriptedLLM{script: []*responses.Response{
+		textResponse("agent-b turn 1"),
+		textResponse("agent-b turn 2"),
+	}}
+	agentB := newScriptedAgent("agent-b", bLLM, hist, broker, nil, nil)
+
+	// The root only ever transfers — a single scripted response. If turn 2
+	// re-entered the root, the scripted LLM would be exhausted and error.
+	aLLM := &scriptedLLM{script: []*responses.Response{
+		toolCallResponse("call_transfer", "transfer_to_agent", `{"agent_name":"agent-b"}`),
+	}}
+	agentA := agents.NewAgent(&agents.AgentOptions{
+		Name:          "agent-a",
+		History:       hist,
+		StreamBroker:  broker,
+		StickyHandoff: true,
+		Handoffs: []*agents.Handoff{
+			agents.NewHandoff("agent-b", "handles part b", agentB),
+		},
+	}).WithLLM(aLLM)
+
+	// Turn 1: root hands off to the specialist.
+	out := runAgent(t, agentA, &agents.AgentInput{
+		Namespace: "test",
+		ThreadID:  "thread-sticky",
+		Message:   userMessage("transfer me"),
+	})
+	requireStatus(t, out, agentstate.RunStatusCompleted)
+	if text := messagesText(out.Output); !strings.Contains(text, "agent-b turn 1") {
+		t.Fatalf("turn 1 output missing specialist answer, got:\n%s", text)
+	}
+
+	// Turn 2: same thread, entering through the ROOT again. Sticky routing
+	// must send it straight to the specialist without re-running the root.
+	out = runAgent(t, agentA, &agents.AgentInput{
+		Namespace:         "test",
+		ThreadID:          "thread-sticky",
+		PreviousMessageID: out.RunID,
+		Message:           userMessage("and again"),
+	})
+	requireStatus(t, out, agentstate.RunStatusCompleted)
+
+	if aLLM.callCount() != 1 {
+		t.Fatalf("root LLM called %d times, want 1 (turn 2 must skip the root)", aLLM.callCount())
+	}
+	if bLLM.callCount() != 2 {
+		t.Fatalf("specialist LLM called %d times, want 2", bLLM.callCount())
+	}
+	if text := messagesText(out.Output); !strings.Contains(text, "agent-b turn 2") {
+		t.Fatalf("turn 2 output missing specialist answer, got:\n%s", text)
+	}
+}
+
+// Without the sticky flag, a subsequent turn re-enters the root agent —
+// the pre-existing behavior the flag opts out of.
+func TestAgentLoop_NonStickyHandoffReentersRootNextTurn(t *testing.T) {
+	persistence := history.NewInMemoryConversationPersistence()
+	hist := history.NewConversationManager(persistence)
+	broker := streambroker.NewMemoryStreamBroker()
+
+	bLLM := &scriptedLLM{script: []*responses.Response{
+		textResponse("agent-b turn 1"),
+	}}
+	agentB := newScriptedAgent("agent-b", bLLM, hist, broker, nil, nil)
+
+	aLLM := &scriptedLLM{script: []*responses.Response{
+		toolCallResponse("call_transfer", "transfer_to_agent", `{"agent_name":"agent-b"}`),
+		textResponse("agent-a turn 2"),
+	}}
+	// newScriptedAgent leaves StickyHandoff at its false default.
+	agentA := newScriptedAgent("agent-a", aLLM, hist, broker, nil, []*agents.Handoff{
+		agents.NewHandoff("agent-b", "handles part b", agentB),
+	})
+
+	out := runAgent(t, agentA, &agents.AgentInput{
+		Namespace: "test",
+		ThreadID:  "thread-nonsticky",
+		Message:   userMessage("transfer me"),
+	})
+	requireStatus(t, out, agentstate.RunStatusCompleted)
+
+	out = runAgent(t, agentA, &agents.AgentInput{
+		Namespace:         "test",
+		ThreadID:          "thread-nonsticky",
+		PreviousMessageID: out.RunID,
+		Message:           userMessage("and again"),
+	})
+	requireStatus(t, out, agentstate.RunStatusCompleted)
+
+	// Turn 2 went back to the root: root LLM ran twice, specialist once.
+	if aLLM.callCount() != 2 {
+		t.Fatalf("root LLM called %d times, want 2 (turn 2 re-enters the root)", aLLM.callCount())
+	}
+	if bLLM.callCount() != 1 {
+		t.Fatalf("specialist LLM called %d times, want 1", bLLM.callCount())
+	}
+	if text := messagesText(out.Output); !strings.Contains(text, "agent-a turn 2") {
+		t.Fatalf("turn 2 output missing root answer, got:\n%s", text)
+	}
+}
+
+// Back-handoff: a specialist transfers control back to the root, which
+// (under sticky routing) un-sticks the thread so later turns re-enter the
+// root. The reverse edge is wired with AddHandoffs after both agents
+// exist, since root ↔ specialist is a construction-time cycle.
+func TestAgentLoop_StickyBackHandoffUnsticksThread(t *testing.T) {
+	persistence := history.NewInMemoryConversationPersistence()
+	hist := history.NewConversationManager(persistence)
+	broker := streambroker.NewMemoryStreamBroker()
+
+	bLLM := &scriptedLLM{script: []*responses.Response{
+		textResponse("agent-b handling"),                                               // turn 1: specialist answers
+		toolCallResponse("call_back", "transfer_to_agent", `{"agent_name":"agent-a"}`), // turn 2: hand back
+	}}
+	agentB := newScriptedAgent("agent-b", bLLM, hist, broker, nil, nil)
+
+	aLLM := &scriptedLLM{script: []*responses.Response{
+		toolCallResponse("call_transfer", "transfer_to_agent", `{"agent_name":"agent-b"}`), // turn 1: hand off
+		textResponse("agent-a back in control"),                                            // turn 2: after hand-back
+		textResponse("agent-a turn 3"),                                                     // turn 3: still root
+	}}
+	agentA := agents.NewAgent(&agents.AgentOptions{
+		Name:          "agent-a",
+		History:       hist,
+		StreamBroker:  broker,
+		StickyHandoff: true,
+		Handoffs: []*agents.Handoff{
+			agents.NewHandoff("agent-b", "handles part b", agentB),
+		},
+	}).WithLLM(aLLM)
+
+	// Wire the reverse edge (specialist → root).
+	agentB.AddHandoffs(agents.NewHandoff("agent-a", "back to triage", agentA))
+
+	// Turn 1: root → specialist. Thread becomes sticky to the specialist.
+	out := runAgent(t, agentA, &agents.AgentInput{
+		Namespace: "test", ThreadID: "thread-back",
+		Message: userMessage("transfer me"),
+	})
+	requireStatus(t, out, agentstate.RunStatusCompleted)
+
+	// Turn 2: sticky enters the specialist, which hands back to the root.
+	out = runAgent(t, agentA, &agents.AgentInput{
+		Namespace: "test", ThreadID: "thread-back",
+		PreviousMessageID: out.RunID,
+		Message:           userMessage("i'm done, go back"),
+	})
+	requireStatus(t, out, agentstate.RunStatusCompleted)
+	if text := messagesText(out.Output); !strings.Contains(text, "agent-a back in control") {
+		t.Fatalf("turn 2 didn't hand back to the root, got:\n%s", text)
+	}
+
+	// Turn 3: the thread is un-stuck — it re-enters the root directly,
+	// without touching the specialist again.
+	out = runAgent(t, agentA, &agents.AgentInput{
+		Namespace: "test", ThreadID: "thread-back",
+		PreviousMessageID: out.RunID,
+		Message:           userMessage("hello again"),
+	})
+	requireStatus(t, out, agentstate.RunStatusCompleted)
+	if text := messagesText(out.Output); !strings.Contains(text, "agent-a turn 3") {
+		t.Fatalf("turn 3 didn't re-enter the root, got:\n%s", text)
+	}
+
+	if aLLM.callCount() != 3 {
+		t.Fatalf("root LLM called %d times, want 3", aLLM.callCount())
+	}
+	if bLLM.callCount() != 2 {
+		t.Fatalf("specialist LLM called %d times, want 2 (turn 3 must skip it)", bLLM.callCount())
+	}
+}
+
 func TestAgentLoop_NestedHandoffToolApprovalPausesRun(t *testing.T) {
 	persistence := history.NewInMemoryConversationPersistence()
 	hist := history.NewConversationManager(persistence)

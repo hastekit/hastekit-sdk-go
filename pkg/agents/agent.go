@@ -29,20 +29,21 @@ var (
 )
 
 type Agent struct {
-	Name         string
-	output       map[string]any
-	history      *history.CommonConversationManager
-	instruction  SystemPromptProvider
-	tools        []Tool
-	mcpServers   []MCPToolset
-	llm          LLM
-	parameters   responses.Parameters
-	runtime      Runtime
-	maxLoops     int
-	streamBroker StreamBroker
-	handoffs     []*Handoff
-	toolExecutor ToolExecutor
-	durableStep  DurableStep
+	Name          string
+	output        map[string]any
+	history       *history.CommonConversationManager
+	instruction   SystemPromptProvider
+	tools         []Tool
+	mcpServers    []MCPToolset
+	llm           LLM
+	parameters    responses.Parameters
+	runtime       Runtime
+	maxLoops      int
+	streamBroker  StreamBroker
+	handoffs      []*Handoff
+	toolExecutor  ToolExecutor
+	durableStep   DurableStep
+	stickyHandoff bool
 }
 
 type AgentOptions struct {
@@ -50,17 +51,18 @@ type AgentOptions struct {
 	Instruction SystemPromptProvider
 	Parameters  responses.Parameters
 
-	Name         string
-	LLM          llm.Provider
-	Output       map[string]any
-	Tools        []Tool
-	Handoffs     []*Handoff
-	McpServers   []MCPToolset
-	Runtime      Runtime
-	MaxLoops     *int
-	ToolExecutor ToolExecutor
-	StreamBroker StreamBroker
-	DurableStep  DurableStep
+	Name          string
+	LLM           llm.Provider
+	Output        map[string]any
+	Tools         []Tool
+	Handoffs      []*Handoff
+	McpServers    []MCPToolset
+	Runtime       Runtime
+	MaxLoops      *int
+	ToolExecutor  ToolExecutor
+	StreamBroker  StreamBroker
+	DurableStep   DurableStep
+	StickyHandoff bool
 }
 
 func NewAgent(opts *AgentOptions) *Agent {
@@ -101,39 +103,41 @@ func NewAgent(opts *AgentOptions) *Agent {
 	}
 
 	return &Agent{
-		Name:         opts.Name,
-		output:       opts.Output,
-		history:      opts.History,
-		instruction:  opts.Instruction,
-		tools:        opts.Tools,
-		mcpServers:   opts.McpServers,
-		llm:          &WrappedLLM{opts.LLM},
-		parameters:   opts.Parameters,
-		runtime:      opts.Runtime,
-		maxLoops:     maxLoops,
-		handoffs:     opts.Handoffs,
-		toolExecutor: toolExecutor,
-		streamBroker: streamBroker,
-		durableStep:  durableStep,
+		Name:          opts.Name,
+		output:        opts.Output,
+		history:       opts.History,
+		instruction:   opts.Instruction,
+		tools:         opts.Tools,
+		mcpServers:    opts.McpServers,
+		llm:           &WrappedLLM{opts.LLM},
+		parameters:    opts.Parameters,
+		runtime:       opts.Runtime,
+		maxLoops:      maxLoops,
+		handoffs:      opts.Handoffs,
+		toolExecutor:  toolExecutor,
+		streamBroker:  streamBroker,
+		durableStep:   durableStep,
+		stickyHandoff: opts.StickyHandoff,
 	}
 }
 
 func (e *Agent) WithLLM(wrappedLLM LLM) *Agent {
 	return &Agent{
-		Name:         e.Name,
-		output:       e.output,
-		history:      e.history,
-		instruction:  e.instruction,
-		tools:        e.tools,
-		mcpServers:   e.mcpServers,
-		llm:          wrappedLLM,
-		parameters:   e.parameters,
-		runtime:      e.runtime,
-		maxLoops:     e.maxLoops,
-		streamBroker: e.streamBroker,
-		handoffs:     e.handoffs,
-		toolExecutor: e.toolExecutor,
-		durableStep:  e.durableStep,
+		Name:          e.Name,
+		output:        e.output,
+		history:       e.history,
+		instruction:   e.instruction,
+		tools:         e.tools,
+		mcpServers:    e.mcpServers,
+		llm:           wrappedLLM,
+		parameters:    e.parameters,
+		runtime:       e.runtime,
+		maxLoops:      e.maxLoops,
+		streamBroker:  e.streamBroker,
+		handoffs:      e.handoffs,
+		toolExecutor:  e.toolExecutor,
+		durableStep:   e.durableStep,
+		stickyHandoff: e.stickyHandoff,
 	}
 }
 
@@ -151,6 +155,11 @@ func (e *Agent) PrepareMCPTools(ctx context.Context, runContext map[string]any) 
 	}
 
 	return coreTools, nil
+}
+
+// AddHandoffs appends handoff edges to the agent after construction.
+func (e *Agent) AddHandoffs(handoffs ...*Handoff) {
+	e.handoffs = append(e.handoffs, handoffs...)
 }
 
 func (e *Agent) PrepareHandoffTools(ctx context.Context) []Tool {
@@ -329,9 +338,21 @@ func (e *Agent) ExecuteLocal(ctx context.Context, in *AgentInput) (*AgentOutput,
 		e.runCreated(ctx, in.StreamID, runId, traceid)
 	})
 
+	// Sticky handoff: if a prior turn on this thread ended inside a
+	// specialist reached via handoff, resume there instead of
+	// re-entering this root agent. LastAgentName was carried forward by
+	// NewRun and hasn't been overwritten yet (GetMessages does that, and
+	// it runs later inside the loop). Routing happens only here at the
+	// top-level entry — never in ExecuteWithRun, which is also the
+	// handoff target's own entry point.
+	if e.stickyHandoff {
+		if target := e.stickyHandoffTarget(run.RunState.LastAgentName); target != nil {
+			return target.ExecuteWithRun(ctx, in, run)
+		}
+	}
+
 	return e.ExecuteWithRun(ctx, in, run)
 }
-
 func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, run *history.ConversationRunManager) (*AgentOutput, error) {
 	publish := e.publisher(in.StreamID)
 
@@ -925,4 +946,41 @@ func toolResponse(toolCall responses.FunctionCallMessage, textOutput string) *To
 			},
 		},
 	}
+}
+
+// stickyHandoffTarget resolves the thread's last-active agent name to a
+// concrete agent reachable from this one through the handoff graph.
+// Returns nil when the name is empty, is this agent itself, or isn't a
+// reachable handoff target (e.g. handoffs were reconfigured since the
+// last turn) — in every such case the caller falls back to running this
+// agent normally.
+func (e *Agent) stickyHandoffTarget(name string) *Agent {
+	if name == "" || name == e.Name {
+		return nil
+	}
+	return e.findHandoffAgent(name, map[string]bool{})
+}
+
+// findHandoffAgent searches this agent's handoff graph (depth-first,
+// cycle-safe) for an agent whose name — or the name it was registered
+// under — matches. Only *Agent handoff targets are considered.
+func (e *Agent) findHandoffAgent(name string, visited map[string]bool) *Agent {
+	if visited[e.Name] {
+		return nil
+	}
+	visited[e.Name] = true
+
+	for _, h := range e.handoffs {
+		target, ok := h.Agent.(*Agent)
+		if !ok {
+			continue
+		}
+		if h.Name == name || target.Name == name {
+			return target
+		}
+		if found := target.findHandoffAgent(name, visited); found != nil {
+			return found
+		}
+	}
+	return nil
 }
