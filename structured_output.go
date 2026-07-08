@@ -10,7 +10,21 @@ import (
 type OutputSchema = jsonschema.Schema
 
 func NewOutputSchema(v any) map[string]any {
-	buf, err := jsonschema.Reflect(v).MarshalJSON()
+	r := &jsonschema.Reflector{
+		// Inline the root struct (type/properties/required at top level)
+		// instead of emitting a top-level $ref into $defs.
+		ExpandedStruct: true,
+		// Inline all nested definitions so the schema is self-contained
+		// (no $ref/$defs), which the LLM tool APIs require.
+		DoNotReference: true,
+	}
+
+	schema := r.Reflect(v)
+	// Drop $schema and $id metadata that the tool APIs reject.
+	schema.Version = ""
+	schema.ID = ""
+
+	buf, err := schema.MarshalJSON()
 	if err != nil {
 		slog.Warn("failed to reflect output schema: " + err.Error())
 		return nil
