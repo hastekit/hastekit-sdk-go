@@ -39,7 +39,7 @@ func TestHistoryToMessages(t *testing.T) {
 						{OfOutputText: &responses.OutputTextContent{Text: "It's 22C in Paris."}},
 					},
 				}},
-				// Interrupt resolutions and reasoning are skipped.
+				// Interrupt resolutions are skipped.
 				{OfFunctionCallInterruptResolution: &responses.FunctionCallInterruptResolutionMessage{
 					ID: "fcir_1", Resolutions: []responses.InterruptResolution{{CallID: "call_1", Action: "approve"}},
 				}},
@@ -209,6 +209,56 @@ func TestThreadsEndpointWithoutLister(t *testing.T) {
 // implementation.
 type noListPersistence struct {
 	history.ConversationPersistenceAdapter
+}
+
+// Reasoning is persisted to history as an OfReasoning item carrying a
+// summary; on reload it must rehydrate as a role="reasoning" message so
+// the reasoning panel renders the same summary it showed live.
+func TestHistoryToMessagesReasoning(t *testing.T) {
+	rows := []history.ConversationMessage{{
+		Messages: []history.Message{
+			messages.New("agent", []responses.InputMessageUnion{
+				{OfReasoning: &responses.ReasoningMessage{
+					ID: "rs_1",
+					Summary: []responses.SummaryTextContent{
+						{Text: "First, check the weather API."},
+						{Text: "Then format the result."},
+					},
+					EncryptedContent: utils.Ptr("enc-blob"),
+				}},
+				{OfOutputMessage: &responses.OutputMessage{
+					ID: "msg_1", Role: constants.RoleAssistant,
+					Content: &responses.OutputContent{
+						{OfOutputText: &responses.OutputTextContent{Text: "It's sunny."}},
+					},
+				}},
+			}),
+		},
+	}}
+
+	out := HistoryToMessages(rows)
+	require.Len(t, out, 2)
+
+	assert.Equal(t, RoleReasoning, out[0].Role)
+	assert.Equal(t, "First, check the weather API.\nThen format the result.", out[0].Content)
+	assert.Equal(t, "enc-blob", out[0].EncryptedValue)
+
+	assert.Equal(t, RoleAssistant, out[1].Role)
+	assert.Equal(t, "It's sunny.", out[1].Content)
+}
+
+// An empty reasoning item (no summary, no encrypted content) carries
+// nothing to render and is dropped, matching the live stream.
+func TestHistoryToMessagesReasoningEmptySkipped(t *testing.T) {
+	rows := []history.ConversationMessage{{
+		Messages: []history.Message{
+			messages.New("agent", []responses.InputMessageUnion{
+				{OfReasoning: &responses.ReasoningMessage{ID: "rs_empty"}},
+			}),
+		},
+	}}
+
+	assert.Empty(t, HistoryToMessages(rows))
 }
 
 func TestHistoryToMessagesImageGeneration(t *testing.T) {

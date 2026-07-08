@@ -21,9 +21,13 @@ import (
 //     when it has no text (a tool-call-only turn), otherwise a fresh
 //     assistant carrier message — mirrors how AG-UI clients nest them
 //   - function call outputs → AG-UI role="tool" messages
-//   - reasoning, approval responses, and other variants are skipped —
-//     hydration is best-effort; the agent's next LLM call loads the
-//     authoritative history server-side anyway
+//   - reasoning → AG-UI role="reasoning" messages carrying the joined
+//     summary text (and any encrypted content) so the reasoning panel
+//     rehydrates the same way it rendered live; empty reasoning items
+//     (no summary) are skipped
+//   - approval responses and other variants are skipped — hydration is
+//     best-effort; the agent's next LLM call loads the authoritative
+//     history server-side anyway
 func HistoryToMessages(rows []history.ConversationMessage) []Message {
 	out := []Message{}
 
@@ -113,6 +117,29 @@ func HistoryToMessages(rows []history.ConversationMessage) []Message {
 						Content:    functionOutputText(m.Output),
 					})
 
+				case msg.OfReasoning != nil:
+					// The live stream renders reasoning from the
+					// REASONING_MESSAGE_* events; on reload we rehydrate it
+					// as a standalone role="reasoning" message (AG-UI's
+					// reasoning message shape) carrying the joined summary.
+					// Skip empty reasoning items — nothing to show, and the
+					// live stream drops those too.
+					m := msg.OfReasoning
+					text := reasoningSummaryText(m.Summary)
+					enc := ""
+					if m.EncryptedContent != nil {
+						enc = *m.EncryptedContent
+					}
+					if text == "" && enc == "" {
+						continue
+					}
+					out = append(out, Message{
+						ID:             uniq(m.ID),
+						Role:           RoleReasoning,
+						Content:        text,
+						EncryptedValue: enc,
+					})
+
 				case msg.OfImageGenerationCall != nil:
 					// A generated image is stored with its base64 result.
 					// Surface it as an assistant message carrying a
@@ -175,6 +202,19 @@ func outputContentText(content *responses.OutputContent) string {
 	for _, c := range *content {
 		if c.OfOutputText != nil && c.OfOutputText.Text != "" {
 			parts = append(parts, c.OfOutputText.Text)
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
+// reasoningSummaryText joins a reasoning item's summary parts into the
+// single string a role="reasoning" message carries. Mirrors how the live
+// stream concatenates summary deltas into one reasoning block.
+func reasoningSummaryText(summary []responses.SummaryTextContent) string {
+	parts := []string{}
+	for _, s := range summary {
+		if s.Text != "" {
+			parts = append(parts, s.Text)
 		}
 	}
 	return strings.Join(parts, "\n")

@@ -90,6 +90,11 @@ const (
 	RoleSystem    Role = "system"
 	RoleTool      Role = "tool"
 	RoleDeveloper Role = "developer"
+	// RoleReasoning marks a standalone reasoning message in a
+	// MessagesSnapshot. The live stream surfaces reasoning via the
+	// REASONING_MESSAGE_* events (also role "reasoning"); on history
+	// reload it rehydrates as a message with this role instead.
+	RoleReasoning Role = "reasoning"
 )
 
 // Event is the common interface every AG-UI event satisfies. The
@@ -416,6 +421,10 @@ type Message struct {
 	Name       string     `json:"name,omitempty"`
 	ToolCalls  []ToolCall `json:"toolCalls,omitempty"`
 	ToolCallID string     `json:"toolCallId,omitempty"`
+	// EncryptedValue carries provider-encrypted reasoning on a
+	// role="reasoning" message, per the AG-UI reasoning message shape.
+	// Empty (and omitted) on every other role.
+	EncryptedValue string `json:"encryptedValue,omitempty"`
 }
 
 // ToolCall is the function-call shape embedded inside an assistant
