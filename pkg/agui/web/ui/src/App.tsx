@@ -45,6 +45,11 @@ export default function App() {
   const [threads, setThreads] = useState<ThreadInfo[]>([]);
   const [listingSupported, setListingSupported] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // runError holds the message from a failed run (server RUN_ERROR or a
+  // transport failure). CopilotKit only logs these to the console, so we
+  // surface them as a banner in the chat pane. Cleared when a new run
+  // starts or the thread/agent changes.
+  const [runError, setRunError] = useState<string | null>(null);
 
   // Load the agent list once.
   useEffect(() => {
@@ -93,13 +98,26 @@ export default function App() {
   }, [agent, active.initialMessages]);
 
   // Refresh the sidebar after each run finishes — that's when the
-  // thread row is created/updated server-side.
+  // thread row is created/updated server-side. Also surface run errors:
+  // the server emits RUN_ERROR (onRunErrorEvent) for agent/LLM failures,
+  // and the client raises onRunFailed for transport errors — CopilotKit
+  // only console.errors both, so we lift them into a banner.
   useEffect(() => {
     if (!agent) return;
-    agent.subscribe({ onRunFinalized: () => refreshThreads() });
+    agent.subscribe({
+      onRunInitialized: () => setRunError(null),
+      onRunFinalized: () => refreshThreads(),
+      onRunErrorEvent: ({ event }: any) =>
+        setRunError(event?.message || "The agent run failed."),
+      onRunFailed: ({ error }: any) =>
+        setRunError(error?.message || String(error) || "The agent run failed."),
+    });
     // HttpAgent 0.0.53 has no unsubscribe handle; the agent is replaced
     // by useMemo when threadId changes, dropping the subscription.
   }, [agent, refreshThreads]);
+
+  // Clear a stale run error when the user switches thread or agent.
+  useEffect(() => setRunError(null), [active.threadId, agentName]);
 
   const selectThread = useCallback(
     async (t: ThreadInfo) => {
@@ -149,6 +167,19 @@ export default function App() {
           <div className="chat-pane">
             <InterruptHandler agentName={agentName} />
             <InlineToolRenderer agentName={agentName} />
+            {runError && (
+              <div className="run-error" role="alert">
+                <span className="ico">⚠</span>
+                <div className="msg">{runError}</div>
+                <button
+                  className="dismiss"
+                  onClick={() => setRunError(null)}
+                  aria-label="Dismiss error"
+                >
+                  ×
+                </button>
+              </div>
+            )}
             <div className="chat-inner">
               <CopilotChat
                 agentId={agentName}
