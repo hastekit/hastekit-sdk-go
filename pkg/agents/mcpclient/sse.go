@@ -287,7 +287,7 @@ func (srv *MCPClient) buildLazyTools(tools []*mcp.Tool, meta mcp.Meta, resolvedH
 		}
 
 		requiresApproval := len(srv.ApprovalRequiredTools) > 0 && slices.Contains(srv.ApprovalRequiredTools, tool.Name)
-		deferred := len(srv.DeferredTools) > 0 && slices.Contains(srv.DeferredTools, tool.Name)
+		deferred := len(srv.DeferredTools) > 0 && (slices.Contains(srv.DeferredTools, tool.Name) || slices.Contains(srv.DeferredTools, "*"))
 
 		result = append(result, NewLazyMcpTool(tool, srv.Endpoint, srv.Transport, resolvedHeaders, meta, srv.DisableStandaloneSSE, requiresApproval, deferred))
 	}
