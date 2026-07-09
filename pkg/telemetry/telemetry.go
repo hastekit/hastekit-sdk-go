@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strings"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -17,17 +16,16 @@ import (
 )
 
 func NewLangFuseExporter(endpoint string, username string, password string, secure bool) (trace.SpanExporter, error) {
-	endpointWithProto := strings.Replace(endpoint, "http://", "", 1)
 	authKey := fmt.Sprintf("%s:%s", username, password)
 
 	opts := []otlptracehttp.Option{
 		otlptracehttp.WithHeaders(map[string]string{
 			"Authorization": fmt.Sprintf("Basic %s", base64.StdEncoding.EncodeToString([]byte(authKey))),
 		}),
-		otlptracehttp.WithEndpoint(endpointWithProto),
+		otlptracehttp.WithEndpoint(endpoint),
 		otlptracehttp.WithURLPath("/api/public/otel/v1/traces"),
 	}
-	if secure {
+	if !secure {
 		opts = append(opts, otlptracehttp.WithInsecure())
 	}
 
