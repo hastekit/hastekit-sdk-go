@@ -10,6 +10,8 @@ import (
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/history"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/messages"
+	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/constants"
+	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 )
 
 // Registry is the minimal view of an SDK client the AG-UI handler
@@ -227,6 +229,11 @@ func serveRun(w http.ResponseWriter, r *http.Request, agent *agents.Agent, o opt
 		sdkMessages = input.ToSDKMessages()
 	}
 
+	// Surface the AG-UI grounding context to the model as a content
+	// block on the user message, wrapped in <context></context>, in
+	// addition to exposing it to prompt templates via RunContext below.
+	appendContextBlock(sdkMessages, input.Context)
+
 	in := &agents.AgentInput{
 		Namespace: o.namespace,
 		ThreadID:  input.ThreadID,
@@ -317,6 +324,51 @@ func serveRun(w http.ResponseWriter, r *http.Request, agent *agents.Agent, o opt
 			}
 		}
 	}
+}
+
+// appendContextBlock renders the AG-UI grounding context as a
+// <context></context> text block and appends it to the last user
+// message's content, so the model sees it inline with the turn. It is
+// a no-op when there is no context or no user message to attach it to.
+func appendContextBlock(msgs []responses.InputMessageUnion, items []InputContext) {
+	block := contextBlock(items)
+	if block == "" {
+		return
+	}
+	for i := len(msgs) - 1; i >= 0; i-- {
+		im := msgs[i].OfInputMessage
+		if im == nil || im.Role != constants.RoleUser {
+			continue
+		}
+		im.Content = append(im.Content, responses.InputContentUnion{
+			OfInputText: &responses.InputTextContent{Text: block},
+		})
+		return
+	}
+}
+
+// contextBlock formats the AG-UI context list as a single
+// <context></context> string, one "description: value" line per item.
+// Returns "" when there is nothing to render.
+func contextBlock(items []InputContext) string {
+	var b strings.Builder
+	for _, c := range items {
+		if c.Description == "" && c.Value == "" {
+			continue
+		}
+		if b.Len() > 0 {
+			b.WriteByte('\n')
+		}
+		if c.Description != "" {
+			b.WriteString(c.Description)
+			b.WriteString(": ")
+		}
+		b.WriteString(c.Value)
+	}
+	if b.Len() == 0 {
+		return ""
+	}
+	return "<context>\n" + b.String() + "\n</context>"
 }
 
 // contextFromAGUI turns the AG-UI context list into a description→value
