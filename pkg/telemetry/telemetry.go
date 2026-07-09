@@ -16,18 +16,22 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 )
 
-func newHttpExporter(endpoint string, username string, password string) (trace.SpanExporter, error) {
+func NewLangFuseExporter(endpoint string, username string, password string, secure bool) (trace.SpanExporter, error) {
 	endpointWithProto := strings.Replace(endpoint, "http://", "", 1)
 	authKey := fmt.Sprintf("%s:%s", username, password)
-	return otlptracehttp.New(
-		context.Background(),
-		otlptracehttp.WithInsecure(),
+
+	opts := []otlptracehttp.Option{
 		otlptracehttp.WithHeaders(map[string]string{
 			"Authorization": fmt.Sprintf("Basic %s", base64.StdEncoding.EncodeToString([]byte(authKey))),
 		}),
 		otlptracehttp.WithEndpoint(endpointWithProto),
 		otlptracehttp.WithURLPath("/api/public/otel/v1/traces"),
-	)
+	}
+	if secure {
+		opts = append(opts, otlptracehttp.WithInsecure())
+	}
+
+	return otlptracehttp.New(context.Background(), opts...)
 }
 
 func newResource() *resource.Resource {
@@ -44,23 +48,11 @@ func newResource() *resource.Resource {
 }
 
 // NewProvider creates new telemetry provider, and sets it as a default open telemetry trace provider.
-func NewProvider(endpoint string, username string, password string) func() {
+func NewProvider(exp trace.SpanExporter) func() {
 	f, err := os.Create("traces.txt")
 	if err != nil {
 		slog.Error("Unable to create traces.txt", slog.Any("error", err))
 		return func() {}
-	}
-
-	// Check for OTEL collector endpoint first
-	if endpoint == "" {
-		slog.Error("OTEL_EXPORTER_OTLP_ENDPOINT not set")
-		return func() {}
-	}
-
-	exp, err := newHttpExporter(endpoint, username, password)
-	if err != nil {
-		slog.Error("Unable to create exporter", slog.Any("error", err))
-		panic(err)
 	}
 
 	// Wrap the deployment-wide exporter in a routing exporter that fans
