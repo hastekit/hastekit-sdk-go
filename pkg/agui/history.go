@@ -2,12 +2,25 @@ package agui
 
 import (
 	"encoding/json"
+	"regexp"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/history"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
 )
+
+// contextBlockRE matches a <context>...</context> block (the grounding
+// context appendContextBlock injects into user messages before a run).
+// These are model-facing scaffolding, not authored content, so they are
+// stripped back out when a thread is rehydrated for a client.
+var contextBlockRE = regexp.MustCompile(`(?s)\s*<context>.*?</context>\s*`)
+
+// stripContextBlocks removes any injected <context></context> blocks
+// from a message's text, collapsing the surrounding whitespace.
+func stripContextBlocks(s string) string {
+	return strings.TrimSpace(contextBlockRE.ReplaceAllString(s, "\n"))
+}
 
 // HistoryToMessages flattens stored conversation rows (one per turn,
 // each carrying sender-attributed bundles of SDK messages) into the
@@ -51,7 +64,7 @@ func HistoryToMessages(rows []history.ConversationMessage) []Message {
 				switch {
 				case msg.OfEasyInput != nil:
 					m := msg.OfEasyInput
-					text := easyInputText(m.Content)
+					text := stripContextBlocks(easyInputText(m.Content))
 					if text == "" {
 						continue
 					}
@@ -63,7 +76,7 @@ func HistoryToMessages(rows []history.ConversationMessage) []Message {
 
 				case msg.OfInputMessage != nil:
 					m := msg.OfInputMessage
-					text := inputContentText(m.Content)
+					text := stripContextBlocks(inputContentText(m.Content))
 					if text == "" {
 						continue
 					}
