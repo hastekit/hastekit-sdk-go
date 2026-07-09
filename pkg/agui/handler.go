@@ -3,6 +3,7 @@ package agui
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -237,6 +238,7 @@ func serveRun(w http.ResponseWriter, r *http.Request, agent *agents.Agent, o opt
 			"Context":        contextFromAGUI(input.Context),
 			"ForwardedProps": input.ForwardedProps,
 			"State":          input.State,
+			"Header":         collectHeaders(r.Header),
 		},
 	}
 
@@ -334,4 +336,14 @@ func writeJSONError(w http.ResponseWriter, status int, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(map[string]any{"error": msg})
+}
+
+func collectHeaders(headers http.Header) map[string]string {
+	out := make(map[string]string, len(headers))
+	for k, v := range headers {
+		if strings.HasPrefix(k, "X-") || k == "Authorization" {
+			out[k] = v[0]
+		}
+	}
+	return out
 }
