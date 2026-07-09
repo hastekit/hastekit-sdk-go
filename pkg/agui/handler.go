@@ -342,7 +342,7 @@ func collectHeaders(headers http.Header) map[string]string {
 	out := make(map[string]string, len(headers))
 	for k, v := range headers {
 		if strings.HasPrefix(k, "X-") || k == "Authorization" {
-			out[k] = v[0]
+			out[strings.ReplaceAll(k, "-", "_")] = v[0]
 		}
 	}
 	return out
