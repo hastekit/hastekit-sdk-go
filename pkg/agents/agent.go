@@ -260,7 +260,7 @@ func (e *Agent) Execute(ctx context.Context, in *AgentInput) (*AgentHandle, erro
 
 		// GenAI invoke_agent span for the whole run. Callers that don't want
 		// this span invoke ExecuteWithoutTrace directly instead.
-		runCtx, span := tracer.Start(ctx, genai.OpInvokeAgent+" "+e.Name)
+		runCtx, span := tracer.Start(context.WithoutCancel(ctx), genai.OpInvokeAgent+" "+e.Name)
 		defer span.End()
 		span.SetAttributes(
 			attribute.String(genai.AttrOperationName, genai.OpInvokeAgent),
