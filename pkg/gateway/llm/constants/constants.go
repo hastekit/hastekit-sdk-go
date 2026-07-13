@@ -218,6 +218,14 @@ func (m *ChunkTypeRunCompleted) UnmarshalJSON(buf []byte) error {
 	return unmarshalConstantString(m, buf)
 }
 
+type ChunkTypeToolProgress string
+
+func (m *ChunkTypeToolProgress) Value() string               { return "tool.progress" }
+func (m ChunkTypeToolProgress) MarshalJSON() ([]byte, error) { return sonic.Marshal(m.Value()) }
+func (m *ChunkTypeToolProgress) UnmarshalJSON(buf []byte) error {
+	return unmarshalConstantString(m, buf)
+}
+
 type ChunkTypeResponseCreated string
 
 func (m *ChunkTypeResponseCreated) Value() string               { return "response.created" }

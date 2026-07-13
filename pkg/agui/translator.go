@@ -363,6 +363,27 @@ func (t *Translator) Translate(chunk *responses.ResponseChunk) []Event {
 		return nil
 	}
 
+	// ── Tool progress (mid-execution updates) ────────────────────
+	// A live, best-effort side stream keyed by the tool call id. AG-UI has
+	// no native tool-progress event, so we surface it as a hastekit.* CUSTOM
+	// event (strict clients ignore it). It never opens or closes a message
+	// item, so it can't leave a dangling item on RUN_FINISHED.
+	if chunk.OfToolProgress != nil {
+		tp := chunk.OfToolProgress
+		return []Event{&CustomEvent{
+			BaseEvent: baseNow(),
+			Name:      CustomNameToolProgress,
+			Value: map[string]any{
+				"toolCallId": tp.CallID,
+				"toolName":   tp.ToolName,
+				"progress":   tp.Progress,
+				"total":      tp.Total,
+				"message":    tp.Message,
+				"sequence":   tp.SequenceNumber,
+			},
+		}}
+	}
+
 	// ── Function call output (the tool's result) ─────────────────
 	if chunk.OfFunctionCallOutput != nil {
 		fco := chunk.OfFunctionCallOutput

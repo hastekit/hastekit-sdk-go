@@ -30,6 +30,14 @@ type ToolCall struct {
 	// loop from QueuedApprovals / QueuedRejections. Nil when
 	// ShouldResume is false.
 	ResumeMessages []responses.InputMessageUnion `json:"resume_messages,omitempty"`
+
+	// Progress is the sink for mid-execution progress updates. It is
+	// injected by whoever runs the tool in-process (the agent loop for the
+	// local runtime; the tool activity/step for durable runtimes) and is
+	// deliberately not serialized — it does not survive an activity
+	// boundary and is re-injected on the far side. Tools should emit via
+	// ReportProgress, which is nil-safe, rather than touching this directly.
+	Progress ProgressReporter `json:"-"`
 }
 
 type ToolCallResponse struct {

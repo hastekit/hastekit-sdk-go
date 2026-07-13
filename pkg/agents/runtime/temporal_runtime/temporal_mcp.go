@@ -10,11 +10,13 @@ import (
 
 type TemporalMCPServer struct {
 	wrappedMcpServer agents.MCPToolset
+	broker           agents.StreamBroker
 }
 
-func NewTemporalMCPServer(wrappedMcpServer agents.MCPToolset) *TemporalMCPServer {
+func NewTemporalMCPServer(wrappedMcpServer agents.MCPToolset, broker agents.StreamBroker) *TemporalMCPServer {
 	return &TemporalMCPServer{
 		wrappedMcpServer: wrappedMcpServer,
+		broker:           broker,
 	}
 }
 
@@ -40,6 +42,7 @@ func (t *TemporalMCPServer) ListTools(ctx context.Context, runContext map[string
 // Temporal activity (exactly once per real call), so the execute_tool span
 // opened here fires once and is replay-safe. callTool does the real work.
 func (t *TemporalMCPServer) ExecuteTool(ctx context.Context, params *agents.ToolCall, runContext map[string]any) (*agents.ToolCallResponse, error) {
+	injectProgressReporter(ctx, t.broker, params)
 	return agents.ExecuteWithTrace(ctx, nil, params, func(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
 		return t.callTool(ctx, params, runContext)
 	})

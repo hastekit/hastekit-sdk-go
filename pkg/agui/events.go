@@ -490,4 +490,5 @@ const (
 	CustomNameFileGenerated = "hastekit.file_generated"
 	CustomNameAnnotation    = "hastekit.annotation"
 	CustomNameStreamID      = "hastekit.stream_id"
+	CustomNameToolProgress  = "hastekit.tool_progress"
 )

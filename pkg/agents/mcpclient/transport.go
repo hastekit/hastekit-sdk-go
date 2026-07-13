@@ -14,7 +14,9 @@ import (
 var sdkClient = mcp.NewClient(&mcp.Implementation{
 	Name:    "hastekit-sdk-go",
 	Version: "0.1.0",
-}, nil)
+}, &mcp.ClientOptions{
+	ProgressNotificationHandler: handleProgressNotification,
+})
 
 // headerRoundTripper injects a fixed set of headers onto every outgoing
 // request. The official SDK transports don't expose a headers option, so

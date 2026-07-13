@@ -63,9 +63,22 @@ type ResponseChunk struct {
 	OfRunPaused          *ChunkRun[constants.ChunkTypeRunPaused]     `json:",omitempty"`
 	OfRunCompleted       *ChunkRun[constants.ChunkTypeRunCompleted]  `json:",omitempty"`
 	OfFunctionCallOutput *FunctionCallOutputMessage                  `json:",omitempty"`
+
+	// OfToolProgress carries a mid-execution progress update emitted by a
+	// running tool call (function tool, MCP tool, etc.). It is a live,
+	// best-effort side stream keyed by CallID — it never enters history and
+	// is not replayed under durable runtimes. For MCP tools it is the
+	// SDK-native projection of the server's notifications/progress.
+	OfToolProgress *ChunkToolProgress[constants.ChunkTypeToolProgress] `json:",omitempty"`
 }
 
 func (u *ResponseChunk) UnmarshalJSON(data []byte) error {
+	var toolProgress *ChunkToolProgress[constants.ChunkTypeToolProgress]
+	if err := sonic.Unmarshal(data, &toolProgress); err == nil {
+		u.OfToolProgress = toolProgress
+		return nil
+	}
+
 	var runCreated *ChunkRun[constants.ChunkTypeRunCreated]
 	if err := sonic.Unmarshal(data, &runCreated); err == nil {
 		u.OfRunCreated = runCreated
@@ -391,6 +404,10 @@ func (u *ResponseChunk) MarshalJSON() ([]byte, error) {
 		return sonic.Marshal(u.OfFunctionCallOutput)
 	}
 
+	if u.OfToolProgress != nil {
+		return sonic.Marshal(u.OfToolProgress)
+	}
+
 	if u.OfCodeInterpreterCallInProgress != nil {
 		return sonic.Marshal(u.OfCodeInterpreterCallInProgress)
 	}
@@ -552,6 +569,10 @@ func (u *ResponseChunk) ChunkType() string {
 		return u.OfFunctionCallOutput.Type.Value()
 	}
 
+	if u.OfToolProgress != nil {
+		return u.OfToolProgress.Type.Value()
+	}
+
 	return ""
 }
 
@@ -559,6 +580,23 @@ type ChunkRun[T any] struct {
 	Type           T            `json:"type"`
 	SequenceNumber int          `json:"sequence_number"`
 	RunState       ChunkRunData `json:"run_state"`
+}
+
+// ChunkToolProgress is a mid-execution progress update for a single tool
+// call. Its shape mirrors MCP's notifications/progress
+// (progress/total/message) so an MCP tool's server notifications map onto it
+// losslessly, while function tools emit the same shape via the
+// ProgressReporter injected into their ToolCall. CallID ties the update back
+// to the in-flight function call; Progress should increase monotonically and
+// Total is optional (0 = unknown).
+type ChunkToolProgress[T any] struct {
+	Type           T       `json:"type"`
+	SequenceNumber int     `json:"sequence_number"`
+	CallID         string  `json:"call_id"`
+	ToolName       string  `json:"tool_name,omitempty"`
+	Progress       float64 `json:"progress"`
+	Total          float64 `json:"total,omitempty"`
+	Message        string  `json:"message,omitempty"`
 }
 
 type ChunkRunData struct {

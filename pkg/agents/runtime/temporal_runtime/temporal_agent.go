@@ -54,12 +54,12 @@ func (a *TemporalAgentV2) GetActivities() map[string]interface{} {
 	}
 
 	for _, tool := range a.options.Tools {
-		temporalTool := NewTemporalTool(tool)
+		temporalTool := NewTemporalTool(tool, a.broker)
 		activities[getToolName(a.options.Name, tool)+"_ExecuteToolActivity"] = temporalTool.Execute
 	}
 
 	for _, mcpClient := range a.options.McpServers {
-		temporalMCP := NewTemporalMCPServer(mcpClient)
+		temporalMCP := NewTemporalMCPServer(mcpClient, a.broker)
 		activities[mcpClient.GetName()+"_ListMCPToolsActivity"] = temporalMCP.ListTools
 		activities[mcpClient.GetName()+"_ExecuteMCPToolActivity"] = temporalMCP.ExecuteTool
 	}
@@ -69,7 +69,7 @@ func (a *TemporalAgentV2) GetActivities() map[string]interface{} {
 
 func (a *TemporalAgentV2) Execute(ctx workflow.Context, in *agents.AgentInput) (*agents.AgentOutput, error) {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		StartToCloseTimeout: 10 * time.Second,
+		StartToCloseTimeout: 30 * time.Second,
 	})
 
 	// Fall back to the workflow execution ID when the caller didn't set

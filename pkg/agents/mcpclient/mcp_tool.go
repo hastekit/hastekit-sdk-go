@@ -62,12 +62,13 @@ func (c *McpTool) Execute(ctx context.Context, params *agents.ToolCall) (*agents
 		}
 	}
 
-	// Call the MCP tool
-	res, err := c.Session.CallTool(ctx, &mcp.CallToolParams{
-		Meta:      c.Meta,
-		Name:      params.Name,
-		Arguments: args,
-	})
+	// Call the MCP tool. When the run wired a progress sink, attach a
+	// progress token so the server streams notifications/progress back
+	// through handleProgressNotification for the duration of the call.
+	callParams, cleanup := newCallToolParams(c.Meta, params.Name, args, params)
+	defer cleanup()
+
+	res, err := c.Session.CallTool(ctx, callParams)
 	if err != nil {
 		return &agents.ToolCallResponse{
 			FunctionCallOutputMessage: &responses.FunctionCallOutputMessage{
@@ -173,12 +174,13 @@ func (c *LazyMcpTool) Execute(ctx context.Context, params *agents.ToolCall) (*ag
 		}, nil
 	}
 
-	// Call the MCP tool directly by name — no ListTools needed
-	res, err := cli.CallTool(ctx, &mcp.CallToolParams{
-		Meta:      c.meta,
-		Name:      params.Name,
-		Arguments: args,
-	})
+	// Call the MCP tool directly by name — no ListTools needed. When the run
+	// wired a progress sink, attach a progress token so the server streams
+	// notifications/progress back through handleProgressNotification.
+	callParams, cleanup := newCallToolParams(c.meta, params.Name, args, params)
+	defer cleanup()
+
+	res, err := cli.CallTool(ctx, callParams)
 	if err != nil {
 		// Connection might be dead — remove from pool and retry once
 		globalPool.Remove(c.endpoint, c.transportType, c.resolvedHeaders)
@@ -194,11 +196,7 @@ func (c *LazyMcpTool) Execute(ctx context.Context, params *agents.ToolCall) (*ag
 				},
 			}, nil
 		}
-		res, err = cli.CallTool(ctx, &mcp.CallToolParams{
-			Meta:      c.meta,
-			Name:      params.Name,
-			Arguments: args,
-		})
+		res, err = cli.CallTool(ctx, callParams)
 		if err != nil {
 			return &agents.ToolCallResponse{
 				FunctionCallOutputMessage: &responses.FunctionCallOutputMessage{

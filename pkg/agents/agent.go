@@ -699,6 +699,7 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, run *history
 							State:               run.State,
 							ShouldResume:        resuming,
 							ResumeMessages:      resumeMessages,
+							Progress:            e.progressReporter(in.StreamID, toolCall.CallID, toolCall.Name),
 						},
 					})
 				}

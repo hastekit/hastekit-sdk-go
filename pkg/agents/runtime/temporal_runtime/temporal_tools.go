@@ -5,20 +5,40 @@ import (
 
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents"
 	"github.com/hastekit/hastekit-sdk-go/pkg/gateway/llm/responses"
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/workflow"
 )
 
-type TemporalTool struct {
-	wrappedTool agents.Tool
+// injectProgressReporter re-establishes a tool call's progress sink inside an
+// activity. ToolCall.Progress does not survive the workflow→activity
+// serialization boundary, so the loop-side reporter is gone by the time the
+// tool runs here; we rebuild a broker-backed one. The stream channel is the
+// workflow execution id, which equals the run's StreamID (see
+// TemporalAgentV2.Execute) and is the same channel the LLM activity publishes
+// on. Progress is a best-effort side stream, so a duplicate update on activity
+// retry is acceptable — clients dedupe by call id + sequence.
+func injectProgressReporter(ctx context.Context, broker agents.StreamBroker, params *agents.ToolCall) {
+	if broker == nil || params == nil {
+		return
+	}
+	streamID := activity.GetInfo(ctx).WorkflowExecution.ID
+	params.Progress = agents.NewStreamProgressReporter(broker, streamID, params.CallID, params.Name)
 }
 
-func NewTemporalTool(wrappedTool agents.Tool) *TemporalTool {
+type TemporalTool struct {
+	wrappedTool agents.Tool
+	broker      agents.StreamBroker
+}
+
+func NewTemporalTool(wrappedTool agents.Tool, broker agents.StreamBroker) *TemporalTool {
 	return &TemporalTool{
 		wrappedTool: wrappedTool,
+		broker:      broker,
 	}
 }
 
 func (t *TemporalTool) Execute(ctx context.Context, params *agents.ToolCall) (*agents.ToolCallResponse, error) {
+	injectProgressReporter(ctx, t.broker, params)
 	return agents.ExecuteWithTrace(ctx, t.wrappedTool, params, t.wrappedTool.Execute)
 }
 

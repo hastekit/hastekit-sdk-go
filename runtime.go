@@ -122,7 +122,7 @@ func NewRestateRuntime(restateEndpoint string, redisEndpoint string) (*RestateRu
 	return &RestateRuntime{
 		RestateRuntime:  restate_runtime.NewRestateRuntime(restateEndpoint, broker),
 		broker:          broker,
-		restateEndpoint: restateEndpoint,
+		restateEndpoint: "localhost:8082",
 		redisEndpoint:   redisEndpoint,
 	}, nil
 }
@@ -133,7 +133,7 @@ func (r *RestateRuntime) Start() {
 	go func() {
 		if err := server.NewRestate().
 			Bind(restate.Reflect(wf)).
-			Start(context.Background(), r.restateEndpoint); err != nil {
+			Start(context.Background(), "localhost:8082"); err != nil {
 			log.Fatal(err)
 		}
 	}()
