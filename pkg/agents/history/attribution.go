@@ -8,12 +8,14 @@ import (
 )
 
 // attributeMessages flattens sender-grouped bundles into the flat provider
-// message list the LLM consumes, applying multi-participant attribution
-// based on each bundle's sender_id and the running agent's id.
+// message list the LLM consumes. When attribution is enabled it rewrites
+// messages from other senders with "(Agent)/(Human) <sender> said:" prefixes
+// based on each bundle's sender_id and the running agent's id; otherwise
+// bundles are flattened as-is.
 func (cm *ConversationRunManager) attributeMessages(msgList []Message, agentID string) []responses.InputMessageUnion {
 	out := make([]responses.InputMessageUnion, 0, len(msgList))
 	for _, bundle := range msgList {
-		own := bundle.SenderID == "" || bundle.SenderID == agentID
+		own := !cm.messageAttribution || bundle.SenderID == "" || bundle.SenderID == agentID
 
 		for _, msg := range bundle.Messages {
 			switch {

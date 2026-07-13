@@ -52,6 +52,12 @@ type CommonConversationManager struct {
 	Summarizer                     HistorySummarizer
 	MessageFilter                  MessageFilter
 
+	// MessageAttribution controls whether sender-attributed bundles are
+	// rewritten with "(Agent)/(Human) <sender> said:" prefixes before being
+	// sent to the provider. It is opt-in — off by default, in which case
+	// bundles are flattened into the provider message list as-is.
+	MessageAttribution bool
+
 	Options []ConversationManagerOptions
 }
 
@@ -81,6 +87,15 @@ func WithMessageFilter(filter MessageFilter) ConversationManagerOptions {
 	}
 }
 
+// WithMessageAttribution enables multi-participant message attribution, which
+// rewrites messages from other senders with "(Agent)/(Human) <sender> said:"
+// prefixes before sending them to the provider. Attribution is off by default.
+func WithMessageAttribution() ConversationManagerOptions {
+	return func(cm *CommonConversationManager) {
+		cm.MessageAttribution = true
+	}
+}
+
 type ConversationRunManager struct {
 	ConversationPersistenceAdapter
 
@@ -105,9 +120,10 @@ type ConversationRunManager struct {
 	// RunState is used to store the state of the run, such as the current step and the usage of the run
 	RunState *agentstate.RunState
 
-	summarizer    HistorySummarizer
-	summaries     *SummaryResult
-	messageFilter MessageFilter
+	summarizer         HistorySummarizer
+	summaries          *SummaryResult
+	messageFilter      MessageFilter
+	messageAttribution bool
 }
 
 func NewRun(ctx context.Context, cm *CommonConversationManager, namespace string, threadID string, previousMessageID string, options ...RunOption) (*ConversationRunManager, error) {
@@ -115,6 +131,7 @@ func NewRun(ctx context.Context, cm *CommonConversationManager, namespace string
 		ConversationPersistenceAdapter: cm.ConversationPersistenceAdapter,
 		summarizer:                     cm.Summarizer,
 		messageFilter:                  cm.MessageFilter,
+		messageAttribution:             cm.MessageAttribution,
 		msgIdToRunId:                   make(map[string]string),
 		State:                          make(map[string]string),
 	}
