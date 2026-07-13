@@ -37,7 +37,7 @@ func (w *AgentWorkflow) Run(restateCtx restate.WorkflowContext, input *WorkflowI
 		streamID = restate.Key(restateCtx)
 	}
 
-	agent := w.newRestateAgentProxy(restateCtx, agentOptions)
+	agent := w.newRestateAgentProxy(restateCtx, agentOptions, input.ProviderConfigKey)
 
 	// The proxy agent receives the broker via AgentOptions and publishes
 	// chunks itself using StreamID. The caller's Execute owns the broker
@@ -52,10 +52,10 @@ func (w *AgentWorkflow) Run(restateCtx restate.WorkflowContext, input *WorkflowI
 	})
 }
 
-func (w *AgentWorkflow) newRestateAgentProxy(restateCtx restate.WorkflowContext, agentOptions *agents.AgentOptions) *agents.Agent {
+func (w *AgentWorkflow) newRestateAgentProxy(restateCtx restate.WorkflowContext, agentOptions *agents.AgentOptions, providerConfigKey string) *agents.Agent {
 	promptProxy := NewRestatePrompt(restateCtx, agentOptions.Instruction)
 
-	llmProxy := NewRestateLLM(restateCtx, agentOptions.LLM)
+	llmProxy := NewRestateLLM(restateCtx, agentOptions.LLM, providerConfigKey)
 
 	conversationPersistenceProxy := NewRestateConversationPersistence(restateCtx, agentOptions.History.ConversationPersistenceAdapter)
 	var options []history.ConversationManagerOptions
@@ -97,7 +97,7 @@ func (w *AgentWorkflow) newRestateAgentProxy(restateCtx restate.WorkflowContext,
 	for _, h := range agentOptions.Handoffs {
 		agentOption := w.agentConfigs[h.Name]
 		opts.Handoffs = append(opts.Handoffs, agents.NewHandoff(
-			h.Name, h.Description, w.newRestateAgentProxy(restateCtx, agentOption),
+			h.Name, h.Description, w.newRestateAgentProxy(restateCtx, agentOption, providerConfigKey),
 		))
 	}
 

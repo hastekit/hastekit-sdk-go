@@ -41,6 +41,9 @@ func NewTemporalRuntime(temporalEndpoint string, redisEndpoint string) (*Tempora
 		Interceptors: []interceptor.ClientInterceptor{
 			otelInterceptor,
 		},
+		ContextPropagators: []workflow.ContextPropagator{
+			temporal_runtime.NewProviderConfigKeyPropagator(),
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -71,6 +74,9 @@ func (r *TemporalRuntime) Start() {
 	cli, err := client.Dial(client.Options{
 		HostPort:     r.temporalEndpoint,
 		Interceptors: []interceptor.ClientInterceptor{tracingInterceptor},
+		ContextPropagators: []workflow.ContextPropagator{
+			temporal_runtime.NewProviderConfigKeyPropagator(),
+		},
 	})
 	if err != nil {
 		panic("unable to create temporal client")

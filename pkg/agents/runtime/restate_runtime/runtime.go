@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents"
 	"github.com/hastekit/hastekit-sdk-go/pkg/agents/history"
+	"github.com/hastekit/hastekit-sdk-go/pkg/gateway"
 	restate "github.com/restatedev/sdk-go"
 	"github.com/restatedev/sdk-go/ingress"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -26,6 +27,13 @@ type WorkflowInput struct {
 	// stop signaling. The runtime sets it equal to the Restate workflow
 	// key so the workflow and the caller agree on the channel.
 	StreamID string
+
+	// ProviderConfigKey is the gateway provider config key (a virtual key
+	// or direct provider API key). Restate has no context propagator, so the
+	// value the caller placed on the context via gateway.WithProviderConfigKey
+	// is carried here across the durable boundary and re-established on the
+	// context inside the workflow.
+	ProviderConfigKey string
 }
 
 // RestateRuntime executes agents via Restate workflows for durability.
@@ -61,6 +69,7 @@ func (r *RestateRuntime) Run(ctx context.Context, agent *agents.Agent, in *agent
 		Message:           in.Message,
 		RunContext:        in.RunContext,
 		StreamID:          streamID,
+		ProviderConfigKey: gateway.ProviderConfigKeyFromContext(ctx),
 	}
 
 	return ingress.Workflow[*WorkflowInput, *agents.AgentOutput](
