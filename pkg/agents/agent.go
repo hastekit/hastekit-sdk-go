@@ -454,6 +454,12 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, run *history
 
 	// Main loop - driven by state machine
 	for run.RunState.LoopIteration < e.maxLoops {
+		// Drain queued input messages from the broker.
+		if in.StreamID != "" && e.streamBroker != nil && !run.RunState.IsComplete() {
+			queued, _ := e.streamBroker.DrainMessages(context.Background(), in.StreamID)
+			run.AddMessagesToQueue(ctx, queued)
+		}
+
 		// Honor an external stop signal at iteration boundaries.
 		// The caller (typically via ExecuteAsync's handle.Stop) sets a
 		// flag on the broker for in.StreamID; we transition cleanly to
@@ -462,6 +468,34 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, run *history
 		if in.StreamID != "" && e.streamBroker != nil && !run.RunState.IsComplete() {
 			stopped, _ := e.streamBroker.IsStopped(context.Background(), in.StreamID)
 			if stopped {
+				// The LLM may have already requested tool calls that we never
+				// got to execute (pending immediate calls, or calls parked
+				// awaiting approval). Their function_call messages are already
+				// in history, so completing now would leave them without a
+				// matching function_call_output — every subsequent turn on this
+				// thread would then fail the provider's "each tool call needs a
+				// result" invariant. Emit a synthetic cancelled result for each
+				// so history stays consistent.
+				cancelledCalls := append([]responses.FunctionCallMessage{}, run.RunState.PendingToolCalls...)
+				cancelledCalls = append(cancelledCalls, run.RunState.ToolsAwaitingApproval...)
+				for _, tc := range cancelledCalls {
+					result := toolResponse(tc, "Tool call cancelled: the run was interrupted by the user before this tool executed.")
+
+					// Publish once (durable step) so streaming clients don't see
+					// a dangling tool call either.
+					e.durableStep.Do(func() {
+						publish(&responses.ResponseChunk{
+							OfFunctionCallOutput: result.FunctionCallOutputMessage,
+						})
+					})
+
+					toolResultMsg := []responses.InputMessageUnion{
+						{OfFunctionCallOutput: result.FunctionCallOutputMessage},
+					}
+					run.AddMessages(ctx, messages.New(in.Message.SenderID, toolResultMsg))
+					finalOutput = append(finalOutput, toolResultMsg...)
+				}
+
 				cancelMsg := responses.InputMessageUnion{
 					OfInputMessage: &responses.InputMessage{
 						Role: constants.RoleAssistant,
@@ -472,14 +506,9 @@ func (e *Agent) ExecuteWithRun(ctx context.Context, in *AgentInput, run *history
 				}
 				run.AddMessages(ctx, messages.New(in.Message.SenderID, []responses.InputMessageUnion{cancelMsg}))
 				finalOutput = append(finalOutput, cancelMsg)
+				run.RunState.ToolsAwaitingApproval = nil
 				run.RunState.TransitionToComplete()
 			}
-		}
-
-		// Drain queued input messages from the broker.
-		if in.StreamID != "" && e.streamBroker != nil && !run.RunState.IsComplete() {
-			queued, _ := e.streamBroker.DrainMessages(context.Background(), in.StreamID)
-			run.AddMessagesToQueue(ctx, queued)
 		}
 
 		switch run.RunState.NextStep() {
